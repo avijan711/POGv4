@@ -37,7 +37,9 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
   const [editingQty, setEditingQty] = useState(null);
   const [quantities, setQuantities] = useState({});
   const [itemIds, setItemIds] = useState({});
-  const [viewMode, setViewMode] = useState('items'); // 'items' or 'suppliers'
+  const [viewMode, setViewMode] = useState('items');
+  const [editingPrice, setEditingPrice] = useState(null);
+  const [temporaryPrices, setTemporaryPrices] = useState({});
 
   console.log('=== ComparisonDialog Initial Data ===');
   console.log('Total prices:', prices?.length);
@@ -149,11 +151,19 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
     }));
   };
 
-  const handleItemIdChange = (itemId, value) => {
-    setItemIds(prev => ({
+  const handlePriceChange = (itemId, supplierKey, value) => {
+    const priceKey = `${itemId}-${supplierKey}`;
+    setTemporaryPrices(prev => ({
       ...prev,
-      [itemId]: value
+      [priceKey]: parseFloat(value) || 0
     }));
+  };
+
+  const getDisplayPrice = (itemId, supplierKey, originalPrice) => {
+    const priceKey = `${itemId}-${supplierKey}`;
+    return temporaryPrices.hasOwnProperty(priceKey) 
+      ? temporaryPrices[priceKey] 
+      : originalPrice;
   };
 
   const calculatePriceDelta = (price, bestPrice) => {
@@ -166,10 +176,13 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
     let bestPrice = Infinity;
     Object.entries(supplierGroups)
       .filter(([key]) => selectedSuppliers[key])
-      .forEach(([_, group]) => {
+      .forEach(([key, group]) => {
         const supplierItem = group.items.find(item => item.ItemID === itemId);
-        if (supplierItem?.PriceQuoted && supplierItem.PriceQuoted < bestPrice) {
-          bestPrice = supplierItem.PriceQuoted;
+        if (supplierItem) {
+          const displayPrice = getDisplayPrice(itemId, key, supplierItem.PriceQuoted);
+          if (displayPrice && displayPrice < bestPrice) {
+            bestPrice = displayPrice;
+          }
         }
       });
     return bestPrice === Infinity ? null : bestPrice;
@@ -179,18 +192,18 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
     if (!price) return false;
     const currentBestPrice = getBestPriceForItem(itemId);
     if (!currentBestPrice) return false;
-    // Use a more lenient epsilon for floating point comparison
-    const epsilon = 0.01; // 1 cent difference
+    const epsilon = 0.01;
     return Math.abs(price - currentBestPrice) <= epsilon;
   };
 
   const calculateSupplierSummary = (group) => {
     const winningItems = group.items.filter(item => 
-      isWinningPrice(item.PriceQuoted, item.ItemID)
+      isWinningPrice(getDisplayPrice(item.ItemID, group.supplierId, item.PriceQuoted), item.ItemID)
     );
     const totalValue = winningItems.reduce((sum, item) => {
       const qty = quantities[item.ItemID] || item.RequestedQty;
-      return sum + (item.PriceQuoted * qty || 0);
+      const price = getDisplayPrice(item.ItemID, group.supplierId, item.PriceQuoted);
+      return sum + (price * qty || 0);
     }, 0);
 
     return {
@@ -201,7 +214,6 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
     };
   };
 
-  // Get unique items across all suppliers
   const uniqueItems = Array.from(new Set(prices?.map(item => item.ItemID))) || [];
   console.log('=== Unique Items ===', uniqueItems);
 
@@ -230,25 +242,7 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
             return (
               <TableRow key={itemId}>
                 <TableCell>
-                  {editingQty === `${itemId}-id` ? (
-                    <TextField
-                      size="small"
-                      value={itemIds[itemId] || itemId}
-                      onChange={(e) => handleItemIdChange(itemId, e.target.value)}
-                      onBlur={() => setEditingQty(null)}
-                      autoFocus
-                    />
-                  ) : (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {itemIds[itemId] || itemId}
-                      <IconButton 
-                        size="small"
-                        onClick={() => setEditingQty(`${itemId}-id`)}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  )}
+                  {itemId}
                 </TableCell>
                 <TableCell>{firstItem?.HebrewDescription}</TableCell>
                 <TableCell align="right">
@@ -277,7 +271,10 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
                   .filter(([key]) => selectedSuppliers[key])
                   .map(([key, group]) => {
                     const supplierItem = group.items.find(item => item.ItemID === itemId);
-                    const isWinner = supplierItem?.PriceQuoted && isWinningPrice(supplierItem.PriceQuoted, itemId);
+                    const displayPrice = getDisplayPrice(itemId, key, supplierItem?.PriceQuoted);
+                    const isWinner = displayPrice && isWinningPrice(displayPrice, itemId);
+                    const priceKey = `${itemId}-${key}`;
+                    
                     return (
                       <TableCell 
                         key={key} 
@@ -289,9 +286,30 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
                       >
                         {supplierItem ? (
                           <Box>
-                            ${supplierItem.PriceQuoted?.toFixed(2) || 'N/A'}
+                            {editingPrice === priceKey ? (
+                              <TextField
+                                size="small"
+                                type="number"
+                                value={displayPrice || ''}
+                                onChange={(e) => handlePriceChange(itemId, key, e.target.value)}
+                                onBlur={() => setEditingPrice(null)}
+                                autoFocus
+                                inputProps={{ step: "0.01" }}
+                                sx={{ width: '100px' }}
+                              />
+                            ) : (
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                                ${displayPrice?.toFixed(2) || 'N/A'}
+                                <IconButton 
+                                  size="small"
+                                  onClick={() => setEditingPrice(priceKey)}
+                                >
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </Box>
+                            )}
                             <Typography variant="caption" display="block" color="text.secondary">
-                              {calculatePriceDelta(supplierItem.PriceQuoted, currentBestPrice)}
+                              {calculatePriceDelta(displayPrice, currentBestPrice)}
                             </Typography>
                           </Box>
                         ) : '-'}
@@ -325,7 +343,6 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
         .map(([key, group]) => {
           const summary = calculateSupplierSummary(group);
           
-          // Skip suppliers with no winning items
           if (summary.winningItems === 0) return null;
 
           return (
@@ -359,7 +376,8 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
                     {summary.winningItemsList.map(item => {
                       const currentBestPrice = getBestPriceForItem(item.ItemID);
                       const qty = quantities[item.ItemID] || item.RequestedQty;
-                      const total = (item.PriceQuoted * qty) || 0;
+                      const displayPrice = getDisplayPrice(item.ItemID, key, item.PriceQuoted);
+                      const total = (displayPrice * qty) || 0;
 
                       return (
                         <TableRow 
@@ -369,13 +387,13 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
                             transition: 'background-color 0.2s'
                           }}
                         >
-                          <TableCell>{itemIds[item.ItemID] || item.ItemID}</TableCell>
+                          <TableCell>{item.ItemID}</TableCell>
                           <TableCell>{item.HebrewDescription}</TableCell>
                           <TableCell align="right">{qty}</TableCell>
-                          <TableCell align="right">${item.PriceQuoted?.toFixed(2) || 'N/A'}</TableCell>
+                          <TableCell align="right">${displayPrice?.toFixed(2) || 'N/A'}</TableCell>
                           <TableCell align="right">${total.toFixed(2)}</TableCell>
                           <TableCell align="right">
-                            {calculatePriceDelta(item.PriceQuoted, currentBestPrice)}
+                            {calculatePriceDelta(displayPrice, currentBestPrice)}
                           </TableCell>
                         </TableRow>
                       );

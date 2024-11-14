@@ -24,7 +24,6 @@ import axios from 'axios';
 import ItemDialog from './ItemDialog';
 import ItemDetailsDialog from './ItemDetailsDialog';
 import SupplierResponseUpload from './SupplierResponseUpload';
-import ComparisonDialog from './ComparisonDialog';
 import InquiryItemsTable from './InquiryItemsTable';
 import InquiryHeader from './InquiryHeader';
 import SupplierResponseList from './SupplierResponseList';
@@ -55,9 +54,6 @@ function InquiryDetail() {
   const [supplierUploadOpen, setSupplierUploadOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
-  const [comparisonOpen, setComparisonOpen] = useState(false);
-  const [comparisonData, setComparisonData] = useState([]);
-  const [creatingOrders, setCreatingOrders] = useState(false);
   const [supplierResponses, setSupplierResponses] = useState([]);
   const [loadingResponses, setLoadingResponses] = useState(false);
   const [showResponses, setShowResponses] = useState(true);
@@ -161,72 +157,16 @@ function InquiryDetail() {
 
   const handleStartComparison = async () => {
     try {
-      console.log('=== Starting comparison process ===');
-      console.log('Fetching prices for inquiry:', inquiryId);
-      console.log('API URL:', `${API_BASE_URL}/api/orders/best-prices/${inquiryId}`);
-      
-      const response = await axios.get(`${API_BASE_URL}/api/orders/best-prices/${inquiryId}`);
-      
-      console.log('=== Received comparison data ===');
-      console.log('Response status:', response.status);
-      console.log('Response data:', response.data);
-      console.log('Total items:', response.data.length);
-      console.log('Sample item:', response.data[0]);
-      
-      // Analyze suppliers and promotions
-      const suppliers = new Set();
-      const promotions = new Set();
-      const supplierItems = {};
-      
-      response.data.forEach(item => {
-        suppliers.add(item.SupplierName);
-        if (item.IsPromotion) {
-          promotions.add(`${item.SupplierName} - ${item.PromotionName}`);
-        }
-        
-        // Group by supplier
-        if (!supplierItems[item.SupplierName]) {
-          supplierItems[item.SupplierName] = {
-            regular: 0,
-            promotion: 0
-          };
-        }
-        if (item.IsPromotion) {
-          supplierItems[item.SupplierName].promotion++;
-        } else {
-          supplierItems[item.SupplierName].regular++;
-        }
+      // Update inquiry status to in_comparison
+      await axios.put(`${API_BASE_URL}/api/inquiries/${inquiryId}/status`, {
+        status: 'in_comparison'
       });
-
-      console.log('=== Data Analysis ===');
-      console.log('Unique suppliers:', Array.from(suppliers));
-      console.log('Active promotions:', Array.from(promotions));
-      console.log('Items per supplier:', supplierItems);
-
-      setComparisonData(response.data);
-      setComparisonOpen(true);
+      
+      // Navigate to the comparison detail page
+      navigate(`/comparisons/${inquiryId}`);
     } catch (error) {
-      console.error('Error fetching comparison data:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      setError('Failed to fetch comparison data. Please try again.');
-    }
-  };
-
-  const handleCreateOrders = async () => {
-    try {
-      setCreatingOrders(true);
-      await axios.post(`${API_BASE_URL}/api/orders/from-inquiry/${inquiryId}`);
-      setComparisonOpen(false);
-      navigate('/orders');
-    } catch (error) {
-      console.error('Error creating orders:', error);
-      setError('Failed to create orders. Please try again.');
-    } finally {
-      setCreatingOrders(false);
+      console.error('Error starting comparison:', error);
+      setError('Failed to start comparison process. Please try again.');
     }
   };
 
@@ -512,14 +452,6 @@ function InquiryDetail() {
           onSort={handleSort}
           getChangeSource={getChangeSource}
           onRefresh={handleRefresh}
-        />
-
-        <ComparisonDialog
-          open={comparisonOpen}
-          onClose={() => setComparisonOpen(false)}
-          prices={comparisonData}
-          onCreateOrders={handleCreateOrders}
-          loading={creatingOrders}
         />
 
         <ItemDialog

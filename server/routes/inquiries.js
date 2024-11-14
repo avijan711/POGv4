@@ -6,6 +6,35 @@ const ExcelProcessor = require('../utils/excelProcessor');
 module.exports = function(inquiryModel) {
     const router = express.Router();
 
+    // PUT /api/inquiries/:id/status
+    router.put('/:id/status', async (req, res) => {
+        try {
+            const inquiryId = req.params.id;
+            const { status } = req.body;
+
+            if (!status) {
+                return res.status(400).json({ error: 'Status is required' });
+            }
+
+            // Validate status
+            const validStatuses = ['new', 'in_comparison', 'completed'];
+            if (!validStatuses.includes(status.toLowerCase())) {
+                return res.status(400).json({ error: 'Invalid status' });
+            }
+
+            // Update status in database
+            await inquiryModel.updateInquiryStatus(inquiryId, status);
+            res.json({ message: 'Status updated successfully' });
+        } catch (error) {
+            console.error('Error updating status:', error);
+            if (error.message === 'Inquiry not found') {
+                res.status(404).json({ error: 'Inquiry not found' });
+            } else {
+                res.status(500).json({ error: 'Failed to update status' });
+            }
+        }
+    });
+
     // PUT /api/inquiry-items/:id/quantity
     router.put('/inquiry-items/:id/quantity', async (req, res) => {
         try {
@@ -234,7 +263,8 @@ module.exports = function(inquiryModel) {
     // GET /api/inquiries
     router.get('/', async (req, res) => {
         try {
-            const inquiries = await inquiryModel.getAllInquiries();
+            const { status } = req.query;
+            const inquiries = await inquiryModel.getAllInquiries(status);
             res.json(inquiries);
         } catch (error) {
             console.error('Error fetching inquiries:', error);

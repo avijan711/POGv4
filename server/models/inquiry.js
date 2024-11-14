@@ -3,9 +3,9 @@ class InquiryModel {
         this.db = db;
     }
 
-    getAllInquiries() {
+    getAllInquiries(status) {
         return new Promise((resolve, reject) => {
-            const query = `
+            let query = `
                 SELECT 
                     i.InquiryID as inquiryID,
                     i.InquiryNumber as customNumber,
@@ -15,11 +15,20 @@ class InquiryModel {
                     SUM(ii.RequestedQty) as totalRequestedQty
                 FROM Inquiry i
                 LEFT JOIN InquiryItem ii ON i.InquiryID = ii.InquiryID
+            `;
+
+            const params = [];
+            if (status) {
+                query += ' WHERE i.Status = ?';
+                params.push(status);
+            }
+
+            query += `
                 GROUP BY i.InquiryID
                 ORDER BY i.Date DESC
             `;
 
-            this.db.all(query, [], (err, inquiries) => {
+            this.db.all(query, params, (err, inquiries) => {
                 if (err) {
                     console.error('Database error in getAllInquiries:', err);
                     reject(new Error('Failed to fetch inquiries'));
@@ -27,6 +36,29 @@ class InquiryModel {
                 }
                 resolve(inquiries);
             });
+        });
+    }
+
+    updateInquiryStatus(inquiryId, status) {
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                'UPDATE Inquiry SET Status = ? WHERE InquiryID = ?',
+                [status, inquiryId],
+                function(err) {
+                    if (err) {
+                        console.error('Database error updating status:', err);
+                        reject(new Error('Failed to update status'));
+                        return;
+                    }
+                    
+                    if (this.changes === 0) {
+                        reject(new Error('Inquiry not found'));
+                        return;
+                    }
+                    
+                    resolve();
+                }
+            );
         });
     }
 

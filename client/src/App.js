@@ -7,13 +7,15 @@ import './App.css';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
 import FileUpload from './components/FileUpload';
-import OrderList from './components/OrderList';  // Changed from OrderManagement
+import OrderList from './components/OrderList';
 import ShipmentTracking from './components/ShipmentTracking';
 import Suppliers from './components/Suppliers';
 import InquiryList from './components/InquiryList';
 import InquiryDetail from './components/InquiryDetail';
 import Navigation from './components/Navigation';
 import PromotionList from './components/PromotionList';
+import ComparisonList from './components/ComparisonList';
+import ComparisonDetail from './components/ComparisonDetail';
 
 // Create theme
 const theme = createTheme({
@@ -68,6 +70,8 @@ function App() {
               <Route path="/suppliers" element={<Suppliers />} />
               <Route path="/inquiries" element={<InquiryList />} />
               <Route path="/inquiries/:id" element={<InquiryDetail />} />
+              <Route path="/comparisons" element={<ComparisonList />} />
+              <Route path="/comparisons/:id" element={<ComparisonDetail />} />
               <Route path="/promotions" element={<PromotionList />} />
             </Routes>
           </Box>

@@ -20,6 +20,7 @@ import {
   Business as SuppliersIcon,
   Assignment as InquiriesIcon,
   LocalOffer as PromotionsIcon,
+  Compare as CompareIcon,
 } from '@mui/icons-material';
 
 const drawerWidth = 240;
@@ -32,6 +33,7 @@ const menuItems = [
   { path: '/shipments', text: 'Shipments', icon: <ShipmentsIcon /> },
   { path: '/suppliers', text: 'Suppliers', icon: <SuppliersIcon /> },
   { path: '/inquiries', text: 'Inquiries', icon: <InquiriesIcon /> },
+  { path: '/comparisons', text: 'Comparisons', icon: <CompareIcon /> },
   { path: '/promotions', text: 'Promotions', icon: <PromotionsIcon /> },
 ];
 
