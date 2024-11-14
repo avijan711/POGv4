@@ -18,6 +18,8 @@ import {
   AppBar,
   Toolbar,
   Button,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import {
   ShoppingCart as ShoppingCartIcon,
@@ -26,6 +28,8 @@ import {
   Compare as CompareIcon,
   Close as CloseIcon,
   Add as AddIcon,
+  ViewList as ViewListIcon,
+  ViewModule as ViewModuleIcon,
 } from '@mui/icons-material';
 
 function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
@@ -33,6 +37,7 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
   const [editingQty, setEditingQty] = useState(null);
   const [quantities, setQuantities] = useState({});
   const [itemIds, setItemIds] = useState({});
+  const [viewMode, setViewMode] = useState('items'); // 'items' or 'suppliers'
 
   console.log('=== ComparisonDialog Initial Data ===');
   console.log('Total prices:', prices?.length);
@@ -179,9 +184,210 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
     return Math.abs(price - currentBestPrice) <= epsilon;
   };
 
+  const calculateSupplierSummary = (group) => {
+    const winningItems = group.items.filter(item => 
+      isWinningPrice(item.PriceQuoted, item.ItemID)
+    );
+    const totalValue = winningItems.reduce((sum, item) => {
+      const qty = quantities[item.ItemID] || item.RequestedQty;
+      return sum + (item.PriceQuoted * qty || 0);
+    }, 0);
+
+    return {
+      totalItems: group.items.length,
+      winningItems: winningItems.length,
+      totalValue,
+      winningItemsList: winningItems
+    };
+  };
+
   // Get unique items across all suppliers
   const uniqueItems = Array.from(new Set(prices?.map(item => item.ItemID))) || [];
   console.log('=== Unique Items ===', uniqueItems);
+
+  const renderItemsView = () => (
+    <TableContainer component={Paper}>
+      <Table size="small" stickyHeader>
+        <TableHead>
+          <TableRow>
+            <TableCell>Item ID</TableCell>
+            <TableCell>Description</TableCell>
+            <TableCell align="right">Requested Qty</TableCell>
+            {Object.entries(supplierGroups)
+              .filter(([key]) => selectedSuppliers[key])
+              .map(([key, group]) => (
+                <TableCell key={key} align="right">
+                  {group.isPromotion ? `${group.supplierName} (${group.promotionName})` : group.supplierName}
+                </TableCell>
+              ))}
+            <TableCell align="center">Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {uniqueItems.map(itemId => {
+            const firstItem = prices?.find(item => item.ItemID === itemId);
+            const currentBestPrice = getBestPriceForItem(itemId);
+            return (
+              <TableRow key={itemId}>
+                <TableCell>
+                  {editingQty === `${itemId}-id` ? (
+                    <TextField
+                      size="small"
+                      value={itemIds[itemId] || itemId}
+                      onChange={(e) => handleItemIdChange(itemId, e.target.value)}
+                      onBlur={() => setEditingQty(null)}
+                      autoFocus
+                    />
+                  ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {itemIds[itemId] || itemId}
+                      <IconButton 
+                        size="small"
+                        onClick={() => setEditingQty(`${itemId}-id`)}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  )}
+                </TableCell>
+                <TableCell>{firstItem?.HebrewDescription}</TableCell>
+                <TableCell align="right">
+                  {editingQty === itemId ? (
+                    <TextField
+                      size="small"
+                      type="number"
+                      value={quantities[itemId] || firstItem?.RequestedQty}
+                      onChange={(e) => handleQuantityChange(itemId, e.target.value)}
+                      onBlur={() => setEditingQty(null)}
+                      autoFocus
+                    />
+                  ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                      {quantities[itemId] || firstItem?.RequestedQty}
+                      <IconButton 
+                        size="small"
+                        onClick={() => setEditingQty(itemId)}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  )}
+                </TableCell>
+                {Object.entries(supplierGroups)
+                  .filter(([key]) => selectedSuppliers[key])
+                  .map(([key, group]) => {
+                    const supplierItem = group.items.find(item => item.ItemID === itemId);
+                    const isWinner = supplierItem?.PriceQuoted && isWinningPrice(supplierItem.PriceQuoted, itemId);
+                    return (
+                      <TableCell 
+                        key={key} 
+                        align="right"
+                        sx={{
+                          backgroundColor: isWinner ? '#4caf5066' : 'inherit',
+                          transition: 'background-color 0.2s'
+                        }}
+                      >
+                        {supplierItem ? (
+                          <Box>
+                            ${supplierItem.PriceQuoted?.toFixed(2) || 'N/A'}
+                            <Typography variant="caption" display="block" color="text.secondary">
+                              {calculatePriceDelta(supplierItem.PriceQuoted, currentBestPrice)}
+                            </Typography>
+                          </Box>
+                        ) : '-'}
+                      </TableCell>
+                    );
+                  })}
+                <TableCell align="center">
+                  <Tooltip title="Remove Item">
+                    <IconButton size="small" color="error">
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Compare">
+                    <IconButton size="small" color="primary">
+                      <CompareIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+
+  const renderSuppliersView = () => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {Object.entries(supplierGroups)
+        .filter(([key]) => selectedSuppliers[key])
+        .map(([key, group]) => {
+          const summary = calculateSupplierSummary(group);
+          
+          // Skip suppliers with no winning items
+          if (summary.winningItems === 0) return null;
+
+          return (
+            <Paper key={key} sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                {group.isPromotion ? `${group.supplierName} (${group.promotionName})` : group.supplierName}
+              </Typography>
+              
+              <Box sx={{ mb: 2, display: 'flex', gap: 4 }}>
+                <Typography>
+                  Winning Items: {summary.winningItems} / {summary.totalItems}
+                </Typography>
+                <Typography>
+                  Total Value: ${summary.totalValue.toFixed(2)}
+                </Typography>
+              </Box>
+
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Item ID</TableCell>
+                      <TableCell>Description</TableCell>
+                      <TableCell align="right">Requested Qty</TableCell>
+                      <TableCell align="right">Price</TableCell>
+                      <TableCell align="right">Total</TableCell>
+                      <TableCell align="right">Best Price Delta</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {summary.winningItemsList.map(item => {
+                      const currentBestPrice = getBestPriceForItem(item.ItemID);
+                      const qty = quantities[item.ItemID] || item.RequestedQty;
+                      const total = (item.PriceQuoted * qty) || 0;
+
+                      return (
+                        <TableRow 
+                          key={item.ItemID}
+                          sx={{
+                            backgroundColor: '#4caf5066',
+                            transition: 'background-color 0.2s'
+                          }}
+                        >
+                          <TableCell>{itemIds[item.ItemID] || item.ItemID}</TableCell>
+                          <TableCell>{item.HebrewDescription}</TableCell>
+                          <TableCell align="right">{qty}</TableCell>
+                          <TableCell align="right">${item.PriceQuoted?.toFixed(2) || 'N/A'}</TableCell>
+                          <TableCell align="right">${total.toFixed(2)}</TableCell>
+                          <TableCell align="right">
+                            {calculatePriceDelta(item.PriceQuoted, currentBestPrice)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+          );
+        })}
+    </Box>
+  );
 
   return (
     <Dialog 
@@ -203,6 +409,24 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
           <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
             Interactive Comparison Process
           </Typography>
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            onChange={(e, newMode) => newMode && setViewMode(newMode)}
+            sx={{ mr: 2, bgcolor: 'background.paper' }}
+            size="small"
+          >
+            <ToggleButton value="items">
+              <Tooltip title="Items View">
+                <ViewListIcon />
+              </Tooltip>
+            </ToggleButton>
+            <ToggleButton value="suppliers">
+              <Tooltip title="Sort by Supplier">
+                <ViewModuleIcon />
+              </Tooltip>
+            </ToggleButton>
+          </ToggleButtonGroup>
           <Button
             color="inherit"
             onClick={onCreateOrders}
@@ -220,159 +444,22 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
             Supplier Management
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            {Object.entries(supplierGroups).map(([key, group]) => {
-              console.log('Rendering supplier chip:', {
-                key,
-                supplier: group.supplierName,
-                isPromotion: group.isPromotion,
-                promotionName: group.promotionName
-              });
-              return (
-                <Chip
-                  key={key}
-                  label={group.isPromotion ? `${group.supplierName} (${group.promotionName})` : group.supplierName}
-                  color={group.isPromotion ? "secondary" : "primary"}
-                  variant={selectedSuppliers[key] ? "filled" : "outlined"}
-                  onClick={() => handleSupplierToggle(key)}
-                  onDelete={() => handleSupplierToggle(key)}
-                  deleteIcon={selectedSuppliers[key] ? <DeleteIcon /> : <AddIcon />}
-                  sx={{ m: 0.5 }}
-                />
-              );
-            })}
+            {Object.entries(supplierGroups).map(([key, group]) => (
+              <Chip
+                key={key}
+                label={group.isPromotion ? `${group.supplierName} (${group.promotionName})` : group.supplierName}
+                color={group.isPromotion ? "secondary" : "primary"}
+                variant={selectedSuppliers[key] ? "filled" : "outlined"}
+                onClick={() => handleSupplierToggle(key)}
+                onDelete={() => handleSupplierToggle(key)}
+                deleteIcon={selectedSuppliers[key] ? <DeleteIcon /> : <AddIcon />}
+                sx={{ m: 0.5 }}
+              />
+            ))}
           </Stack>
         </Paper>
 
-        <TableContainer component={Paper}>
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                <TableCell>Item ID</TableCell>
-                <TableCell>Description</TableCell>
-                <TableCell align="right">Requested Qty</TableCell>
-                {Object.entries(supplierGroups)
-                  .filter(([key]) => selectedSuppliers[key])
-                  .map(([key, group]) => {
-                    console.log('Rendering supplier column:', {
-                      key,
-                      supplier: group.supplierName,
-                      isPromotion: group.isPromotion,
-                      promotionName: group.promotionName
-                    });
-                    return (
-                      <TableCell key={key} align="right">
-                        {group.isPromotion ? `${group.supplierName} (${group.promotionName})` : group.supplierName}
-                      </TableCell>
-                    );
-                  })}
-                <TableCell align="center">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {uniqueItems.map(itemId => {
-                const firstItem = prices?.find(item => item.ItemID === itemId);
-                const currentBestPrice = getBestPriceForItem(itemId);
-                console.log('Rendering item row:', {
-                  itemId,
-                  description: firstItem?.HebrewDescription,
-                  currentBestPrice
-                });
-                return (
-                  <TableRow key={itemId}>
-                    <TableCell>
-                      {editingQty === `${itemId}-id` ? (
-                        <TextField
-                          size="small"
-                          value={itemIds[itemId] || itemId}
-                          onChange={(e) => handleItemIdChange(itemId, e.target.value)}
-                          onBlur={() => setEditingQty(null)}
-                          autoFocus
-                        />
-                      ) : (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {itemIds[itemId] || itemId}
-                          <IconButton 
-                            size="small"
-                            onClick={() => setEditingQty(`${itemId}-id`)}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      )}
-                    </TableCell>
-                    <TableCell>{firstItem?.HebrewDescription}</TableCell>
-                    <TableCell align="right">
-                      {editingQty === itemId ? (
-                        <TextField
-                          size="small"
-                          type="number"
-                          value={quantities[itemId] || firstItem?.RequestedQty}
-                          onChange={(e) => handleQuantityChange(itemId, e.target.value)}
-                          onBlur={() => setEditingQty(null)}
-                          autoFocus
-                        />
-                      ) : (
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-                          {quantities[itemId] || firstItem?.RequestedQty}
-                          <IconButton 
-                            size="small"
-                            onClick={() => setEditingQty(itemId)}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      )}
-                    </TableCell>
-                    {Object.entries(supplierGroups)
-                      .filter(([key]) => selectedSuppliers[key])
-                      .map(([key, group]) => {
-                        const supplierItem = group.items.find(item => item.ItemID === itemId);
-                        const isWinner = supplierItem?.PriceQuoted && isWinningPrice(supplierItem.PriceQuoted, itemId);
-                        console.log('Rendering price cell:', {
-                          itemId,
-                          supplier: group.supplierName,
-                          price: supplierItem?.PriceQuoted,
-                          currentBestPrice,
-                          isWinner
-                        });
-                        return (
-                          <TableCell 
-                            key={key} 
-                            align="right"
-                            sx={{
-                              backgroundColor: isWinner ? '#4caf5066' : 'inherit',
-                              transition: 'background-color 0.2s'
-                            }}
-                          >
-                            {supplierItem ? (
-                              <Box>
-                                ${supplierItem.PriceQuoted?.toFixed(2) || 'N/A'}
-                                <Typography variant="caption" display="block" color="text.secondary">
-                                  {calculatePriceDelta(supplierItem.PriceQuoted, currentBestPrice)}
-                                </Typography>
-                              </Box>
-                            ) : '-'}
-                          </TableCell>
-                        );
-                      })}
-                    <TableCell align="center">
-                      <Tooltip title="Remove Item">
-                        <IconButton size="small" color="error">
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Compare">
-                        <IconButton size="small" color="primary">
-                          <CompareIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        {viewMode === 'items' ? renderItemsView() : renderSuppliersView()}
       </Box>
     </Dialog>
   );
