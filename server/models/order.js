@@ -3,22 +3,30 @@ class OrderModel {
         this.db = db;
     }
 
-    /**
-     * Get all supplier prices for each item in an inquiry, including promotions
-     * @param {number} inquiryId - The ID of the inquiry
-     * @returns {Promise<Array>} Array of items with their supplier info and prices
-     */
     getBestSupplierPrices(inquiryId) {
         return new Promise((resolve, reject) => {
             const query = `
                 WITH InquiryItems AS (
-                    -- Get all items from the inquiry
+                    -- Get all items from the inquiry with their details
                     SELECT 
                         ii.ItemID,
                         ii.InquiryItemID,
                         ii.RequestedQty,
                         i.HebrewDescription,
-                        i.EnglishDescription
+                        i.EnglishDescription,
+                        i.ImportMarkup,
+                        COALESCE(
+                            CAST(ii.RetailPrice AS NUMERIC),
+                            (
+                                SELECT ILSRetailPrice 
+                                FROM ItemHistory ih 
+                                WHERE ih.ItemID = ii.ItemID 
+                                AND ih.ILSRetailPrice IS NOT NULL 
+                                ORDER BY ih.Date DESC 
+                                LIMIT 1
+                            ),
+                            0
+                        ) as RetailPrice
                     FROM InquiryItem ii
                     JOIN Item i ON ii.ItemID = i.ItemID
                     WHERE ii.InquiryID = ?
@@ -62,9 +70,15 @@ class OrderModel {
                     SELECT * FROM PromotionSuppliers
                 ),
                 ItemSupplierCombos AS (
-                    -- Create all possible item-supplier combinations
+                    -- Create all possible item-supplier combinations with retail price
                     SELECT 
-                        ii.*,
+                        ii.ItemID,
+                        ii.InquiryItemID,
+                        ii.RequestedQty,
+                        ii.HebrewDescription,
+                        ii.EnglishDescription,
+                        ii.ImportMarkup,
+                        ii.RetailPrice,
                         st.SupplierID,
                         st.SupplierName,
                         st.IsPromotion,
@@ -120,8 +134,6 @@ class OrderModel {
                     ap.PriceQuoted ASC NULLS LAST
             `;
 
-            console.log('Executing query:', query.replace(/\s+/g, ' '));
-
             this.db.all(query, [inquiryId], (err, results) => {
                 if (err) {
                     console.error('Error executing query:', err);
@@ -129,14 +141,27 @@ class OrderModel {
                     return;
                 }
 
-                console.log('Query results:', results);
-                console.log('Unique suppliers:', new Set(results.map(r => r.SupplierName)));
-                console.log('Promotion prices:', results.filter(r => r.IsPromotion));
-                console.log('Total rows:', results.length);
-                console.log('Rows by supplier:', results.reduce((acc, r) => {
-                    acc[r.SupplierName] = (acc[r.SupplierName] || 0) + 1;
-                    return acc;
-                }, {}));
+                // Log the first item to examine its structure
+                if (results && results.length > 0) {
+                    const sampleItem = results[0];
+                    console.log('Sample item structure:', {
+                        item: sampleItem,
+                        importMarkup: sampleItem.ImportMarkup,
+                        retailPrice: sampleItem.RetailPrice,
+                        priceQuoted: sampleItem.PriceQuoted,
+                        // Log the raw values and their types
+                        rawValues: {
+                            importMarkup: {
+                                value: sampleItem.ImportMarkup,
+                                type: typeof sampleItem.ImportMarkup
+                            },
+                            retailPrice: {
+                                value: sampleItem.RetailPrice,
+                                type: typeof sampleItem.RetailPrice
+                            }
+                        }
+                    });
+                }
 
                 resolve(results);
             });

@@ -18,6 +18,9 @@ import {
   Button,
   ToggleButton,
   ToggleButtonGroup,
+  Link,
+  FormControl,
+  InputAdornment,
 } from '@mui/material';
 import {
   ShoppingCart as ShoppingCartIcon,
@@ -26,9 +29,11 @@ import {
   Compare as CompareIcon,
   ViewList as ViewListIcon,
   ViewModule as ViewModuleIcon,
+  FilterAlt as FilterIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
+import ItemDetailsDialog from './ItemDetailsDialog';
 
 function ComparisonDetail() {
   const { id } = useParams();
@@ -43,16 +48,83 @@ function ComparisonDetail() {
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [eurToIls, setEurToIls] = useState(3.95);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [itemDetailsOpen, setItemDetailsOpen] = useState(false);
+  const [discountFilter, setDiscountFilter] = useState('');
 
   useEffect(() => {
     fetchComparisonData();
+    fetchSettings();
   }, [id]);
+
+  const fetchSettings = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/settings`);
+      if (response.data && response.data.eurToIls) {
+        const rate = Number(response.data.eurToIls);
+        console.log('Fetched EUR to ILS rate:', rate);
+        setEurToIls(rate);
+      }
+    } catch (err) {
+      console.error('Error fetching settings:', err);
+    }
+  };
+
+  const fetchItemDetails = async (itemId) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/items/${itemId}`);
+      setSelectedItem(response.data);
+      setItemDetailsOpen(true);
+    } catch (err) {
+      console.error('Error fetching item details:', err);
+      setError('Failed to load item details');
+    }
+  };
+
+  const handleItemClick = (itemId) => {
+    fetchItemDetails(itemId);
+  };
+
+  const handleCloseItemDetails = () => {
+    setItemDetailsOpen(false);
+    setSelectedItem(null);
+  };
 
   const fetchComparisonData = async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${API_BASE_URL}/api/orders/best-prices/${id}`);
-      setPrices(response.data);
+      console.log('API Response:', response.data);
+      
+      if (response.data && response.data.length > 0) {
+        const sampleItem = response.data[0];
+        console.log('Sample item structure:', {
+          item: sampleItem,
+          importMarkup: sampleItem.ImportMarkup,
+          retailPrice: sampleItem.RetailPrice,
+          priceQuoted: sampleItem.PriceQuoted,
+          rawValues: {
+            importMarkup: {
+              value: sampleItem.ImportMarkup,
+              type: typeof sampleItem.ImportMarkup
+            },
+            retailPrice: {
+              value: sampleItem.RetailPrice,
+              type: typeof sampleItem.RetailPrice
+            }
+          }
+        });
+      }
+
+      const processedData = response.data.map(item => ({
+        ...item,
+        ImportMarkup: Number(item.ImportMarkup) || 1.3,
+        RetailPrice: Number(item.RetailPrice) || 0,
+        PriceQuoted: Number(item.PriceQuoted) || 0
+      }));
+
+      setPrices(processedData);
       setError(null);
     } catch (err) {
       console.error('Error fetching comparison data:', err);
@@ -62,7 +134,62 @@ function ComparisonDetail() {
     }
   };
 
-  // First, get all unique suppliers and their types
+  const calculateDiscount = (priceEUR, importMarkup, retailPrice) => {
+    if (!retailPrice) {
+      console.log('Missing retail price (ILS)');
+      return null;
+    }
+    if (!importMarkup) {
+      console.log('Missing import markup');
+      return null;
+    }
+    if (!priceEUR) {
+      console.log('Missing EUR price');
+      return null;
+    }
+
+    const supplierPriceILS = priceEUR * eurToIls * importMarkup;
+    console.log('Discount calculation:', {
+      priceEUR,
+      importMarkup,
+      retailPrice,
+      supplierPriceILS,
+      eurToIls,
+      message: 'RetailPrice is already in ILS from query COALESCE'
+    });
+
+    const discount = ((retailPrice - supplierPriceILS) / retailPrice) * 100;
+    console.log('Final discount:', discount);
+
+    return Math.max(0, Math.min(100, discount));
+  };
+
+  const shouldShowItem = (itemId) => {
+    if (!discountFilter) return true;
+    
+    const filterValue = parseFloat(discountFilter);
+    if (isNaN(filterValue)) return true;
+
+    let maxDiscount = -Infinity;
+    Object.entries(supplierGroups)
+      .filter(([key]) => selectedSuppliers[key])
+      .forEach(([key, group]) => {
+        const supplierItem = group.items.find(item => item.ItemID === itemId);
+        if (supplierItem) {
+          const displayPrice = getDisplayPrice(itemId, key, supplierItem.PriceQuoted);
+          const discount = calculateDiscount(
+            displayPrice,
+            Number(supplierItem.ImportMarkup),
+            Number(supplierItem.RetailPrice)
+          );
+          if (discount !== null) {
+            maxDiscount = Math.max(maxDiscount, discount);
+          }
+        }
+      });
+      return maxDiscount !== -Infinity && maxDiscount < filterValue;
+    };
+
   const allSuppliers = prices?.reduce((acc, item) => {
     const key = item.IsPromotion 
       ? `${item.SupplierID}-${item.PromotionGroupID}`
@@ -80,7 +207,6 @@ function ComparisonDetail() {
     return acc;
   }, {});
 
-  // Then group items by supplier
   const supplierGroups = prices?.reduce((groups, item) => {
     const key = item.IsPromotion 
       ? `${item.SupplierID}-${item.PromotionGroupID}`
@@ -97,13 +223,12 @@ function ComparisonDetail() {
   }, {}) || {};
 
   useEffect(() => {
-    // Initialize selected suppliers
     const initial = Object.keys(supplierGroups).reduce((acc, key) => ({
       ...acc,
       [key]: true
     }), {});
     setSelectedSuppliers(initial);
-  }, [prices]);
+  }, [supplierGroups]);
 
   const handleSupplierToggle = (key) => {
     setSelectedSuppliers(prev => ({
@@ -132,12 +257,6 @@ function ComparisonDetail() {
     return temporaryPrices.hasOwnProperty(priceKey) 
       ? temporaryPrices[priceKey] 
       : originalPrice;
-  };
-
-  const calculatePriceDelta = (price, bestPrice) => {
-    if (!price || !bestPrice) return '0.00%';
-    const delta = ((price - bestPrice) / bestPrice * 100).toFixed(2);
-    return delta > 0 ? `+${delta}%` : `${delta}%`;
   };
 
   const getBestPriceForItem = (itemId) => {
@@ -183,6 +302,7 @@ function ComparisonDetail() {
   };
 
   const uniqueItems = Array.from(new Set(prices?.map(item => item.ItemID))) || [];
+  const filteredItems = uniqueItems.filter(shouldShowItem);
 
   const handleCreateOrders = async () => {
     try {
@@ -216,12 +336,20 @@ function ComparisonDetail() {
           </TableRow>
         </TableHead>
         <TableBody>
-          {uniqueItems.map(itemId => {
+          {filteredItems.map(itemId => {
             const firstItem = prices?.find(item => item.ItemID === itemId);
-            const currentBestPrice = getBestPriceForItem(itemId);
             return (
               <TableRow key={itemId}>
-                <TableCell>{itemId}</TableCell>
+                <TableCell>
+                  <Link
+                    component="button"
+                    variant="body2"
+                    onClick={() => handleItemClick(itemId)}
+                    sx={{ textDecoration: 'none' }}
+                  >
+                    {itemId}
+                  </Link>
+                </TableCell>
                 <TableCell>{firstItem?.HebrewDescription}</TableCell>
                 <TableCell align="right">
                   {editingQty === itemId ? (
@@ -249,10 +377,75 @@ function ComparisonDetail() {
                   .filter(([key]) => selectedSuppliers[key])
                   .map(([key, group]) => {
                     const supplierItem = group.items.find(item => item.ItemID === itemId);
+                    console.log('Processing supplier item:', {
+                      itemId,
+                      supplierKey: key,
+                      item: supplierItem,
+                      rawValues: supplierItem ? {
+                        importMarkup: {
+                          value: supplierItem.ImportMarkup,
+                          type: typeof supplierItem.ImportMarkup,
+                          isValid: !isNaN(Number(supplierItem.ImportMarkup))
+                        },
+                        retailPrice: {
+                          value: supplierItem.RetailPrice,
+                          type: typeof supplierItem.RetailPrice,
+                          isValid: !isNaN(Number(supplierItem.RetailPrice))
+                        },
+                        priceQuoted: {
+                          value: supplierItem.PriceQuoted,
+                          type: typeof supplierItem.PriceQuoted,
+                          isValid: !isNaN(Number(supplierItem.PriceQuoted))
+                        }
+                      } : null
+                    });
+                    
                     const displayPrice = getDisplayPrice(itemId, key, supplierItem?.PriceQuoted);
                     const isWinner = displayPrice && isWinningPrice(displayPrice, itemId);
                     const priceKey = `${itemId}-${key}`;
                     
+                    let discount = null;
+                    if (supplierItem) {
+                      console.log('Calculating discount for item:', {
+                        itemId,
+                        displayPrice,
+                        importMarkup: supplierItem.ImportMarkup,
+                        retailPrice: supplierItem.RetailPrice,
+                        rawValues: {
+                          importMarkup: {
+                            value: supplierItem.ImportMarkup,
+                            type: typeof supplierItem.ImportMarkup,
+                            isValid: !isNaN(Number(supplierItem.ImportMarkup))
+                          },
+                          retailPrice: {
+                            value: supplierItem.RetailPrice,
+                            type: typeof supplierItem.RetailPrice,
+                            isValid: !isNaN(Number(supplierItem.RetailPrice))
+                          }
+                        }
+                      });
+                      
+                      const parsedMarkup = Number(supplierItem.ImportMarkup);
+                      const parsedRetail = Number(supplierItem.RetailPrice);
+                      
+                      console.log('Parsed values:', {
+                        parsedMarkup,
+                        parsedRetail,
+                        isValid: {
+                          markup: !isNaN(parsedMarkup) && parsedMarkup > 0,
+                          retail: !isNaN(parsedRetail) && parsedRetail > 0
+                        }
+                      });
+                      
+                      discount = calculateDiscount(
+                        displayPrice,
+                        parsedMarkup,
+                        parsedRetail
+                      );
+                      
+                      console.log('Calculated discount result:', discount);
+                    }
+
                     return (
                       <TableCell 
                         key={key} 
@@ -277,7 +470,7 @@ function ComparisonDetail() {
                               />
                             ) : (
                               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-                                ${displayPrice?.toFixed(2) || 'N/A'}
+                                €{displayPrice?.toFixed(2) || 'N/A'}
                                 <IconButton 
                                   size="small"
                                   onClick={() => setEditingPrice(priceKey)}
@@ -287,7 +480,7 @@ function ComparisonDetail() {
                               </Box>
                             )}
                             <Typography variant="caption" display="block" color="text.secondary">
-                              {calculatePriceDelta(displayPrice, currentBestPrice)}
+                              {discount !== null ? `${discount.toFixed(1)}%` : ''}
                             </Typography>
                           </Box>
                         ) : '-'}
@@ -322,7 +515,7 @@ function ComparisonDetail() {
                   Winning Items: {summary.winningItems} / {summary.totalItems}
                 </Typography>
                 <Typography>
-                  Total Value: ${summary.totalValue.toFixed(2)}
+                  Total Value: €{summary.totalValue.toFixed(2)}
                 </Typography>
               </Box>
 
@@ -335,35 +528,50 @@ function ComparisonDetail() {
                       <TableCell align="right">Requested Qty</TableCell>
                       <TableCell align="right">Price</TableCell>
                       <TableCell align="right">Total</TableCell>
-                      <TableCell align="right">Best Price Delta</TableCell>
+                      <TableCell align="right">Discount Rate</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {summary.winningItemsList.map(item => {
-                      const currentBestPrice = getBestPriceForItem(item.ItemID);
-                      const qty = quantities[item.ItemID] || item.RequestedQty;
-                      const displayPrice = getDisplayPrice(item.ItemID, key, item.PriceQuoted);
-                      const total = (displayPrice * qty) || 0;
+                    {summary.winningItemsList
+                      .filter(item => shouldShowItem(item.ItemID))
+                      .map(item => {
+                        const qty = quantities[item.ItemID] || item.RequestedQty;
+                        const displayPrice = getDisplayPrice(item.ItemID, key, item.PriceQuoted);
+                        const total = (displayPrice * qty) || 0;
+                        const discount = calculateDiscount(
+                          displayPrice,
+                          parseFloat(item.ImportMarkup),
+                          parseFloat(item.RetailPrice)
+                        );
 
-                      return (
-                        <TableRow 
-                          key={item.ItemID}
-                          sx={{
-                            backgroundColor: '#4caf5066',
-                            transition: 'background-color 0.2s'
-                          }}
-                        >
-                          <TableCell>{item.ItemID}</TableCell>
-                          <TableCell>{item.HebrewDescription}</TableCell>
-                          <TableCell align="right">{qty}</TableCell>
-                          <TableCell align="right">${displayPrice?.toFixed(2) || 'N/A'}</TableCell>
-                          <TableCell align="right">${total.toFixed(2)}</TableCell>
-                          <TableCell align="right">
-                            {calculatePriceDelta(displayPrice, currentBestPrice)}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                        return (
+                          <TableRow 
+                            key={item.ItemID}
+                            sx={{
+                              backgroundColor: '#4caf5066',
+                              transition: 'background-color 0.2s'
+                            }}
+                          >
+                            <TableCell>
+                              <Link
+                                component="button"
+                                variant="body2"
+                                onClick={() => handleItemClick(item.ItemID)}
+                                sx={{ textDecoration: 'none' }}
+                              >
+                                {item.ItemID}
+                              </Link>
+                            </TableCell>
+                            <TableCell>{item.HebrewDescription}</TableCell>
+                            <TableCell align="right">{qty}</TableCell>
+                            <TableCell align="right">€{displayPrice?.toFixed(2) || 'N/A'}</TableCell>
+                            <TableCell align="right">€{total.toFixed(2)}</TableCell>
+                            <TableCell align="right">
+                              {discount !== null ? `${discount.toFixed(1)}%` : ''}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -396,6 +604,24 @@ function ComparisonDetail() {
           Interactive Comparison Process
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
+          <FormControl sx={{ width: '200px' }}>
+            <TextField
+              label="Filter by Discount"
+              value={discountFilter}
+              onChange={(e) => setDiscountFilter(e.target.value)}
+              size="small"
+              type="number"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <FilterIcon />
+                  </InputAdornment>
+                ),
+                endAdornment: <InputAdornment position="end">%</InputAdornment>,
+              }}
+              placeholder="Enter discount %"
+            />
+          </FormControl>
           <ToggleButtonGroup
             value={viewMode}
             exclusive
@@ -445,6 +671,12 @@ function ComparisonDetail() {
       </Paper>
 
       {viewMode === 'items' ? renderItemsView() : renderSuppliersView()}
+
+      <ItemDetailsDialog
+        open={itemDetailsOpen}
+        onClose={handleCloseItemDetails}
+        item={selectedItem}
+      />
     </Box>
   );
 }
