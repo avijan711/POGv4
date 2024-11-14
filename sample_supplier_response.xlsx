@@ -1,0 +1,5 @@
+ItemID	NewItemID	Price	Notes
+SP001	SP002	85.50	Manufacturer discontinued - replaced with newer model
+SP002	SP004	95.00	Updated to 2024 version with improved filtration
+SP003	SP001	120.00	Item discontinued, recommending SP001 as replacement
+SP005		150.00	Price update only, no replacement

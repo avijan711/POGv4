@@ -1,0 +1,19 @@
+{
+  "inquiryNumber": "TEST-REF-002",
+  "items": [
+    {
+      "itemId": "171366",
+      "hebrewDescription": "בלם קדמי",
+      "englishDescription": "Front Brake",
+      "importMarkup": 1.30,
+      "hsCode": "8708302100",
+      "qtyInStock": 45,
+      "soldThisYear": 120,
+      "soldLastYear": 98,
+      "retailPrice": 249.99,
+      "requestedQty": 30,
+      "NewReferenceID": "1692647380",
+      "ReferenceNotes": "Updated version with improved material"
+    }
+  ]
+}
