@@ -1,0 +1,8 @@
+-- Add missing columns to InquiryItem table
+ALTER TABLE InquiryItem ADD COLUMN ImportMarkup DECIMAL(10,2) DEFAULT 1.3;
+ALTER TABLE InquiryItem ADD COLUMN HSCode TEXT;
+ALTER TABLE InquiryItem ADD COLUMN QtyInStock INTEGER DEFAULT 0;
+ALTER TABLE InquiryItem ADD COLUMN RetailPrice DECIMAL(10,2);
+ALTER TABLE InquiryItem ADD COLUMN SoldThisYear INTEGER DEFAULT 0;
+ALTER TABLE InquiryItem ADD COLUMN SoldLastYear INTEGER DEFAULT 0;
+ALTER TABLE InquiryItem ADD COLUMN ReferenceNotes TEXT;

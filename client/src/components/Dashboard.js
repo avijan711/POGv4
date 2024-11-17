@@ -12,6 +12,14 @@ import {
   Divider,
   CircularProgress,
   Container,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Alert,
+  Snackbar,
 } from '@mui/material';
 import {
   Inventory as InventoryIcon,
@@ -19,6 +27,8 @@ import {
   LocalShipping as ShippingIcon,
   Assignment as InquiryIcon,
   LocalOffer as PromotionIcon,
+  Warning as WarningIcon,
+  DeleteForever as DeleteForeverIcon,
 } from '@mui/icons-material';
 import Settings from './Settings';
 import { API_BASE_URL } from '../config';
@@ -50,6 +60,9 @@ function Dashboard() {
   const [recentActivities, setRecentActivities] = useState([]);
   const [activePromotions, setActivePromotions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [reinitializing, setReinitializing] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -92,6 +105,7 @@ function Dashboard() {
         }
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
+        setError('Failed to load dashboard data');
       } finally {
         setLoading(false);
       }
@@ -99,6 +113,38 @@ function Dashboard() {
 
     fetchData();
   }, []);
+
+  const handleReinitializeDB = async () => {
+    setReinitializing(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/reinitialize-db`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.details || data.error || 'Failed to reinitialize database');
+      }
+
+      // Show success message and reload after a short delay
+      setError({ severity: 'success', message: 'Database reset to clean state successfully. Reloading...' });
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    } catch (error) {
+      console.error('Error reinitializing database:', error);
+      setError({ severity: 'error', message: error.message });
+    } finally {
+      setReinitializing(false);
+      setOpenDialog(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -110,6 +156,86 @@ function Dashboard() {
 
   return (
     <Container maxWidth="lg" sx={{ mb: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+        <Button
+          variant="contained"
+          color="error"
+          startIcon={<DeleteForeverIcon />}
+          onClick={() => setOpenDialog(true)}
+          disabled={reinitializing}
+        >
+          {reinitializing ? 'Resetting App...' : 'Reset App'}
+        </Button>
+      </Box>
+
+      <Dialog
+        open={openDialog}
+        onClose={() => !reinitializing && setOpenDialog(false)}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle id="alert-dialog-title" sx={{ color: 'error.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <DeleteForeverIcon /> Reset Application to Clean State
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="alert-dialog-description" sx={{ mb: 2 }}>
+            <strong>Warning: This action will completely reset the application!</strong>
+          </DialogContentText>
+          <Typography variant="body1" gutterBottom>
+            This will permanently delete:
+          </Typography>
+          <Box component="ul" sx={{ mt: 1, mb: 2 }}>
+            <li>All inventory items</li>
+            <li>All inquiries and their responses</li>
+            <li>All orders and shipments</li>
+            <li>All promotions and supplier data</li>
+            <li>All historical data and settings</li>
+          </Box>
+          <Typography variant="body1" color="error" sx={{ mt: 2 }}>
+            The application will be reset to its initial clean state. This action cannot be undone!
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 2, fontStyle: 'italic' }}>
+            Are you absolutely sure you want to proceed?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button 
+            onClick={() => setOpenDialog(false)} 
+            color="primary"
+            disabled={reinitializing}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleReinitializeDB}
+            color="error"
+            variant="contained"
+            disabled={reinitializing}
+            startIcon={reinitializing ? <CircularProgress size={20} /> : <DeleteForeverIcon />}
+            autoFocus
+          >
+            {reinitializing ? 'Resetting App...' : 'Reset Application'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar 
+        open={error !== null} 
+        autoHideDuration={6000} 
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setError(null)} 
+          severity={error?.severity || 'error'} 
+          sx={{ width: '100%' }}
+        >
+          {error?.message}
+        </Alert>
+      </Snackbar>
+
       <Grid container spacing={3}>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard

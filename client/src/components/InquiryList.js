@@ -19,6 +19,7 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  Stack,
 } from '@mui/material';
 import {
   Visibility as ViewIcon,
@@ -27,10 +28,14 @@ import {
   ArrowUpward as ArrowUpwardIcon,
   ArrowDownward as ArrowDownwardIcon,
   Delete as DeleteIcon,
+  Warning as WarningIcon,
+  People as PeopleIcon,
+  SwapHoriz as SwapHorizIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
+import { formatIlsPrice } from '../utils/priceUtils';
 
 function InquiryItemsDialog({ open, onClose, items, onViewDetails }) {
   const [sortField, setSortField] = useState('itemID');
@@ -49,9 +54,13 @@ function InquiryItemsDialog({ open, onClose, items, onViewDetails }) {
     let aValue = a[sortField];
     let bValue = b[sortField];
 
+    if (aValue == null && bValue == null) return 0;
+    if (aValue == null) return 1;
+    if (bValue == null) return -1;
+
     if (typeof aValue === 'string') {
       aValue = aValue.toLowerCase();
-      bValue = bValue.toLowerCase();
+      bValue = (bValue || '').toLowerCase();
     }
 
     if (aValue === bValue) return 0;
@@ -132,7 +141,13 @@ function InquiryItemsDialog({ open, onClose, items, onViewDetails }) {
                     <TableCell>{item.hebrewDescription}</TableCell>
                     <TableCell>{item.englishDescription}</TableCell>
                     <TableCell align="right">{item.importMarkup?.toFixed(2)}</TableCell>
-                    <TableCell align="right">₪{item.retailPrice || 0}</TableCell>
+                    <TableCell align="right">
+                      {formatIlsPrice(item.retailPrice) || (
+                        <Typography variant="body2" color="error">
+                          No Price
+                        </Typography>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -176,12 +191,16 @@ function InquiryList() {
     let aValue = a[sortField];
     let bValue = b[sortField];
 
+    if (aValue == null && bValue == null) return 0;
+    if (aValue == null) return 1;
+    if (bValue == null) return -1;
+
     if (sortField === 'date') {
-      aValue = new Date(aValue).getTime();
-      bValue = new Date(bValue).getTime();
+      aValue = new Date(aValue || 0).getTime();
+      bValue = new Date(bValue || 0).getTime();
     } else if (typeof aValue === 'string') {
       aValue = aValue.toLowerCase();
-      bValue = bValue.toLowerCase();
+      bValue = (bValue || '').toLowerCase();
     }
 
     if (aValue === bValue) return 0;
@@ -200,7 +219,7 @@ function InquiryList() {
   const fetchInquiries = async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/inquiries`);
-      setInquiries(response.data);
+      setInquiries(response.data || []);
       setError('');
     } catch (err) {
       console.error('Error fetching inquiries:', err);
@@ -214,7 +233,7 @@ function InquiryList() {
     try {
       setCurrentInquiryId(inquiryId);
       const response = await axios.get(`${API_BASE_URL}/api/inquiries/${inquiryId}`);
-      setInquiryItems(response.data.items || []); // Only set the items array
+      setInquiryItems(response.data.items || []);
       setDialogOpen(true);
     } catch (err) {
       console.error('Error fetching inquiry details:', err);
@@ -227,25 +246,16 @@ function InquiryList() {
       const response = await axios.get(`${API_BASE_URL}/api/inquiries/${inquiryId}/export`, {
         responseType: 'blob'
       });
-
-      // Create a URL for the blob
       const url = window.URL.createObjectURL(new Blob([response.data]));
-      
-      // Create a temporary link element
       const link = document.createElement('a');
       link.href = url;
-      
-      // Get the filename from the Content-Disposition header if available
       const contentDisposition = response.headers['content-disposition'];
       const filename = contentDisposition
         ? contentDisposition.split('filename=')[1].replace(/"/g, '')
         : 'inquiry-export.xlsx';
-      
       link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
-      
-      // Cleanup
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (err) {
@@ -269,7 +279,7 @@ function InquiryList() {
       await axios.delete(`${API_BASE_URL}/api/inquiries/${inquiryToDelete.inquiryID}`);
       setDeleteConfirmOpen(false);
       setInquiryToDelete(null);
-      fetchInquiries(); // Refresh the list after deletion
+      fetchInquiries();
     } catch (error) {
       console.error('Error deleting inquiry:', error);
       const errorMessage = error.response?.data?.error || 
@@ -284,7 +294,7 @@ function InquiryList() {
   };
 
   const getStatusColor = (status) => {
-    switch (status?.toLowerCase()) {
+    switch (status?.toLowerCase() || '') {
       case 'processed':
         return 'success';
       case 'processing':
@@ -347,13 +357,14 @@ function InquiryList() {
               >
                 Items <SortIcon field="itemCount" />
               </TableCell>
+              <TableCell>Response Stats</TableCell>
               <TableCell align="center">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {sortedInquiries.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center">
+                <TableCell colSpan={6} align="center">
                   No inquiries found
                 </TableCell>
               </TableRow>
@@ -361,15 +372,41 @@ function InquiryList() {
               sortedInquiries.map((inquiry) => (
                 <TableRow key={inquiry.inquiryID}>
                   <TableCell>{inquiry.customNumber}</TableCell>
-                  <TableCell>{new Date(inquiry.date).toLocaleString()}</TableCell>
+                  <TableCell>{new Date(inquiry.date || 0).toLocaleString()}</TableCell>
                   <TableCell>
                     <Chip
-                      label={inquiry.status}
+                      label={inquiry.status || 'Unknown'}
                       color={getStatusColor(inquiry.status)}
                       size="small"
                     />
                   </TableCell>
-                  <TableCell align="right">{inquiry.itemCount}</TableCell>
+                  <TableCell align="right">{inquiry.itemCount || 0}</TableCell>
+                  <TableCell>
+                    <Stack direction="row" spacing={1}>
+                      <Chip
+                        icon={<PeopleIcon />}
+                        label={`${inquiry.respondedSuppliersCount || 0} Suppliers`}
+                        color="primary"
+                        size="small"
+                      />
+                      {inquiry.notRespondedItemsCount > 0 && (
+                        <Chip
+                          icon={<WarningIcon />}
+                          label={`${inquiry.notRespondedItemsCount} Not Responded`}
+                          color="error"
+                          size="small"
+                        />
+                      )}
+                      {inquiry.totalReplacementsCount > 0 && (
+                        <Chip
+                          icon={<SwapHorizIcon />}
+                          label={`${inquiry.totalReplacementsCount} Replacements`}
+                          color="info"
+                          size="small"
+                        />
+                      )}
+                    </Stack>
+                  </TableCell>
                   <TableCell align="center">
                     <Tooltip title="Quick View">
                       <IconButton 

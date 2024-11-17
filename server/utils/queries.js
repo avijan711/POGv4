@@ -1,43 +1,123 @@
 function getSupplierResponsesQuery() {
     return `
         WITH InquiryItems AS (
-            SELECT DISTINCT ItemID
-            FROM InquiryItem
-            WHERE InquiryID = ?
+            SELECT DISTINCT 
+                ii.ItemID,
+                i.HebrewDescription,
+                i.EnglishDescription,
+                ii.RequestedQty,
+                ii.RetailPrice
+            FROM InquiryItem ii
+            JOIN Item i ON ii.ItemID = i.ItemID
+            WHERE ii.InquiryID = ?
         ),
-        -- Debug: Show all supplier responses with promotion flag
-        DebugPromotions AS (
-            SELECT 
+        ResponseStats AS (
+            -- Get all response items for this supplier and date
+            SELECT DISTINCT
+                sr.ItemID as ResponseItemID,
+                ii.ItemID as InquiryItemID,
+                irc.NewReferenceID as ReplacementID,
                 sr.SupplierID,
-                s.Name as SupplierName,
-                sr.ItemID,
-                sr.IsPromotion,
-                sr.PromotionName,
-                sr.ResponseDate
+                sr.ResponseDate,
+                ii.HebrewDescription,
+                ii.EnglishDescription,
+                ii.RequestedQty,
+                ii.RetailPrice,
+                CASE
+                    WHEN ii.ItemID IS NULL THEN 'extra'
+                    WHEN irc.NewReferenceID IS NOT NULL THEN 'replacement'
+                    ELSE 'matched'
+                END as ItemStatus
+            FROM SupplierResponse sr
+            LEFT JOIN InquiryItems ii ON sr.ItemID = ii.ItemID
+            LEFT JOIN ItemReferenceChange irc ON sr.ItemID = irc.OriginalItemID 
+                AND sr.SupplierID = irc.SupplierID
+                AND strftime('%Y-%m-%d %H:%M', sr.ResponseDate) = strftime('%Y-%m-%d %H:%M', irc.ChangeDate)
+        ),
+        SupplierResponses AS (
+            -- Get unique supplier responses
+            SELECT DISTINCT
+                sr.SupplierID,
+                sr.ResponseDate,
+                s.Name as SupplierName
             FROM SupplierResponse sr
             JOIN Supplier s ON sr.SupplierID = s.SupplierID
-            WHERE sr.IsPromotion = 1
+            WHERE EXISTS (SELECT 1 FROM InquiryItems ii WHERE ii.ItemID = sr.ItemID)
         ),
-        -- Debug: Show inquiry items with their promotions
-        DebugInquiryPromotions AS (
+        MissingItems AS (
+            -- Find items in inquiry that are missing per supplier response
             SELECT 
+                sr.SupplierID,
+                sr.ResponseDate,
                 ii.ItemID,
-                dp.SupplierID,
-                dp.SupplierName,
-                COALESCE(dp.IsPromotion, 0) as IsPromotion,
-                COALESCE(dp.PromotionName, '') as PromotionName
+                ii.HebrewDescription,
+                ii.EnglishDescription,
+                ii.RequestedQty,
+                ii.RetailPrice
             FROM InquiryItems ii
-            LEFT JOIN DebugPromotions dp ON ii.ItemID = dp.ItemID
+            CROSS JOIN SupplierResponses sr
+            LEFT JOIN SupplierResponse resp ON 
+                resp.ItemID = ii.ItemID 
+                AND resp.SupplierID = sr.SupplierID
+                AND strftime('%Y-%m-%d %H:%M', resp.ResponseDate) = strftime('%Y-%m-%d %H:%M', sr.ResponseDate)
+            WHERE resp.ItemID IS NULL
         ),
         SupplierActions AS (
             -- Get suppliers with responses (excluding those with promotions)
             SELECT DISTINCT 
-                sr.ResponseDate as ActionDate,
+                MIN(sr.ResponseDate) as ActionDate,
                 sr.SupplierID,
                 s.Name as SupplierName,
                 COUNT(*) as ItemCount,
+                -- Get statistics
+                (SELECT COUNT(*) FROM ResponseStats rs2 
+                 WHERE rs2.SupplierID = sr.SupplierID 
+                 AND strftime('%Y-%m-%d %H:%M', rs2.ResponseDate) = strftime('%Y-%m-%d %H:%M', MIN(sr.ResponseDate))
+                 AND rs2.ItemStatus = 'extra') as ExtraItemsCount,
+                (SELECT COUNT(*) FROM ResponseStats rs2 
+                 WHERE rs2.SupplierID = sr.SupplierID 
+                 AND strftime('%Y-%m-%d %H:%M', rs2.ResponseDate) = strftime('%Y-%m-%d %H:%M', MIN(sr.ResponseDate))
+                 AND rs2.ItemStatus = 'replacement') as ReplacementsCount,
+                (SELECT COUNT(*) FROM MissingItems mi
+                 WHERE mi.SupplierID = sr.SupplierID
+                 AND strftime('%Y-%m-%d %H:%M', mi.ResponseDate) = strftime('%Y-%m-%d %H:%M', MIN(sr.ResponseDate))
+                ) as MissingItemsCount,
+                -- Get item details for tooltips
+                (SELECT json_group_array(json_object(
+                    'itemId', ResponseItemID,
+                    'hebrewDescription', HebrewDescription,
+                    'englishDescription', EnglishDescription,
+                    'requestedQty', RequestedQty,
+                    'retailPrice', RetailPrice
+                )) 
+                FROM ResponseStats rs2 
+                WHERE rs2.SupplierID = sr.SupplierID 
+                AND strftime('%Y-%m-%d %H:%M', rs2.ResponseDate) = strftime('%Y-%m-%d %H:%M', MIN(sr.ResponseDate))
+                AND rs2.ItemStatus = 'extra') as ExtraItems,
+                (SELECT json_group_array(json_object(
+                    'original', ResponseItemID,
+                    'replacement', ReplacementID,
+                    'hebrewDescription', HebrewDescription,
+                    'englishDescription', EnglishDescription,
+                    'requestedQty', RequestedQty,
+                    'retailPrice', RetailPrice
+                )) 
+                FROM ResponseStats rs2 
+                WHERE rs2.SupplierID = sr.SupplierID 
+                AND strftime('%Y-%m-%d %H:%M', rs2.ResponseDate) = strftime('%Y-%m-%d %H:%M', MIN(sr.ResponseDate))
+                AND rs2.ItemStatus = 'replacement') as Replacements,
+                (SELECT json_group_array(json_object(
+                    'itemId', ItemID,
+                    'hebrewDescription', HebrewDescription,
+                    'englishDescription', EnglishDescription,
+                    'requestedQty', RequestedQty,
+                    'retailPrice', RetailPrice
+                )) 
+                FROM MissingItems mi
+                WHERE mi.SupplierID = sr.SupplierID
+                AND strftime('%Y-%m-%d %H:%M', mi.ResponseDate) = strftime('%Y-%m-%d %H:%M', MIN(sr.ResponseDate))
+                ) as MissingItems,
                 'response' as ActionType,
-                -- Debug: Add promotion info
                 COALESCE((SELECT GROUP_CONCAT(DISTINCT PromotionName)
                  FROM SupplierResponse sr2
                  WHERE sr2.SupplierID = sr.SupplierID
@@ -45,18 +125,30 @@ function getSupplierResponsesQuery() {
             FROM SupplierResponse sr
             JOIN Supplier s ON sr.SupplierID = s.SupplierID
             JOIN InquiryItems ii ON sr.ItemID = ii.ItemID
-            GROUP BY sr.ResponseDate, sr.SupplierID, s.Name
+            GROUP BY strftime('%Y-%m-%d %H:%M', sr.ResponseDate), sr.SupplierID, s.Name
             
             UNION
             
             -- Get suppliers with reference changes
             SELECT DISTINCT 
-                irc.ChangeDate as ActionDate,
+                MIN(irc.ChangeDate) as ActionDate,
                 irc.SupplierID,
                 s.Name as SupplierName,
                 COUNT(*) as ItemCount,
+                0 as ExtraItemsCount,
+                COUNT(*) as ReplacementsCount,
+                0 as MissingItemsCount,
+                '[]' as ExtraItems,
+                json_group_array(json_object(
+                    'original', irc.OriginalItemID,
+                    'replacement', irc.NewReferenceID,
+                    'hebrewDescription', i.HebrewDescription,
+                    'englishDescription', i.EnglishDescription,
+                    'requestedQty', ii.RequestedQty,
+                    'retailPrice', ii.RetailPrice
+                )) as Replacements,
+                '[]' as MissingItems,
                 'reference' as ActionType,
-                -- Debug: Add promotion info
                 COALESCE((SELECT GROUP_CONCAT(DISTINCT PromotionName)
                  FROM SupplierResponse sr
                  WHERE sr.SupplierID = irc.SupplierID
@@ -64,7 +156,8 @@ function getSupplierResponsesQuery() {
             FROM ItemReferenceChange irc
             JOIN Supplier s ON irc.SupplierID = s.SupplierID
             JOIN InquiryItems ii ON irc.OriginalItemID = ii.ItemID
-            GROUP BY irc.ChangeDate, irc.SupplierID, s.Name
+            JOIN Item i ON irc.OriginalItemID = i.ItemID
+            GROUP BY strftime('%Y-%m-%d %H:%M', irc.ChangeDate), irc.SupplierID, s.Name
         ),
         ResponseItems AS (
             -- Get items from responses
@@ -83,12 +176,11 @@ function getSupplierResponsesQuery() {
                 COALESCE(sr.Status, '') as Status,
                 'response' as ItemType,
                 sr.SupplierResponseID as ItemKey,
-                -- Debug: Add promotion info
                 COALESCE(sr.IsPromotion, 0) as DebugIsPromotion,
                 COALESCE(sr.PromotionName, '') as DebugPromotionName
             FROM SupplierActions sa
             JOIN SupplierResponse sr ON 
-                strftime('%Y-%m-%d %H:%M:%S', sa.ActionDate) = strftime('%Y-%m-%d %H:%M:%S', sr.ResponseDate) AND 
+                strftime('%Y-%m-%d %H:%M', sa.ActionDate) = strftime('%Y-%m-%d %H:%M', sr.ResponseDate) AND 
                 sa.SupplierID = sr.SupplierID
             JOIN Item i ON sr.ItemID = i.ItemID
             WHERE sa.ActionType = 'response'
@@ -113,12 +205,11 @@ function getSupplierResponsesQuery() {
                 END as Status,
                 'reference' as ItemType,
                 irc.ChangeID as ItemKey,
-                -- Debug: Add empty promotion fields for union
                 0 as DebugIsPromotion,
                 '' as DebugPromotionName
             FROM SupplierActions sa
             JOIN ItemReferenceChange irc ON 
-                strftime('%Y-%m-%d %H:%M:%S', sa.ActionDate) = strftime('%Y-%m-%d %H:%M:%S', irc.ChangeDate) AND 
+                strftime('%Y-%m-%d %H:%M', sa.ActionDate) = strftime('%Y-%m-%d %H:%M', irc.ChangeDate) AND 
                 sa.SupplierID = irc.SupplierID
             JOIN Item i ON irc.OriginalItemID = i.ItemID
             WHERE sa.ActionType = 'reference'
@@ -127,38 +218,19 @@ function getSupplierResponsesQuery() {
             SELECT * FROM ResponseItems
             UNION ALL
             SELECT * FROM ReferenceItems
-        ),
-        -- Debug: Final check of suppliers with promotions
-        DebugFinalPromotions AS (
-            SELECT DISTINCT
-                s.SupplierID,
-                s.Name as SupplierName,
-                COUNT(DISTINCT CASE WHEN sr.IsPromotion = 1 THEN sr.ItemID END) as PromotionItemCount,
-                COALESCE(GROUP_CONCAT(DISTINCT sr.PromotionName), '') as PromotionNames
-            FROM Supplier s
-            LEFT JOIN SupplierResponse sr ON s.SupplierID = sr.SupplierID
-            WHERE sr.IsPromotion = 1
-            GROUP BY s.SupplierID, s.Name
         )
         SELECT 
             sa.ActionDate as date,
             sa.SupplierID as supplierId,
             sa.SupplierName as supplierName,
             sa.ItemCount as itemCount,
-            -- Debug: Add promotion info to output
+            sa.ExtraItemsCount as extraItemsCount,
+            sa.ReplacementsCount as replacementsCount,
+            sa.MissingItemsCount as missingItemsCount,
+            sa.ExtraItems as extraItems,
+            sa.Replacements as replacements,
+            sa.MissingItems as missingItems,
             COALESCE(sa.DebugPromotions, '') as debugPromotions,
-            COALESCE((SELECT json_group_array(json_object(
-                'supplierId', SupplierID,
-                'supplierName', COALESCE(SupplierName, ''),
-                'promotionItemCount', COALESCE(PromotionItemCount, 0),
-                'promotionNames', COALESCE(PromotionNames, '')
-            )) FROM DebugFinalPromotions), '[]') as debugFinalPromotions,
-            COALESCE((SELECT json_group_array(json_object(
-                'itemId', COALESCE(ItemID, ''),
-                'supplierName', COALESCE(SupplierName, ''),
-                'isPromotion', COALESCE(IsPromotion, 0),
-                'promotionName', COALESCE(PromotionName, '')
-            )) FROM DebugInquiryPromotions), '[]') as debugInquiryPromotions,
             COALESCE(json_group_array(
                 json_object(
                     'itemId', COALESCE(id.ItemID, ''),
@@ -184,7 +256,7 @@ function getSupplierResponsesQuery() {
             ), '[]') as items
         FROM SupplierActions sa
         LEFT JOIN ItemDetails id ON 
-            strftime('%Y-%m-%d %H:%M:%S', sa.ActionDate) = strftime('%Y-%m-%d %H:%M:%S', id.ActionDate) AND 
+            strftime('%Y-%m-%d %H:%M', sa.ActionDate) = strftime('%Y-%m-%d %H:%M', id.ActionDate) AND 
             sa.SupplierID = id.SupplierID
         GROUP BY sa.ActionDate, sa.SupplierID, sa.SupplierName
         ORDER BY sa.ActionDate DESC`;

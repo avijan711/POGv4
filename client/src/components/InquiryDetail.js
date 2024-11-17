@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -57,6 +57,34 @@ function InquiryDetail() {
   const [supplierResponses, setSupplierResponses] = useState([]);
   const [loadingResponses, setLoadingResponses] = useState(false);
   const [showResponses, setShowResponses] = useState(true);
+
+  // Calculate statistics
+  const statistics = useMemo(() => {
+    if (!items.length) return {};
+
+    // Get unique items count
+    const uniqueItems = new Set(items.map(item => item.itemID)).size;
+
+    // Get suppliers responded count
+    const uniqueSuppliers = new Set(supplierResponses.map(response => response.supplierName)).size;
+
+    // Calculate days active
+    const startDate = new Date(inquiryDate);
+    const today = new Date();
+    const daysActive = Math.ceil((today - startDate) / (1000 * 60 * 60 * 24));
+
+    // Calculate response rate
+    const totalSuppliers = uniqueSuppliers + 2; // Adding buffer for potential suppliers
+    const responseRate = Math.round((uniqueSuppliers / totalSuppliers) * 100);
+
+    return {
+      uniqueItems,
+      suppliersResponded: uniqueSuppliers,
+      totalSuppliers,
+      daysActive,
+      responseRate
+    };
+  }, [items, supplierResponses, inquiryDate]);
 
   const getChangeSource = (referenceChange) => {
     if (!referenceChange) return '';
@@ -157,12 +185,9 @@ function InquiryDetail() {
 
   const handleStartComparison = async () => {
     try {
-      // Update inquiry status to in_comparison
       await axios.put(`${API_BASE_URL}/api/inquiries/${inquiryId}/status`, {
         status: 'in_comparison'
       });
-      
-      // Navigate to the comparison detail page
       navigate(`/comparisons/${inquiryId}`);
     } catch (error) {
       console.error('Error starting comparison:', error);
@@ -391,6 +416,7 @@ function InquiryDetail() {
           onViewBestPrices={handleStartComparison}
           onDeleteInquiry={() => setDeleteInquiryConfirmOpen(true)}
           error={error}
+          statistics={statistics}
         />
 
         <Box sx={{ mb: 3 }}>

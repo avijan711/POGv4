@@ -1,80 +1,124 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  Box,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  IconButton,
-  TextField,
-  Tooltip,
-  Chip,
-  Stack,
-  Button,
-  ToggleButton,
-  ToggleButtonGroup,
-  Link,
-  FormControl,
-  InputAdornment,
-} from '@mui/material';
-import {
-  ShoppingCart as ShoppingCartIcon,
-  Delete as DeleteIcon,
-  Edit as EditIcon,
-  Compare as CompareIcon,
-  ViewList as ViewListIcon,
-  ViewModule as ViewModuleIcon,
-  FilterAlt as FilterIcon,
-} from '@mui/icons-material';
+import { Box, Typography, CircularProgress, Alert } from '@mui/material';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
+
 import ItemDetailsDialog from './ItemDetailsDialog';
+import ItemsView from './ItemsView';
+import SuppliersView from './SuppliersView';
+import ComparisonToolbar from './ComparisonToolbar';
+import { useSupplierManagement } from '../hooks/useSupplierManagement';
+import { 
+  fetchSettings, 
+  isWinningPrice, 
+  getDisplayPrice,
+  calculateDiscount 
+} from '../utils/priceUtils';
 
 function ComparisonDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [selectedSuppliers, setSelectedSuppliers] = useState({});
   const [editingQty, setEditingQty] = useState(null);
   const [quantities, setQuantities] = useState({});
-  const [itemIds, setItemIds] = useState({});
   const [viewMode, setViewMode] = useState('items');
   const [editingPrice, setEditingPrice] = useState(null);
   const [temporaryPrices, setTemporaryPrices] = useState({});
   const [prices, setPrices] = useState([]);
+  const [replacementItems, setReplacementItems] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [replacementsError, setReplacementsError] = useState(null);
   const [eurToIls, setEurToIls] = useState(3.95);
   const [selectedItem, setSelectedItem] = useState(null);
   const [itemDetailsOpen, setItemDetailsOpen] = useState(false);
   const [discountFilter, setDiscountFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    fetchComparisonData();
-    fetchSettings();
-  }, [id]);
+  const {
+    selectedSuppliers,
+    supplierGroups,
+    handleSupplierToggle,
+    calculateSupplierSummary
+  } = useSupplierManagement(prices);
 
-  const fetchSettings = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/settings`);
-      if (response.data && response.data.eurToIls) {
-        const rate = Number(response.data.eurToIls);
-        console.log('Fetched EUR to ILS rate:', rate);
-        setEurToIls(rate);
-      }
-    } catch (err) {
-      console.error('Error fetching settings:', err);
-    }
+  const initializeSettings = async () => {
+    const rate = await fetchSettings();
+    setEurToIls(rate);
   };
 
   const fetchItemDetails = async (itemId) => {
     try {
+      console.log('Fetching details for item:', itemId);
       const response = await axios.get(`${API_BASE_URL}/api/items/${itemId}`);
-      setSelectedItem(response.data);
+      
+      const priceData = prices.find(p => p.ItemID === itemId);
+      const replacement = replacementItems[itemId];
+      
+      console.log('Found replacement data:', {
+        itemId,
+        replacement,
+        allReplacements: replacementItems
+      });
+
+      // Check if this item is referenced by others
+      const isReferencedBy = Object.entries(replacementItems).some(([originalId, rep]) => 
+        rep.newItemId === itemId
+      );
+
+      // Get referencing items if any
+      const referencingItems = Object.entries(replacementItems)
+        .filter(([originalId, rep]) => rep.newItemId === itemId)
+        .map(([originalId, rep]) => ({
+          itemID: originalId,
+          referenceChange: {
+            source: rep.source,
+            supplierName: rep.supplierName,
+            changeDate: rep.changeDate,
+            notes: rep.description,
+            originalDescription: rep.originalDescription,
+            newDescription: rep.newDescription
+          }
+        }));
+
+      // Debug log the reference data
+      console.log('Reference data for item', itemId, ':', {
+        fromAPI: response.data.item?.referenceChange,
+        fromReplacements: replacement,
+        isReferencedBy,
+        referencingItems
+      });
+      
+      const itemData = {
+        ...response.data,
+        item: {
+          ...response.data.item,
+          itemID: itemId,
+          hebrewDescription: priceData?.HebrewDescription || response.data.item?.hebrewDescription,
+          englishDescription: priceData?.EnglishDescription || response.data.item?.englishDescription,
+          hsCode: priceData?.HSCode || response.data.item?.hsCode,
+          importMarkup: priceData?.ImportMarkup || response.data.item?.importMarkup,
+          retailPrice: priceData?.RetailPrice || response.data.item?.retailPrice,
+          qtyInStock: priceData?.QtyInStock || response.data.item?.qtyInStock,
+          soldThisYear: priceData?.SoldThisYear || response.data.item?.soldThisYear,
+          soldLastYear: priceData?.SoldLastYear || response.data.item?.soldLastYear,
+          hasReferenceChange: !!response.data.item?.referenceChange || !!replacement,
+          referenceChange: response.data.item?.referenceChange || (replacement ? {
+            newReferenceID: replacement.newItemId,
+            source: replacement.source,
+            supplierName: replacement.supplierName,
+            changeDate: replacement.changeDate,
+            notes: replacement.description,
+            originalDescription: replacement.originalDescription,
+            newDescription: replacement.newDescription
+          } : null),
+          isReferencedBy: response.data.item?.isReferencedBy || isReferencedBy,
+          referencingItems: response.data.item?.referencingItems || referencingItems
+        }
+      };
+
+      console.log('Constructed item data:', itemData);
+      setSelectedItem(itemData);
       setItemDetailsOpen(true);
     } catch (err) {
       console.error('Error fetching item details:', err);
@@ -94,148 +138,77 @@ function ComparisonDetail() {
   const fetchComparisonData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/api/orders/best-prices/${id}`);
-      console.log('API Response:', response.data);
+      setError(null);
+      setReplacementsError(null);
       
-      if (response.data && response.data.length > 0) {
-        const sampleItem = response.data[0];
-        console.log('Sample item structure:', {
-          item: sampleItem,
-          importMarkup: sampleItem.ImportMarkup,
-          retailPrice: sampleItem.RetailPrice,
-          priceQuoted: sampleItem.PriceQuoted,
-          rawValues: {
-            importMarkup: {
-              value: sampleItem.ImportMarkup,
-              type: typeof sampleItem.ImportMarkup
-            },
-            retailPrice: {
-              value: sampleItem.RetailPrice,
-              type: typeof sampleItem.RetailPrice
-            }
-          }
-        });
-      }
-
-      const processedData = response.data.map(item => ({
+      // First get the prices data
+      console.log('Fetching prices for inquiry:', id);
+      const pricesResponse = await axios.get(`${API_BASE_URL}/api/orders/best-prices/${id}`);
+      const processedData = pricesResponse.data.map(item => ({
         ...item,
         ImportMarkup: Number(item.ImportMarkup) || 1.3,
         RetailPrice: Number(item.RetailPrice) || 0,
         PriceQuoted: Number(item.PriceQuoted) || 0
       }));
 
+      console.log('Processed prices data:', processedData);
       setPrices(processedData);
-      setError(null);
+
+      // Then try to get the replacements data
+      try {
+        console.log('Fetching replacements for inquiry:', id);
+        const replacementsResponse = await axios.get(`${API_BASE_URL}/api/orders/${id}/replacements`);
+        console.log('Raw replacements response:', replacementsResponse.data);
+        
+        // Process replacements data
+        const replacementsMap = {};
+        replacementsResponse.data.forEach(replacement => {
+          if (replacement.originalItemId && replacement.newItemId) {
+            console.log('Processing replacement:', replacement);
+            replacementsMap[replacement.originalItemId] = {
+              newItemId: replacement.newItemId,
+              source: replacement.source,
+              supplierName: replacement.supplierName,
+              description: replacement.description,
+              changeDate: replacement.changeDate,
+              originalDescription: replacement.originalDescription,
+              newDescription: replacement.newDescription,
+              inquiryDescription: replacement.inquiryDescription
+            };
+          }
+        });
+
+        // Debug log the replacements data
+        console.log('Final replacements map:', replacementsMap);
+        setReplacementItems(replacementsMap);
+      } catch (err) {
+        console.error('Error fetching replacements:', err);
+        if (err.response?.status === 404) {
+          setReplacementsError('No replacements found for this inquiry');
+          setReplacementItems({});
+        } else {
+          console.error('Failed to fetch replacements:', err);
+          setReplacementsError('Failed to load replacement items');
+        }
+      }
     } catch (err) {
       console.error('Error fetching comparison data:', err);
-      setError('Failed to load comparison data');
+      if (err.response?.status === 404) {
+        setError('Inquiry not found');
+      } else {
+        setError('Failed to load comparison data');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateDiscount = (priceEUR, importMarkup, retailPrice) => {
-    if (!retailPrice) {
-      console.log('Missing retail price (ILS)');
-      return null;
-    }
-    if (!importMarkup) {
-      console.log('Missing import markup');
-      return null;
-    }
-    if (!priceEUR) {
-      console.log('Missing EUR price');
-      return null;
-    }
-
-    const supplierPriceILS = priceEUR * eurToIls * importMarkup;
-    console.log('Discount calculation:', {
-      priceEUR,
-      importMarkup,
-      retailPrice,
-      supplierPriceILS,
-      eurToIls,
-      message: 'RetailPrice is already in ILS from query COALESCE'
-    });
-
-    const discount = ((retailPrice - supplierPriceILS) / retailPrice) * 100;
-    console.log('Final discount:', discount);
-
-    return Math.max(0, Math.min(100, discount));
-  };
-
-  const shouldShowItem = (itemId) => {
-    if (!discountFilter) return true;
-    
-    const filterValue = parseFloat(discountFilter);
-    if (isNaN(filterValue)) return true;
-
-    let maxDiscount = -Infinity;
-    Object.entries(supplierGroups)
-      .filter(([key]) => selectedSuppliers[key])
-      .forEach(([key, group]) => {
-        const supplierItem = group.items.find(item => item.ItemID === itemId);
-        if (supplierItem) {
-          const displayPrice = getDisplayPrice(itemId, key, supplierItem.PriceQuoted);
-          const discount = calculateDiscount(
-            displayPrice,
-            Number(supplierItem.ImportMarkup),
-            Number(supplierItem.RetailPrice)
-          );
-          if (discount !== null) {
-            maxDiscount = Math.max(maxDiscount, discount);
-          }
-        }
-      });
-      return maxDiscount !== -Infinity && maxDiscount < filterValue;
-    };
-
-  const allSuppliers = prices?.reduce((acc, item) => {
-    const key = item.IsPromotion 
-      ? `${item.SupplierID}-${item.PromotionGroupID}`
-      : `${item.SupplierID}-regular`;
-
-    if (!acc[key]) {
-      acc[key] = {
-        supplierId: item.SupplierID,
-        supplierName: item.SupplierName,
-        isPromotion: item.IsPromotion || false,
-        promotionName: item.PromotionName,
-        promotionGroupId: item.PromotionGroupID
-      };
-    }
-    return acc;
-  }, {});
-
-  const supplierGroups = prices?.reduce((groups, item) => {
-    const key = item.IsPromotion 
-      ? `${item.SupplierID}-${item.PromotionGroupID}`
-      : `${item.SupplierID}-regular`;
-
-    if (!groups[key]) {
-      groups[key] = {
-        ...allSuppliers[key],
-        items: []
-      };
-    }
-    groups[key].items.push(item);
-    return groups;
-  }, {}) || {};
-
   useEffect(() => {
-    const initial = Object.keys(supplierGroups).reduce((acc, key) => ({
-      ...acc,
-      [key]: true
-    }), {});
-    setSelectedSuppliers(initial);
-  }, [supplierGroups]);
-
-  const handleSupplierToggle = (key) => {
-    setSelectedSuppliers(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
+    if (id) {
+      fetchComparisonData();
+      initializeSettings();
+    }
+  }, [id]);
 
   const handleQuantityChange = (itemId, value) => {
     setQuantities(prev => ({
@@ -252,57 +225,42 @@ function ComparisonDetail() {
     }));
   };
 
-  const getDisplayPrice = (itemId, supplierKey, originalPrice) => {
-    const priceKey = `${itemId}-${supplierKey}`;
-    return temporaryPrices.hasOwnProperty(priceKey) 
-      ? temporaryPrices[priceKey] 
-      : originalPrice;
-  };
+  const shouldShowItem = (itemId) => {
+    if (searchQuery) {
+      const item = prices.find(item => item.ItemID === itemId);
+      const searchLower = searchQuery.toLowerCase();
+      const matchesSearch = 
+        itemId.toLowerCase().includes(searchLower) ||
+        (item?.HebrewDescription || '').toLowerCase().includes(searchLower);
+      
+      if (!matchesSearch) return false;
+    }
 
-  const getBestPriceForItem = (itemId) => {
-    let bestPrice = Infinity;
+    if (!discountFilter) return true;
+    
+    const filterValue = parseFloat(discountFilter);
+    if (isNaN(filterValue)) return true;
+
+    let maxDiscount = -Infinity;
     Object.entries(supplierGroups)
       .filter(([key]) => selectedSuppliers[key])
       .forEach(([key, group]) => {
         const supplierItem = group.items.find(item => item.ItemID === itemId);
         if (supplierItem) {
-          const displayPrice = getDisplayPrice(itemId, key, supplierItem.PriceQuoted);
-          if (displayPrice && displayPrice < bestPrice) {
-            bestPrice = displayPrice;
+          const displayPrice = getDisplayPrice(itemId, key, supplierItem.PriceQuoted, temporaryPrices);
+          const discount = calculateDiscount(
+            displayPrice,
+            Number(supplierItem.ImportMarkup),
+            Number(supplierItem.RetailPrice),
+            eurToIls
+          );
+          if (discount !== null) {
+            maxDiscount = Math.max(maxDiscount, discount);
           }
         }
       });
-    return bestPrice === Infinity ? null : bestPrice;
+    return maxDiscount !== -Infinity && maxDiscount < filterValue;
   };
-
-  const isWinningPrice = (price, itemId) => {
-    if (!price) return false;
-    const currentBestPrice = getBestPriceForItem(itemId);
-    if (!currentBestPrice) return false;
-    const epsilon = 0.01;
-    return Math.abs(price - currentBestPrice) <= epsilon;
-  };
-
-  const calculateSupplierSummary = (group) => {
-    const winningItems = group.items.filter(item => 
-      isWinningPrice(getDisplayPrice(item.ItemID, group.supplierId, item.PriceQuoted), item.ItemID)
-    );
-    const totalValue = winningItems.reduce((sum, item) => {
-      const qty = quantities[item.ItemID] || item.RequestedQty;
-      const price = getDisplayPrice(item.ItemID, group.supplierId, item.PriceQuoted);
-      return sum + (price * qty || 0);
-    }, 0);
-
-    return {
-      totalItems: group.items.length,
-      winningItems: winningItems.length,
-      totalValue,
-      winningItemsList: winningItems
-    };
-  };
-
-  const uniqueItems = Array.from(new Set(prices?.map(item => item.ItemID))) || [];
-  const filteredItems = uniqueItems.filter(shouldShowItem);
 
   const handleCreateOrders = async () => {
     try {
@@ -318,273 +276,21 @@ function ComparisonDetail() {
     }
   };
 
-  const renderItemsView = () => (
-    <TableContainer component={Paper}>
-      <Table size="small" stickyHeader>
-        <TableHead>
-          <TableRow>
-            <TableCell>Item ID</TableCell>
-            <TableCell>Description</TableCell>
-            <TableCell align="right">Requested Qty</TableCell>
-            {Object.entries(supplierGroups)
-              .filter(([key]) => selectedSuppliers[key])
-              .map(([key, group]) => (
-                <TableCell key={key} align="right">
-                  {group.isPromotion ? `${group.supplierName} (${group.promotionName})` : group.supplierName}
-                </TableCell>
-              ))}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {filteredItems.map(itemId => {
-            const firstItem = prices?.find(item => item.ItemID === itemId);
-            return (
-              <TableRow key={itemId}>
-                <TableCell>
-                  <Link
-                    component="button"
-                    variant="body2"
-                    onClick={() => handleItemClick(itemId)}
-                    sx={{ textDecoration: 'none' }}
-                  >
-                    {itemId}
-                  </Link>
-                </TableCell>
-                <TableCell>{firstItem?.HebrewDescription}</TableCell>
-                <TableCell align="right">
-                  {editingQty === itemId ? (
-                    <TextField
-                      size="small"
-                      type="number"
-                      value={quantities[itemId] || firstItem?.RequestedQty}
-                      onChange={(e) => handleQuantityChange(itemId, e.target.value)}
-                      onBlur={() => setEditingQty(null)}
-                      autoFocus
-                    />
-                  ) : (
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-                      {quantities[itemId] || firstItem?.RequestedQty}
-                      <IconButton 
-                        size="small"
-                        onClick={() => setEditingQty(itemId)}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  )}
-                </TableCell>
-                {Object.entries(supplierGroups)
-                  .filter(([key]) => selectedSuppliers[key])
-                  .map(([key, group]) => {
-                    const supplierItem = group.items.find(item => item.ItemID === itemId);
-                    console.log('Processing supplier item:', {
-                      itemId,
-                      supplierKey: key,
-                      item: supplierItem,
-                      rawValues: supplierItem ? {
-                        importMarkup: {
-                          value: supplierItem.ImportMarkup,
-                          type: typeof supplierItem.ImportMarkup,
-                          isValid: !isNaN(Number(supplierItem.ImportMarkup))
-                        },
-                        retailPrice: {
-                          value: supplierItem.RetailPrice,
-                          type: typeof supplierItem.RetailPrice,
-                          isValid: !isNaN(Number(supplierItem.RetailPrice))
-                        },
-                        priceQuoted: {
-                          value: supplierItem.PriceQuoted,
-                          type: typeof supplierItem.PriceQuoted,
-                          isValid: !isNaN(Number(supplierItem.PriceQuoted))
-                        }
-                      } : null
-                    });
-                    
-                    const displayPrice = getDisplayPrice(itemId, key, supplierItem?.PriceQuoted);
-                    const isWinner = displayPrice && isWinningPrice(displayPrice, itemId);
-                    const priceKey = `${itemId}-${key}`;
-                    
-                    let discount = null;
-                    if (supplierItem) {
-                      console.log('Calculating discount for item:', {
-                        itemId,
-                        displayPrice,
-                        importMarkup: supplierItem.ImportMarkup,
-                        retailPrice: supplierItem.RetailPrice,
-                        rawValues: {
-                          importMarkup: {
-                            value: supplierItem.ImportMarkup,
-                            type: typeof supplierItem.ImportMarkup,
-                            isValid: !isNaN(Number(supplierItem.ImportMarkup))
-                          },
-                          retailPrice: {
-                            value: supplierItem.RetailPrice,
-                            type: typeof supplierItem.RetailPrice,
-                            isValid: !isNaN(Number(supplierItem.RetailPrice))
-                          }
-                        }
-                      });
-                      
-                      const parsedMarkup = Number(supplierItem.ImportMarkup);
-                      const parsedRetail = Number(supplierItem.RetailPrice);
-                      
-                      console.log('Parsed values:', {
-                        parsedMarkup,
-                        parsedRetail,
-                        isValid: {
-                          markup: !isNaN(parsedMarkup) && parsedMarkup > 0,
-                          retail: !isNaN(parsedRetail) && parsedRetail > 0
-                        }
-                      });
-                      
-                      discount = calculateDiscount(
-                        displayPrice,
-                        parsedMarkup,
-                        parsedRetail
-                      );
-                      
-                      console.log('Calculated discount result:', discount);
-                    }
+  const uniqueItems = Array.from(new Set(prices?.map(item => item.ItemID))) || [];
+  const filteredItems = uniqueItems.filter(shouldShowItem);
 
-                    return (
-                      <TableCell 
-                        key={key} 
-                        align="right"
-                        sx={{
-                          backgroundColor: isWinner ? '#4caf5066' : 'inherit',
-                          transition: 'background-color 0.2s'
-                        }}
-                      >
-                        {supplierItem ? (
-                          <Box>
-                            {editingPrice === priceKey ? (
-                              <TextField
-                                size="small"
-                                type="number"
-                                value={displayPrice || ''}
-                                onChange={(e) => handlePriceChange(itemId, key, e.target.value)}
-                                onBlur={() => setEditingPrice(null)}
-                                autoFocus
-                                inputProps={{ step: "0.01" }}
-                                sx={{ width: '100px' }}
-                              />
-                            ) : (
-                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-                                €{displayPrice?.toFixed(2) || 'N/A'}
-                                <IconButton 
-                                  size="small"
-                                  onClick={() => setEditingPrice(priceKey)}
-                                >
-                                  <EditIcon fontSize="small" />
-                                </IconButton>
-                              </Box>
-                            )}
-                            <Typography variant="caption" display="block" color="text.secondary">
-                              {discount !== null ? `${discount.toFixed(1)}%` : ''}
-                            </Typography>
-                          </Box>
-                        ) : '-'}
-                      </TableCell>
-                    );
-                  })}
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
-
-  const renderSuppliersView = () => (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {Object.entries(supplierGroups)
-        .filter(([key]) => selectedSuppliers[key])
-        .map(([key, group]) => {
-          const summary = calculateSupplierSummary(group);
-          
-          if (summary.winningItems === 0) return null;
-
-          return (
-            <Paper key={key} sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                {group.isPromotion ? `${group.supplierName} (${group.promotionName})` : group.supplierName}
-              </Typography>
-              
-              <Box sx={{ mb: 2, display: 'flex', gap: 4 }}>
-                <Typography>
-                  Winning Items: {summary.winningItems} / {summary.totalItems}
-                </Typography>
-                <Typography>
-                  Total Value: €{summary.totalValue.toFixed(2)}
-                </Typography>
-              </Box>
-
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Item ID</TableCell>
-                      <TableCell>Description</TableCell>
-                      <TableCell align="right">Requested Qty</TableCell>
-                      <TableCell align="right">Price</TableCell>
-                      <TableCell align="right">Total</TableCell>
-                      <TableCell align="right">Discount Rate</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {summary.winningItemsList
-                      .filter(item => shouldShowItem(item.ItemID))
-                      .map(item => {
-                        const qty = quantities[item.ItemID] || item.RequestedQty;
-                        const displayPrice = getDisplayPrice(item.ItemID, key, item.PriceQuoted);
-                        const total = (displayPrice * qty) || 0;
-                        const discount = calculateDiscount(
-                          displayPrice,
-                          parseFloat(item.ImportMarkup),
-                          parseFloat(item.RetailPrice)
-                        );
-
-                        return (
-                          <TableRow 
-                            key={item.ItemID}
-                            sx={{
-                              backgroundColor: '#4caf5066',
-                              transition: 'background-color 0.2s'
-                            }}
-                          >
-                            <TableCell>
-                              <Link
-                                component="button"
-                                variant="body2"
-                                onClick={() => handleItemClick(item.ItemID)}
-                                sx={{ textDecoration: 'none' }}
-                              >
-                                {item.ItemID}
-                              </Link>
-                            </TableCell>
-                            <TableCell>{item.HebrewDescription}</TableCell>
-                            <TableCell align="right">{qty}</TableCell>
-                            <TableCell align="right">€{displayPrice?.toFixed(2) || 'N/A'}</TableCell>
-                            <TableCell align="right">€{total.toFixed(2)}</TableCell>
-                            <TableCell align="right">
-                              {discount !== null ? `${discount.toFixed(1)}%` : ''}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
-          );
-        })}
-    </Box>
-  );
+  // Debug log the current state
+  console.log('Current state:', {
+    prices,
+    replacementItems,
+    filteredItems,
+    uniqueItems
+  });
 
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-        <Typography>Loading comparison data...</Typography>
+        <CircularProgress />
       </Box>
     );
   }
@@ -592,90 +298,68 @@ function ComparisonDetail() {
   if (error) {
     return (
       <Box sx={{ p: 2 }}>
-        <Typography color="error">{error}</Typography>
+        <Alert severity="error">{error}</Alert>
       </Box>
     );
   }
 
   return (
     <Box sx={{ p: 2 }}>
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h5">
-          Interactive Comparison Process
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <FormControl sx={{ width: '200px' }}>
-            <TextField
-              label="Filter by Discount"
-              value={discountFilter}
-              onChange={(e) => setDiscountFilter(e.target.value)}
-              size="small"
-              type="number"
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <FilterIcon />
-                  </InputAdornment>
-                ),
-                endAdornment: <InputAdornment position="end">%</InputAdornment>,
-              }}
-              placeholder="Enter discount %"
-            />
-          </FormControl>
-          <ToggleButtonGroup
-            value={viewMode}
-            exclusive
-            onChange={(e, newMode) => newMode && setViewMode(newMode)}
-            size="small"
-          >
-            <ToggleButton value="items">
-              <Tooltip title="Items View">
-                <ViewListIcon />
-              </Tooltip>
-            </ToggleButton>
-            <ToggleButton value="suppliers">
-              <Tooltip title="Sort by Supplier">
-                <ViewModuleIcon />
-              </Tooltip>
-            </ToggleButton>
-          </ToggleButtonGroup>
-          <Button
-            variant="contained"
-            onClick={handleCreateOrders}
-            startIcon={<ShoppingCartIcon />}
-            disabled={Object.values(selectedSuppliers).filter(Boolean).length === 0}
-          >
-            Create Orders
-          </Button>
-        </Box>
-      </Box>
+      {replacementsError && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {replacementsError}
+        </Alert>
+      )}
 
-      <Paper sx={{ mb: 2, p: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Supplier Management
-        </Typography>
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          {Object.entries(supplierGroups).map(([key, group]) => (
-            <Chip
-              key={key}
-              label={group.isPromotion ? `${group.supplierName} (${group.promotionName})` : group.supplierName}
-              color={group.isPromotion ? "secondary" : "primary"}
-              variant={selectedSuppliers[key] ? "filled" : "outlined"}
-              onClick={() => handleSupplierToggle(key)}
-              onDelete={() => handleSupplierToggle(key)}
-              deleteIcon={selectedSuppliers[key] ? <DeleteIcon /> : <CompareIcon />}
-              sx={{ m: 0.5 }}
-            />
-          ))}
-        </Stack>
-      </Paper>
+      <ComparisonToolbar
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        discountFilter={discountFilter}
+        setDiscountFilter={setDiscountFilter}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        handleCreateOrders={handleCreateOrders}
+        selectedSuppliers={selectedSuppliers}
+        supplierGroups={supplierGroups}
+        handleSupplierToggle={handleSupplierToggle}
+      />
 
-      {viewMode === 'items' ? renderItemsView() : renderSuppliersView()}
+      {viewMode === 'items' ? (
+        <ItemsView
+          filteredItems={filteredItems}
+          prices={prices}
+          supplierGroups={supplierGroups}
+          selectedSuppliers={selectedSuppliers}
+          editingQty={editingQty}
+          setEditingQty={setEditingQty}
+          quantities={quantities}
+          handleQuantityChange={handleQuantityChange}
+          editingPrice={editingPrice}
+          setEditingPrice={setEditingPrice}
+          temporaryPrices={temporaryPrices}
+          handlePriceChange={handlePriceChange}
+          handleItemClick={handleItemClick}
+          eurToIls={eurToIls}
+          replacementItems={replacementItems}
+        />
+      ) : (
+        <SuppliersView
+          supplierGroups={supplierGroups}
+          selectedSuppliers={selectedSuppliers}
+          calculateSupplierSummary={calculateSupplierSummary}
+          quantities={quantities}
+          temporaryPrices={temporaryPrices}
+          handleItemClick={handleItemClick}
+          shouldShowItem={shouldShowItem}
+          eurToIls={eurToIls}
+        />
+      )}
 
       <ItemDetailsDialog
         open={itemDetailsOpen}
         onClose={handleCloseItemDetails}
         item={selectedItem}
+        showReferenceDetails={true}
       />
     </Box>
   );

@@ -3,18 +3,197 @@ class InquiryModel {
         this.db = db;
     }
 
+    createInquiry(inquiryNumber, items) {
+        return new Promise((resolve, reject) => {
+            const db = this.db;
+            console.log('Starting createInquiry with:', { inquiryNumber, itemCount: items.length });
+
+            db.serialize(() => {
+                db.run('BEGIN TRANSACTION', async (err) => {
+                    if (err) {
+                        console.error('Error starting transaction:', err);
+                        reject(new Error('Failed to start transaction'));
+                        return;
+                    }
+
+                    console.log('Transaction started successfully');
+
+                    try {
+                        // First, ensure all items exist in the Item table
+                        const uniqueItems = [...new Set(items.map(item => item.itemId))];
+                        for (const itemId of uniqueItems) {
+                            const item = items.find(i => i.itemId === itemId);
+                            await new Promise((resolve, reject) => {
+                                db.run(
+                                    `INSERT OR REPLACE INTO Item (
+                                        ItemID,
+                                        HebrewDescription,
+                                        EnglishDescription,
+                                        ImportMarkup,
+                                        HSCode
+                                    ) VALUES (?, ?, ?, ?, ?)`,
+                                    [
+                                        itemId,
+                                        item.hebrewDescription,
+                                        item.englishDescription || '',
+                                        item.importMarkup || 1.3,
+                                        item.hsCode || ''
+                                    ],
+                                    (err) => {
+                                        if (err) {
+                                            reject(err);
+                                        } else {
+                                            resolve();
+                                        }
+                                    }
+                                );
+                            });
+
+                            // Add price history if provided
+                            if (item.retailPrice !== undefined && item.retailPrice !== null) {
+                                await new Promise((resolve, reject) => {
+                                    db.run(
+                                        `INSERT INTO ItemHistory (
+                                            ItemID,
+                                            ILSRetailPrice,
+                                            QtyInStock,
+                                            QtySoldThisYear,
+                                            QtySoldLastYear,
+                                            Date
+                                        ) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+                                        [
+                                            itemId,
+                                            item.retailPrice,
+                                            item.qtyInStock || 0,
+                                            item.soldThisYear || 0,
+                                            item.soldLastYear || 0
+                                        ],
+                                        (err) => {
+                                            if (err) {
+                                                reject(err);
+                                            } else {
+                                                resolve();
+                                            }
+                                        }
+                                    );
+                                });
+                            }
+                        }
+
+                        // Create the inquiry
+                        const inquiryId = await new Promise((resolve, reject) => {
+                            db.run(
+                                'INSERT INTO Inquiry (InquiryNumber, Status) VALUES (?, ?)',
+                                [inquiryNumber, 'new'],
+                                function(err) {
+                                    if (err) {
+                                        reject(err);
+                                    } else {
+                                        resolve(this.lastID);
+                                    }
+                                }
+                            );
+                        });
+
+                        console.log('Created inquiry with ID:', inquiryId);
+
+                        // Now insert all inquiry items
+                        for (const item of items) {
+                            await new Promise((resolve, reject) => {
+                                db.run(
+                                    `INSERT INTO InquiryItem (
+                                        InquiryID,
+                                        ItemID,
+                                        HebrewDescription,
+                                        EnglishDescription,
+                                        ImportMarkup,
+                                        HSCode,
+                                        QtyInStock,
+                                        RetailPrice,
+                                        SoldThisYear,
+                                        SoldLastYear,
+                                        RequestedQty,
+                                        NewReferenceID,
+                                        ReferenceNotes
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                    [
+                                        inquiryId,
+                                        item.itemId,
+                                        item.hebrewDescription,
+                                        item.englishDescription || '',
+                                        item.importMarkup || 1.3,
+                                        item.hsCode || '',
+                                        item.qtyInStock || 0,
+                                        item.retailPrice,
+                                        item.soldThisYear || 0,
+                                        item.soldLastYear || 0,
+                                        item.requestedQty || 0,
+                                        item.newReferenceId || null,
+                                        item.referenceNotes || null
+                                    ],
+                                    (err) => {
+                                        if (err) {
+                                            reject(err);
+                                        } else {
+                                            resolve();
+                                        }
+                                    }
+                                );
+                            });
+                        }
+
+                        // Commit transaction after all items are processed
+                        await new Promise((resolve, reject) => {
+                            db.run('COMMIT', (err) => {
+                                if (err) {
+                                    reject(err);
+                                } else {
+                                    resolve();
+                                }
+                            });
+                        });
+
+                        console.log('Transaction committed successfully');
+                        resolve(inquiryId);
+
+                    } catch (error) {
+                        console.error('Error in transaction:', error);
+                        db.run('ROLLBACK', () => {
+                            reject(error);
+                        });
+                    }
+                });
+            });
+        });
+    }
+
     getAllInquiries(status) {
         return new Promise((resolve, reject) => {
             let query = `
+                WITH ResponseStats AS (
+                    SELECT 
+                        ii.InquiryID,
+                        sr.SupplierID,
+                        COUNT(DISTINCT sr.SupplierResponseID) as ResponseCount,
+                        COUNT(DISTINCT CASE WHEN irc.NewReferenceID IS NOT NULL THEN irc.ChangeID END) as ReplacementCount
+                    FROM InquiryItem ii
+                    LEFT JOIN SupplierResponse sr ON ii.ItemID = sr.ItemID AND sr.Status = 'Active'
+                    LEFT JOIN ItemReferenceChange irc ON sr.ItemID = irc.OriginalItemID 
+                        AND sr.SupplierID = irc.SupplierID
+                    GROUP BY ii.InquiryID, sr.SupplierID
+                )
                 SELECT 
                     i.InquiryID as inquiryID,
                     i.InquiryNumber as customNumber,
                     i.Date as date,
                     i.Status as status,
-                    COUNT(ii.InquiryItemID) as itemCount,
-                    SUM(ii.RequestedQty) as totalRequestedQty
+                    COUNT(DISTINCT ii.InquiryItemID) as itemCount,
+                    COUNT(DISTINCT rs.SupplierID) as respondedSuppliersCount,
+                    SUM(CASE WHEN rs.ResponseCount IS NULL THEN 1 ELSE 0 END) as notRespondedItemsCount,
+                    SUM(COALESCE(rs.ReplacementCount, 0)) as totalReplacementsCount
                 FROM Inquiry i
                 LEFT JOIN InquiryItem ii ON i.InquiryID = ii.InquiryID
+                LEFT JOIN ResponseStats rs ON i.InquiryID = rs.InquiryID
             `;
 
             const params = [];
@@ -39,34 +218,9 @@ class InquiryModel {
         });
     }
 
-    updateInquiryStatus(inquiryId, status) {
-        return new Promise((resolve, reject) => {
-            this.db.run(
-                'UPDATE Inquiry SET Status = ? WHERE InquiryID = ?',
-                [status, inquiryId],
-                function(err) {
-                    if (err) {
-                        console.error('Database error updating status:', err);
-                        reject(new Error('Failed to update status'));
-                        return;
-                    }
-                    
-                    if (this.changes === 0) {
-                        reject(new Error('Inquiry not found'));
-                        return;
-                    }
-                    
-                    resolve();
-                }
-            );
-        });
-    }
-
     getInquiryById(inquiryId) {
         return new Promise((resolve, reject) => {
             this.db.serialize(() => {
-                this.db.run('BEGIN TRANSACTION');
-
                 // Get inquiry details
                 this.db.get(
                     `SELECT 
@@ -80,13 +234,11 @@ class InquiryModel {
                     (err, inquiry) => {
                         if (err) {
                             console.error('Database error in getInquiryById:', err);
-                            this.db.run('ROLLBACK');
                             reject(new Error('Failed to fetch inquiry details'));
                             return;
                         }
 
                         if (!inquiry) {
-                            this.db.run('ROLLBACK');
                             reject(new Error('Inquiry not found'));
                             return;
                         }
@@ -169,7 +321,6 @@ class InquiryModel {
                         this.db.all(itemsQuery, [inquiryId], (err, items) => {
                             if (err) {
                                 console.error('Database error fetching inquiry items:', err);
-                                this.db.run('ROLLBACK');
                                 reject(new Error('Failed to fetch inquiry items'));
                                 return;
                             }
@@ -195,23 +346,37 @@ class InquiryModel {
                                 return item;
                             });
 
-                            this.db.run('COMMIT', (err) => {
-                                if (err) {
-                                    console.error('Error committing transaction:', err);
-                                    this.db.run('ROLLBACK');
-                                    reject(new Error('Failed to complete inquiry fetch'));
-                                    return;
-                                }
-
-                                resolve({
-                                    inquiry,
-                                    items
-                                });
+                            resolve({
+                                inquiry,
+                                items
                             });
                         });
                     }
                 );
             });
+        });
+    }
+
+    updateInquiryStatus(inquiryId, status) {
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                'UPDATE Inquiry SET Status = ? WHERE InquiryID = ?',
+                [status, inquiryId],
+                function(err) {
+                    if (err) {
+                        console.error('Database error updating status:', err);
+                        reject(new Error('Failed to update status'));
+                        return;
+                    }
+                    
+                    if (this.changes === 0) {
+                        reject(new Error('Inquiry not found'));
+                        return;
+                    }
+                    
+                    resolve();
+                }
+            );
         });
     }
 
@@ -243,328 +408,55 @@ class InquiryModel {
         });
     }
 
-    createInquiry(inquiryNumber, items) {
-        return new Promise((resolve, reject) => {
-            const db = this.db;
-            let isRolledBack = false;
-            let isCommitted = false;
-
-            const safeRollback = () => {
-                if (!isRolledBack && !isCommitted) {
-                    isRolledBack = true;
-                    db.run('ROLLBACK');
-                }
-            };
-
-            db.serialize(() => {
-                db.run('BEGIN TRANSACTION');
-
-                // Validate inquiry number
-                if (!inquiryNumber) {
-                    safeRollback();
-                    reject(new Error('Inquiry number is required'));
-                    return;
-                }
-
-                // Validate items array
-                if (!Array.isArray(items) || items.length === 0) {
-                    safeRollback();
-                    reject(new Error('At least one item is required'));
-                    return;
-                }
-
-                // Validate each item has required fields
-                for (const item of items) {
-                    if (!item.itemId || !item.hebrewDescription) {
-                        safeRollback();
-                        reject(new Error(`Item ${item.itemId || 'unknown'} is missing required fields`));
-                        return;
-                    }
-                }
-
-                // Check if inquiry number already exists
-                db.get('SELECT InquiryID FROM Inquiry WHERE InquiryNumber = ?', [inquiryNumber], (err, existing) => {
-                    if (err) {
-                        console.error('Database error checking inquiry number:', err);
-                        safeRollback();
-                        reject(new Error('Failed to check inquiry number'));
-                        return;
-                    }
-
-                    if (existing) {
-                        safeRollback();
-                        reject(new Error(`Inquiry number ${inquiryNumber} already exists`));
-                        return;
-                    }
-
-                    // Create the inquiry first
-                    db.run(
-                        `INSERT INTO Inquiry (InquiryNumber, Date, Status) VALUES (?, datetime('now'), 'New')`,
-                        [inquiryNumber],
-                        function(err) {
-                            if (err) {
-                                console.error('Database error creating inquiry:', err);
-                                safeRollback();
-                                reject(new Error('Failed to create inquiry'));
-                                return;
-                            }
-
-                            const inquiryId = this.lastID;
-
-                            // Process items sequentially
-                            const processNextItem = (index) => {
-                                if (index >= items.length) {
-                                    // All items processed successfully
-                                    db.run('COMMIT', (err) => {
-                                        if (err) {
-                                            console.error('Error committing transaction:', err);
-                                            safeRollback();
-                                            reject(new Error('Failed to complete inquiry creation'));
-                                            return;
-                                        }
-                                        isCommitted = true;
-                                        resolve(inquiryId);
-                                    });
-                                    return;
-                                }
-
-                                const item = items[index];
-
-                                // First check if item exists
-                                db.get('SELECT ItemID FROM Item WHERE ItemID = ?', [item.itemId], (err, existingItem) => {
-                                    if (err) {
-                                        console.error(`Error checking item ${item.itemId}:`, err);
-                                        safeRollback();
-                                        reject(new Error(`Failed to check item ${item.itemId}`));
-                                        return;
-                                    }
-
-                                    const createOrUpdateItem = () => {
-                                        const query = existingItem ? 
-                                            `UPDATE Item SET 
-                                                HebrewDescription = ?,
-                                                EnglishDescription = ?,
-                                                ImportMarkup = ?,
-                                                HSCode = ?
-                                            WHERE ItemID = ?` :
-                                            `INSERT INTO Item (
-                                                HebrewDescription,
-                                                EnglishDescription,
-                                                ImportMarkup,
-                                                HSCode,
-                                                ItemID
-                                            ) VALUES (?, ?, ?, ?, ?)`;
-
-                                        const params = [
-                                            item.hebrewDescription,
-                                            item.englishDescription || '',
-                                            item.importMarkup || 1.30,
-                                            item.hsCode || '',
-                                            item.itemId
-                                        ];
-
-                                        db.run(query, params, (err) => {
-                                            if (err) {
-                                                console.error(`Error ${existingItem ? 'updating' : 'creating'} item ${item.itemId}:`, err);
-                                                safeRollback();
-                                                reject(new Error(`Failed to ${existingItem ? 'update' : 'create'} item ${item.itemId}`));
-                                                return;
-                                            }
-
-                                            // Create inquiry item
-                                            db.run(
-                                                `INSERT INTO InquiryItem (
-                                                    InquiryID,
-                                                    ItemID,
-                                                    OriginalItemID,
-                                                    HebrewDescription,
-                                                    EnglishDescription,
-                                                    ImportMarkup,
-                                                    HSCode,
-                                                    QtyInStock,
-                                                    RetailPrice,
-                                                    SoldThisYear,
-                                                    SoldLastYear,
-                                                    RequestedQty,
-                                                    ReferenceNotes
-                                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                                                [
-                                                    inquiryId,
-                                                    item.itemId,
-                                                    item.itemId,
-                                                    item.hebrewDescription,
-                                                    item.englishDescription || '',
-                                                    item.importMarkup || 1.30,
-                                                    item.hsCode || '',
-                                                    item.qtyInStock || 0,
-                                                    item.retailPrice,  // Removed || 0 to allow null
-                                                    item.soldThisYear || 0,
-                                                    item.soldLastYear || 0,
-                                                    item.requestedQty || 0,
-                                                    item.referenceNotes || null
-                                                ],
-                                                (err) => {
-                                                    if (err) {
-                                                        console.error(`Error creating inquiry item ${item.itemId}:`, err);
-                                                        safeRollback();
-                                                        reject(new Error(`Failed to create inquiry item ${item.itemId}`));
-                                                        return;
-                                                    }
-
-                                                    // Create item history
-                                                    db.run(
-                                                        `INSERT INTO ItemHistory (
-                                                            ItemID,
-                                                            ILSRetailPrice,
-                                                            QtyInStock,
-                                                            QtySoldThisYear,
-                                                            QtySoldLastYear,
-                                                            Date
-                                                        ) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-                                                        [
-                                                            item.itemId,
-                                                            item.retailPrice,  // Removed || 0 to allow null
-                                                            item.qtyInStock || 0,
-                                                            item.soldThisYear || 0,
-                                                            item.soldLastYear || 0
-                                                        ],
-                                                        (err) => {
-                                                            if (err) {
-                                                                console.error(`Error creating history for item ${item.itemId}:`, err);
-                                                                safeRollback();
-                                                                reject(new Error(`Failed to create history for item ${item.itemId}`));
-                                                                return;
-                                                            }
-
-                                                            // Create reference change if newReferenceId exists
-                                                            if (item.newReferenceId) {
-                                                                // First ensure the new reference item exists
-                                                                db.get('SELECT ItemID FROM Item WHERE ItemID = ?', [item.newReferenceId], (err, existingRef) => {
-                                                                    if (err) {
-                                                                        console.error(`Error checking reference item ${item.newReferenceId}:`, err);
-                                                                        safeRollback();
-                                                                        reject(new Error(`Failed to check reference item ${item.newReferenceId}`));
-                                                                        return;
-                                                                    }
-
-                                                                    // Create new reference item if it doesn't exist
-                                                                    const createRefItem = () => {
-                                                                        if (!existingRef) {
-                                                                            db.run(
-                                                                                `INSERT INTO Item (
-                                                                                    ItemID,
-                                                                                    HebrewDescription,
-                                                                                    EnglishDescription,
-                                                                                    ImportMarkup
-                                                                                ) VALUES (?, ?, ?, ?)`,
-                                                                                [
-                                                                                    item.newReferenceId,
-                                                                                    'חלק חדש לא ידוע', // "New unknown part" in Hebrew
-                                                                                    'New unknown part',
-                                                                                    1.30
-                                                                                ],
-                                                                                (err) => {
-                                                                                    if (err) {
-                                                                                        console.error(`Error creating reference item ${item.newReferenceId}:`, err);
-                                                                                        safeRollback();
-                                                                                        reject(new Error(`Failed to create reference item ${item.newReferenceId}`));
-                                                                                        return;
-                                                                                    }
-                                                                                    createReferenceChange();
-                                                                                }
-                                                                            );
-                                                                        } else {
-                                                                            createReferenceChange();
-                                                                        }
-                                                                    };
-
-                                                                    const createReferenceChange = () => {
-                                                                        db.run(
-                                                                            `INSERT INTO ItemReferenceChange (
-                                                                                OriginalItemID,
-                                                                                NewReferenceID,
-                                                                                ChangedByUser,
-                                                                                Notes,
-                                                                                ChangeDate
-                                                                            ) VALUES (?, ?, 1, ?, datetime('now'))`,
-                                                                            [
-                                                                                item.itemId,
-                                                                                item.newReferenceId,
-                                                                                item.referenceNotes || null
-                                                                            ],
-                                                                            (err) => {
-                                                                                if (err) {
-                                                                                    console.error(`Error creating reference change for item ${item.itemId}:`, err);
-                                                                                    safeRollback();
-                                                                                    reject(new Error(`Failed to create reference change for item ${item.itemId}`));
-                                                                                    return;
-                                                                                }
-
-                                                                                // Process next item
-                                                                                processNextItem(index + 1);
-                                                                            }
-                                                                        );
-                                                                    };
-
-                                                                    createRefItem();
-                                                                });
-                                                            } else {
-                                                                // Process next item if no reference change needed
-                                                                processNextItem(index + 1);
-                                                            }
-                                                        }
-                                                    );
-                                                }
-                                            );
-                                        });
-                                    };
-
-                                    createOrUpdateItem();
-                                });
-                            };
-
-                            // Start processing items
-                            processNextItem(0);
-                        }
-                    );
-                });
-            });
-        });
-    }
-
     deleteInquiry(inquiryId) {
         return new Promise((resolve, reject) => {
             this.db.serialize(() => {
-                this.db.run('BEGIN TRANSACTION');
-
-                // Delete inquiry items first (due to foreign key constraint)
-                this.db.run('DELETE FROM InquiryItem WHERE InquiryID = ?', [inquiryId], (err) => {
+                // Start a transaction
+                this.db.run('BEGIN TRANSACTION', (err) => {
                     if (err) {
-                        console.error('Database error deleting inquiry items:', err);
-                        this.db.run('ROLLBACK');
-                        reject(new Error('Failed to delete inquiry items'));
+                        console.error('Error starting transaction:', err);
+                        reject(new Error('Failed to start delete transaction'));
                         return;
                     }
 
-                    // Then delete the inquiry
-                    this.db.run('DELETE FROM Inquiry WHERE InquiryID = ?', [inquiryId], (err) => {
-                        if (err) {
-                            console.error('Database error deleting inquiry:', err);
-                            this.db.run('ROLLBACK');
-                            reject(new Error('Failed to delete inquiry'));
-                            return;
-                        }
-
-                        this.db.run('COMMIT', (err) => {
+                    // First delete related inquiry items
+                    this.db.run(
+                        'DELETE FROM InquiryItem WHERE InquiryID = ?',
+                        [inquiryId],
+                        (err) => {
                             if (err) {
-                                console.error('Error committing transaction:', err);
+                                console.error('Error deleting inquiry items:', err);
                                 this.db.run('ROLLBACK');
-                                reject(new Error('Failed to complete inquiry deletion'));
+                                reject(new Error('Failed to delete inquiry items'));
                                 return;
                             }
-                            resolve();
-                        });
-                    });
+
+                            // Then delete the inquiry itself
+                            this.db.run(
+                                'DELETE FROM Inquiry WHERE InquiryID = ?',
+                                [inquiryId],
+                                (err) => {
+                                    if (err) {
+                                        console.error('Error deleting inquiry:', err);
+                                        this.db.run('ROLLBACK');
+                                        reject(new Error('Failed to delete inquiry'));
+                                        return;
+                                    }
+
+                                    // Commit the transaction
+                                    this.db.run('COMMIT', (err) => {
+                                        if (err) {
+                                            console.error('Error committing transaction:', err);
+                                            this.db.run('ROLLBACK');
+                                            reject(new Error('Failed to commit delete transaction'));
+                                            return;
+                                        }
+                                        resolve();
+                                    });
+                                }
+                            );
+                        }
+                    );
                 });
             });
         });

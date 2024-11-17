@@ -30,8 +30,8 @@ class ExcelProcessor {
             
             // Then get the data with column mapping if provided
             const data = xlsx.utils.sheet_to_json(worksheet, {
-                raw: false,  // Convert everything to strings for consistent handling
-                defval: null, // Use null for empty cells to distinguish from empty strings
+                raw: true,  // Keep original types
+                defval: null, // Use null for empty cells
                 ...options
             });
 
@@ -39,13 +39,57 @@ class ExcelProcessor {
                 throw new Error('No data found in Excel file');
             }
 
+            // Process each row to ensure proper type conversion
+            const processedData = data.map((row, index) => {
+                const processed = {};
+                for (const [key, value] of Object.entries(row)) {
+                    // Log the raw value for debugging
+                    console.log(`Processing row ${index + 1}, column "${key}":`, {
+                        rawValue: value,
+                        type: typeof value
+                    });
+
+                    if (value === null || value === undefined || value === '') {
+                        processed[key] = null;
+                        continue;
+                    }
+
+                    if (key.toLowerCase().includes('price')) {
+                        // Handle price values
+                        processed[key] = typeof value === 'number' ? value :
+                            parseFloat(value.toString().replace(/[^\d.-]/g, '')) || null;
+                    }
+                    else if (key.toLowerCase().includes('qty') || 
+                             key.toLowerCase().includes('quantity') ||
+                             key.toLowerCase().includes('stock') || 
+                             key.toLowerCase().includes('sold')) {
+                        // Handle quantity values - ensure they're integers
+                        processed[key] = typeof value === 'number' ? Math.floor(value) :
+                            parseInt(value.toString().replace(/[^\d-]/g, '')) || 0;
+                    }
+                    else if (key.toLowerCase().includes('markup')) {
+                        // Handle markup values - keep decimal places
+                        processed[key] = typeof value === 'number' ? value :
+                            parseFloat(value.toString().replace(/[^\d.-]/g, '')) || 1.3;
+                    }
+                    else {
+                        // Keep other values as strings
+                        processed[key] = value.toString().trim();
+                    }
+
+                    // Log the processed value for debugging
+                    console.log(`Processed value:`, processed[key]);
+                }
+                return processed;
+            });
+
             return {
                 headers,
-                data
+                data: processedData
             };
         } catch (error) {
             console.error('Excel processing error:', error);
-            throw new Error('Failed to read Excel file');
+            throw new Error(`Failed to read Excel file: ${error.message}`);
         }
     }
 
@@ -57,7 +101,7 @@ class ExcelProcessor {
             
             // Get the data with header row as column names
             const data = xlsx.utils.sheet_to_json(worksheet, {
-                raw: false,
+                raw: true,
                 defval: null,
                 header: "A"  // Use A1 notation for headers
             });
@@ -93,13 +137,16 @@ class ExcelProcessor {
                     throw new Error(`Row ${index + 2}: Item ID is required`);
                 }
 
-                const priceStr = row[priceCol]?.toString().trim();
-                if (!priceStr) {
+                let price = row[priceCol];
+                if (price === null || price === '') {
                     throw new Error(`Row ${index + 2}: Price is required for item ${itemId}`);
                 }
 
-                // Convert price to number and validate
-                const price = parseFloat(priceStr.replace(/[^\d.-]/g, ''));
+                // Convert price to number if it's not already
+                if (typeof price !== 'number') {
+                    price = parseFloat(price.toString().replace(/[^\d.-]/g, ''));
+                }
+
                 if (isNaN(price)) {
                     throw new Error(`Row ${index + 2}: Invalid price format for item ${itemId}`);
                 }
@@ -137,25 +184,30 @@ class ExcelProcessor {
             throw new Error('Invalid headers format');
         }
 
-        // Create a reverse mapping from Excel headers to field names
-        const reverseMapping = {};
-        for (const [field, header] of Object.entries(columnMapping)) {
-            reverseMapping[header] = field;
-        }
+        // Check if required fields are mapped
+        const requiredFields = {
+            itemID: 'Item ID',
+            hebrewDescription: 'Hebrew Description',
+            requestedQty: 'Requested Quantity'
+        };
 
-        // Check if all mapped columns exist in the headers
-        for (const header of Object.values(columnMapping)) {
-            if (!headers.includes(header)) {
-                throw new Error(`Mapped column "${header}" not found in Excel file`);
+        const missingFields = [];
+        for (const [field, label] of Object.entries(requiredFields)) {
+            if (!columnMapping[field]) {
+                missingFields.push(label);
             }
         }
 
-        // Check required mappings using Excel header names
-        const requiredHeaders = ['Item ID', 'Hebrew Description', 'Requested Quantity'];
-        const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
-        
-        if (missingHeaders.length > 0) {
-            throw new Error(`Missing required columns in Excel file: ${missingHeaders.join(', ')}`);
+        if (missingFields.length > 0) {
+            throw new Error(`Missing required field mappings: ${missingFields.join(', ')}`);
+        }
+
+        // Check if mapped columns exist in headers
+        const mappedColumns = Object.values(columnMapping).filter(Boolean);
+        const missingColumns = mappedColumns.filter(col => !headers.includes(col));
+
+        if (missingColumns.length > 0) {
+            throw new Error(`Mapped columns not found in Excel file: ${missingColumns.join(', ')}`);
         }
     }
 

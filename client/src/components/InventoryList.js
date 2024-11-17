@@ -1,33 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   Box,
-  Paper,
   Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TablePagination,
-  TextField,
-  IconButton,
-  Tooltip,
   CircularProgress,
   Alert,
-  Button,
-  Chip,
 } from '@mui/material';
-import {
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Search as SearchIcon,
-  Add as AddIcon,
-} from '@mui/icons-material';
 import axios from 'axios';
-import ItemDialog from './ItemDialog.js';
-import ItemDetailsDialog from './ItemDetailsDialog.js';
+import ItemDialog from './ItemDialog';
+import ItemDetailsDialog from './ItemDetailsDialog';
 import { API_BASE_URL } from '../config';
+import { uiDebug, dataDebug } from '../utils/debug';
+import { useState, useEffect } from 'react';
+
+// Import modular components
+import ItemTable from './InventoryList/ItemTable';
+import SearchBar from './InventoryList/SearchBar';
 
 function InventoryList() {
   const [items, setItems] = useState([]);
@@ -49,6 +37,7 @@ function InventoryList() {
 
   const fetchItems = async () => {
     try {
+      dataDebug.log('Fetching inventory items');
       const response = await axios.get(`${API_BASE_URL}/api/items`);
       const itemsList = response.data;
       
@@ -82,10 +71,11 @@ function InventoryList() {
         return processedItem;
       });
       
+      dataDebug.log('Processed items with references:', itemsWithDetails.length);
       setItems(itemsWithDetails);
       setError('');
     } catch (err) {
-      console.error('Error fetching items:', err);
+      dataDebug.error('Error fetching items:', err);
       setError('Failed to load inventory items. Please try again later.');
     } finally {
       setLoading(false);
@@ -93,6 +83,7 @@ function InventoryList() {
   };
 
   const handleAddItem = () => {
+    uiDebug.log('Opening add item dialog');
     setSelectedItem(null);
     setDialogMode('add');
     setDialogOpen(true);
@@ -101,6 +92,7 @@ function InventoryList() {
   const handleEditItem = (e, item) => {
     e.preventDefault();
     e.stopPropagation();
+    uiDebug.log('Opening edit item dialog for:', item.itemID);
     const formattedItem = {
       itemID: item.itemID,
       hebrewDescription: item.hebrewDescription,
@@ -116,6 +108,7 @@ function InventoryList() {
 
   const handleSaveItem = async (itemData) => {
     try {
+      dataDebug.log('Saving item:', itemData.get('itemID'));
       if (dialogMode === 'add') {
         await axios.post(`${API_BASE_URL}/api/items`, itemData, {
           headers: {
@@ -134,7 +127,7 @@ function InventoryList() {
       setSelectedItem(null);
       setError('');
     } catch (error) {
-      console.error('Error saving item:', error);
+      dataDebug.error('Error saving item:', error);
       setError('Failed to save item. Please try again.');
     }
   };
@@ -144,11 +137,11 @@ function InventoryList() {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this item?')) {
       try {
+        dataDebug.log('Deleting item:', itemId);
         await axios.delete(`${API_BASE_URL}/api/items/${itemId}`);
         fetchItems();
       } catch (error) {
-        console.error('Error deleting item:', error);
-        // Display the error message from the backend if available
+        dataDebug.error('Error deleting item:', error);
         const errorMessage = error.response?.data?.message || 'Failed to delete item. Please try again.';
         setError(errorMessage);
       }
@@ -157,41 +150,44 @@ function InventoryList() {
 
   const handleRowClick = async (item) => {
     try {
+      uiDebug.log('Opening item details for:', item.itemID);
       setLoadingDetails(true);
+      setDetailsOpen(true);
+      
       const response = await axios.get(`${API_BASE_URL}/api/items/${item.itemID}`);
       const fullDetails = response.data;
       
-      // Merge the reference data from the list view with the full details
+      // Create the merged data structure expected by ItemDetailsDialog
       const mergedData = {
-        ...fullDetails,
         item: {
           ...fullDetails.item,
           referenceChange: item.referenceChange,
           hasReferenceChange: item.hasReferenceChange,
           isReferencedBy: item.isReferencedBy,
           referencingItems: item.referencingItems
-        }
+        },
+        priceHistory: fullDetails.priceHistory || [],
+        supplierPrices: fullDetails.supplierPrices || [],
+        promotions: fullDetails.promotions || []
       };
       
       setItemDetails(mergedData);
-      setDetailsOpen(true);
     } catch (error) {
-      console.error('Error fetching item details:', error);
-      setError('Failed to load item details. Please try again.');
+      dataDebug.error('Error fetching item details:', error);
+      if (error.response?.status === 404) {
+        setError(`Item ${item.itemID} not found. It may have been deleted.`);
+      } else {
+        setError('Failed to load item details. Please try again.');
+      }
+      setDetailsOpen(false);
     } finally {
       setLoadingDetails(false);
     }
   };
 
-  const handleDialogClose = () => {
-    setDialogOpen(false);
-    setSelectedItem(null);
-    setError('');
-  };
-
-  const handleDetailsClose = () => {
-    setDetailsOpen(false);
-    setItemDetails(null);
+  const handleSearchChange = (event) => {
+    setSearchTerm(event.target.value);
+    setPage(0);
   };
 
   const handleChangePage = (event, newPage) => {
@@ -200,11 +196,6 @@ function InventoryList() {
 
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
-  const handleSearchChange = (event) => {
-    setSearchTerm(event.target.value);
     setPage(0);
   };
 
@@ -242,25 +233,11 @@ function InventoryList() {
     <Box sx={{ width: '100%', p: 2 }}>
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h5">Inventory Items</Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <TextField
-            variant="outlined"
-            size="small"
-            placeholder="Search items..."
-            value={searchTerm}
-            onChange={handleSearchChange}
-            InputProps={{
-              startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-            }}
-          />
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddItem}
-          >
-            Add Item
-          </Button>
-        </Box>
+        <SearchBar 
+          searchTerm={searchTerm}
+          onSearchChange={handleSearchChange}
+          onAddItem={handleAddItem}
+        />
       </Box>
 
       {error && (
@@ -269,149 +246,14 @@ function InventoryList() {
         </Alert>
       )}
 
-      <TableContainer component={Paper}>
-        <Table sx={{ minWidth: 650 }} aria-label="inventory table">
-          <TableHead>
-            <TableRow>
-              <TableCell>Item ID</TableCell>
-              <TableCell>Hebrew Description</TableCell>
-              <TableCell>English Description</TableCell>
-              <TableCell align="right">Import Markup</TableCell>
-              <TableCell>HS Code</TableCell>
-              <TableCell>Image</TableCell>
-              <TableCell align="right">Stock</TableCell>
-              <TableCell align="right">Sold This Year</TableCell>
-              <TableCell align="right">Sold Last Year</TableCell>
-              <TableCell align="right">Retail Price (ILS)</TableCell>
-              <TableCell>Reference</TableCell>
-              <TableCell align="center">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {displayedItems.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={12} align="center">
-                  No items found
-                </TableCell>
-              </TableRow>
-            ) : (
-              displayedItems.map((item) => {
-                // Check if this item is referenced by any other item
-                const isNewReference = items.some(otherItem => 
-                  otherItem.referenceChange && 
-                  otherItem.referenceChange.newReferenceID === item.itemID
-                );
-
-                // Find the items that reference this item
-                const referencingItems = items.filter(otherItem => 
-                  otherItem.referenceChange && 
-                  otherItem.referenceChange.newReferenceID === item.itemID
-                );
-
-                return (
-                  <TableRow 
-                    key={item.itemID}
-                    onClick={() => handleRowClick(item)}
-                    sx={{ 
-                      cursor: 'pointer',
-                      backgroundColor: item.hasReferenceChange 
-                        ? 'rgba(255, 243, 224, 0.9)'  // Orange for items being replaced
-                        : isNewReference
-                          ? '#e8f5e9'  // Solid light green for new reference items
-                          : 'inherit',
-                      '&:hover': { 
-                        backgroundColor: item.hasReferenceChange 
-                          ? 'rgba(255, 243, 224, 1)' 
-                          : isNewReference
-                            ? '#c8e6c9'  // Darker green on hover
-                            : 'rgba(0, 0, 0, 0.04)' 
-                      }
-                    }}
-                  >
-                    <TableCell>{item.itemID}</TableCell>
-                    <TableCell>{item.hebrewDescription}</TableCell>
-                    <TableCell>{item.englishDescription}</TableCell>
-                    <TableCell align="right">{Number(item.importMarkup).toFixed(2)}</TableCell>
-                    <TableCell>{item.hsCode}</TableCell>
-                    <TableCell>
-                      {item.image && (
-                        <img 
-                          src={`${API_BASE_URL}/uploads/${item.image}`} 
-                          alt={item.englishDescription || item.hebrewDescription}
-                          style={{ maxWidth: '50px', maxHeight: '50px' }}
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell align="right">{item.qtyInStock || 0}</TableCell>
-                    <TableCell align="right">{item.soldThisYear || 0}</TableCell>
-                    <TableCell align="right">{item.soldLastYear || 0}</TableCell>
-                    <TableCell align="right">
-                      {item.retailPrice || (
-                        <Typography variant="body2" color="error">
-                          No Price
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {item.hasReferenceChange && (
-                        <Box>
-                          <Chip
-                            label={`→ ${item.referenceChange.newReferenceID}`}
-                            color="warning"
-                            variant="outlined"
-                            size="small"
-                          />
-                          <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
-                            {getChangeSource(item.referenceChange)}
-                          </Typography>
-                        </Box>
-                      )}
-                      {isNewReference && (
-                        <Box sx={{ mt: item.hasReferenceChange ? 1 : 0 }}>
-                          <Chip
-                            label={`← ${referencingItems.map(i => i.itemID).join(', ')}`}
-                            color="success"
-                            variant="outlined"
-                            size="small"
-                          />
-                          {referencingItems.map((refItem, index) => (
-                            <Typography key={index} variant="caption" display="block" sx={{ mt: 0.5 }}>
-                              {getChangeSource(refItem.referenceChange)}
-                            </Typography>
-                          ))}
-                        </Box>
-                      )}
-                    </TableCell>
-                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
-                        <Tooltip title="Edit Item">
-                          <IconButton 
-                            size="small" 
-                            onClick={(e) => handleEditItem(e, item)}
-                            sx={{ '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.1)' } }}
-                          >
-                            <EditIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete Item">
-                          <IconButton 
-                            size="small" 
-                            color="error"
-                            onClick={(e) => handleDeleteItem(e, item.itemID)}
-                            sx={{ '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.1)' } }}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <ItemTable 
+        items={items}
+        displayedItems={displayedItems}
+        getChangeSource={getChangeSource}
+        onRowClick={handleRowClick}
+        onEditItem={handleEditItem}
+        onDeleteItem={handleDeleteItem}
+      />
       
       <TablePagination
         rowsPerPageOptions={[5, 10, 25]}
@@ -425,7 +267,11 @@ function InventoryList() {
 
       <ItemDialog
         open={dialogOpen}
-        onClose={handleDialogClose}
+        onClose={() => {
+          setDialogOpen(false);
+          setSelectedItem(null);
+          setError('');
+        }}
         item={selectedItem}
         onSave={handleSaveItem}
         mode={dialogMode}
@@ -433,8 +279,13 @@ function InventoryList() {
 
       <ItemDetailsDialog
         open={detailsOpen}
-        onClose={handleDetailsClose}
+        onClose={() => {
+          setDetailsOpen(false);
+          setItemDetails(null);
+          setError('');
+        }}
         item={itemDetails}
+        loading={loadingDetails}
       />
 
       {loadingDetails && (

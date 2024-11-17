@@ -27,6 +27,7 @@ import {
 } from '@mui/material';
 import { format } from 'date-fns';
 import { API_BASE_URL } from '../config';
+import { uiDebug, dataDebug, perfDebug } from '../utils/debug';
 
 const PromotionList = () => {
     const [promotions, setPromotions] = useState([]);
@@ -55,57 +56,66 @@ const PromotionList = () => {
     const [loadingDetails, setLoadingDetails] = useState(false);
 
     useEffect(() => {
-        console.log('Component mounted');
+        uiDebug.log('PromotionList component mounted');
         fetchPromotions();
         fetchSuppliers();
     }, []);
 
     const fetchPromotions = async () => {
+        perfDebug.time('fetchPromotions');
         try {
             setLoading(true);
             setError(null);
-            console.log('Fetching promotions...');
+            dataDebug.log('Fetching promotions...');
+            
             const response = await fetch(`${API_BASE_URL}/api/promotions/active`);
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.message || 'Failed to fetch promotions');
             }
             const data = await response.json();
-            console.log('Fetched promotions:', data);
+            dataDebug.log('Fetched promotions:', data.length);
             setPromotions(data);
         } catch (error) {
-            console.error('Error fetching promotions:', error);
+            dataDebug.error('Error fetching promotions:', error);
             setError(error.message);
             setPromotions([]);
         } finally {
+            perfDebug.timeEnd('fetchPromotions');
             setLoading(false);
         }
     };
 
     const fetchSuppliers = async () => {
+        perfDebug.time('fetchSuppliers');
         try {
-            console.log('Fetching suppliers...');
+            dataDebug.log('Fetching suppliers...');
             setLoadingSuppliers(true);
             setError(null);
+
             const response = await fetch(`${API_BASE_URL}/api/suppliers`);
-            console.log('Suppliers API response:', response);
+            dataDebug.log('Suppliers API response status:', response.status);
+            
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.message || 'Failed to fetch suppliers');
             }
+            
             const data = await response.json();
-            console.log('Fetched suppliers data:', data);
+            dataDebug.log('Fetched suppliers count:', data.length);
+            
             if (!data || data.length === 0) {
-                console.log('No suppliers found');
+                dataDebug.warn('No suppliers found');
                 setError('No suppliers found. Please add suppliers before creating promotions.');
             }
+            
             setSuppliers(data);
-            console.log('Suppliers state updated:', data);
         } catch (error) {
-            console.error('Error fetching suppliers:', error);
+            dataDebug.error('Error fetching suppliers:', error);
             setError(error.message);
-            setSuppliers([]); // Clear suppliers on error
+            setSuppliers([]);
         } finally {
+            perfDebug.timeEnd('fetchSuppliers');
             setLoadingSuppliers(false);
         }
     };
@@ -121,7 +131,9 @@ const PromotionList = () => {
             formData.append('excelFile', file);
 
             try {
-                console.log('Uploading file for column detection...');
+                dataDebug.log('Uploading file for column detection:', file.name);
+                perfDebug.time('columnDetection');
+                
                 const response = await fetch(`${API_BASE_URL}/api/promotions/columns`, {
                     method: 'POST',
                     body: formData
@@ -133,12 +145,14 @@ const PromotionList = () => {
                 }
 
                 const data = await response.json();
-                console.log('Detected columns:', data.columns);
+                dataDebug.log('Detected columns:', data.columns);
                 setColumns(data.columns);
                 setColumnSelectionOpen(true);
                 setUploadDialogOpen(false);
+                
+                perfDebug.timeEnd('columnDetection');
             } catch (error) {
-                console.error('Error reading Excel columns:', error);
+                dataDebug.error('Error reading Excel columns:', error);
                 setError(error.message);
             } finally {
                 setLoading(false);
@@ -155,6 +169,7 @@ const PromotionList = () => {
         try {
             setLoading(true);
             setError(null);
+            perfDebug.time('uploadPromotion');
 
             const formData = new FormData();
             formData.append('name', newPromotion.name);
@@ -165,7 +180,7 @@ const PromotionList = () => {
             formData.append('itemIdColumn', selectedColumns.itemId);
             formData.append('priceColumn', selectedColumns.price);
 
-            console.log('Creating promotion...');
+            dataDebug.log('Creating promotion:', { name: newPromotion.name });
             const response = await fetch(`${API_BASE_URL}/api/promotions`, {
                 method: 'POST',
                 body: formData
@@ -176,7 +191,7 @@ const PromotionList = () => {
                 throw new Error(errorData.message || 'Failed to create promotion');
             }
 
-            console.log('Promotion created successfully');
+            dataDebug.log('Promotion created successfully');
             setUploadDialogOpen(false);
             setColumnSelectionOpen(false);
             setNewPromotion({
@@ -190,9 +205,11 @@ const PromotionList = () => {
                 itemId: '',
                 price: ''
             });
+            
+            perfDebug.timeEnd('uploadPromotion');
             fetchPromotions();
         } catch (error) {
-            console.error('Error creating promotion:', error);
+            dataDebug.error('Error creating promotion:', error);
             setError(error.message);
         } finally {
             setLoading(false);
@@ -203,8 +220,9 @@ const PromotionList = () => {
         try {
             setLoadingDetails(true);
             setError(null);
+            perfDebug.time('viewPromotionDetails');
 
-            console.log('Fetching promotion details for ID:', groupId);
+            dataDebug.log('Fetching promotion details:', { groupId, page });
             const response = await fetch(`${API_BASE_URL}/api/promotions/${groupId}?page=${page}&pageSize=${pageSize}`);
             
             if (response.status === 404) {
@@ -217,12 +235,18 @@ const PromotionList = () => {
             }
 
             const details = await response.json();
-            console.log('Fetched promotion details:', details);
+            dataDebug.log('Fetched promotion details:', { 
+                name: details.Name, 
+                itemCount: details.items?.length 
+            });
+            
             setPromotionDetails(details);
             setCurrentPage(page);
             setDetailsDialogOpen(true);
+            
+            perfDebug.timeEnd('viewPromotionDetails');
         } catch (error) {
-            console.error('Error fetching promotion details:', error);
+            dataDebug.error('Error fetching promotion details:', error);
             setError(error.message);
             setDetailsDialogOpen(false);
             fetchPromotions();
@@ -241,9 +265,11 @@ const PromotionList = () => {
         try {
             setLoading(true);
             setError(null);
+            perfDebug.time('updatePromotion');
 
             const promotion = promotions.find(p => p.PromotionGroupID === groupId);
-            console.log('Updating promotion:', { groupId, isActive });
+            dataDebug.log('Updating promotion:', { groupId, isActive });
+            
             const response = await fetch(`${API_BASE_URL}/api/promotions/${groupId}`, {
                 method: 'PUT',
                 headers: {
@@ -266,10 +292,11 @@ const PromotionList = () => {
                 throw new Error(errorData.message || 'Failed to update promotion');
             }
 
-            console.log('Promotion updated successfully');
+            dataDebug.log('Promotion updated successfully');
+            perfDebug.timeEnd('updatePromotion');
             fetchPromotions();
         } catch (error) {
-            console.error('Error updating promotion:', error);
+            dataDebug.error('Error updating promotion:', error);
             setError(error.message);
             fetchPromotions();
         } finally {
@@ -278,11 +305,13 @@ const PromotionList = () => {
     };
 
     const handleCloseDetailsDialog = () => {
+        uiDebug.log('Closing promotion details dialog');
         setDetailsDialogOpen(false);
         setPromotionDetails(null);
         setCurrentPage(1);
     };
 
+    // Rest of the component remains the same...
     return (
         <Box>
             <Snackbar 

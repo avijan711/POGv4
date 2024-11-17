@@ -6,6 +6,8 @@ import {
   Button,
   Chip,
   Alert,
+  Grid,
+  Paper,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -14,6 +16,10 @@ import {
   SwapHoriz as SwapHorizIcon,
   Delete as DeleteIcon,
   Compare as CompareIcon,
+  Inventory as InventoryIcon,
+  Business as BusinessIcon,
+  Schedule as ScheduleIcon,
+  TrendingUp as TrendingUpIcon,
 } from '@mui/icons-material';
 
 function InquiryHeader({
@@ -29,9 +35,10 @@ function InquiryHeader({
   onViewBestPrices,
   onDeleteInquiry,
   error,
+  statistics = {},
 }) {
   const handleComparisonClick = (e) => {
-    e.stopPropagation(); // Prevent event bubbling
+    e.stopPropagation();
     console.log('=== Comparison button clicked ===');
     console.log('onViewBestPrices:', typeof onViewBestPrices);
     if (onViewBestPrices) {
@@ -41,6 +48,22 @@ function InquiryHeader({
       console.log('onViewBestPrices is not defined');
     }
   };
+
+  const StatBox = ({ icon: Icon, label, value, color = 'primary' }) => (
+    <Paper elevation={0} sx={{ p: 1.5, bgcolor: `${color}.50`, borderRadius: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Icon sx={{ color: `${color}.main` }} />
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            {label}
+          </Typography>
+          <Typography variant="h6" color={`${color}.main`} sx={{ fontWeight: 'medium' }}>
+            {value}
+          </Typography>
+        </Box>
+      </Box>
+    </Paper>
+  );
 
   return (
     <Box sx={{ mb: 3 }}>
@@ -114,6 +137,41 @@ function InquiryHeader({
           </Button>
         </Box>
       </Box>
+
+      {/* Statistics Section */}
+      <Grid container spacing={2} sx={{ mt: 2, mb: 2 }}>
+        <Grid item xs={3}>
+          <StatBox
+            icon={InventoryIcon}
+            label="Unique Items"
+            value={statistics.uniqueItems || 0}
+          />
+        </Grid>
+        <Grid item xs={3}>
+          <StatBox
+            icon={BusinessIcon}
+            label="Suppliers Responded"
+            value={`${statistics.suppliersResponded || 0} / ${statistics.totalSuppliers || 0}`}
+            color="success"
+          />
+        </Grid>
+        <Grid item xs={3}>
+          <StatBox
+            icon={ScheduleIcon}
+            label="Days Active"
+            value={statistics.daysActive || 0}
+            color="info"
+          />
+        </Grid>
+        <Grid item xs={3}>
+          <StatBox
+            icon={TrendingUpIcon}
+            label="Response Rate"
+            value={`${statistics.responseRate || 0}%`}
+            color="warning"
+          />
+        </Grid>
+      </Grid>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>

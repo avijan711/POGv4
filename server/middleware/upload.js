@@ -52,7 +52,48 @@ const upload = multer({
     }
 }).single('file');
 
-// Middleware to handle file upload
+// Basic file upload handler without additional validation
+const handleBasicUpload = (req, res, next) => {
+    console.log('Handling basic upload request');
+    
+    upload(req, res, (err) => {
+        if (err instanceof multer.MulterError) {
+            console.error('Multer error:', err);
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).json({
+                    error: 'File too large',
+                    details: 'Maximum file size is 50MB',
+                    suggestion: 'Please reduce the file size or split into multiple files'
+                });
+            }
+            return res.status(400).json({
+                error: 'File upload error',
+                details: err.message,
+                suggestion: 'Please try again with a smaller file or contact support if the issue persists'
+            });
+        } else if (err) {
+            console.error('Upload error:', err);
+            return res.status(400).json({
+                error: 'File upload failed',
+                details: err.message,
+                suggestion: 'Please ensure you are uploading a valid Excel file'
+            });
+        }
+
+        if (!req.file) {
+            console.error('No file uploaded');
+            return res.status(400).json({
+                error: 'No file uploaded',
+                details: 'Please select a file to upload',
+                suggestion: 'Click the browse button to select a file'
+            });
+        }
+
+        next();
+    });
+};
+
+// Full upload handler with inquiry validation
 const handleUpload = (req, res, next) => {
     console.log('Handling upload request');
     console.log('Request headers:', req.headers);
@@ -195,6 +236,7 @@ const cleanupFile = (filePath) => {
 
 module.exports = {
     handleUpload,
+    handleBasicUpload,
     validateExcelFile,
     cleanupFile
 };

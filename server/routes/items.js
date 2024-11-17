@@ -19,7 +19,7 @@ module.exports = (itemModel) => {
                 soldThisYear: parseInt(item.soldThisYear) || 0,
                 soldLastYear: parseInt(item.soldLastYear) || 0,
                 retailPrice: item.retailPrice !== null && item.retailPrice !== undefined ? 
-                    `₪${parseFloat(item.retailPrice).toFixed(2)}` : null,
+                    parseFloat(item.retailPrice) : null,
                 // Preserve reference change data
                 referenceChange: item.referenceChange,
                 referencedBy: item.referencedBy
@@ -38,45 +38,69 @@ module.exports = (itemModel) => {
     // Get item by ID
     router.get('/:id', async (req, res) => {
         try {
+            console.log('Fetching item details for ID:', req.params.id);
             const result = await itemModel.getItemById(req.params.id);
-            if (!result.item) {
+            
+            console.log('Raw result from database:', JSON.stringify(result, null, 2));
+            
+            if (!result) {
                 return res.status(404).json({ 
                     error: 'Item not found',
                     details: `No item exists with ID: ${req.params.id}`,
                     suggestion: 'Please verify the item ID and try again'
                 });
             }
-            // Format item to match the table structure, preserving reference data
+
+            // Format the response with the expected structure
             const formattedResult = {
                 item: {
-                    itemID: result.item.itemID || '',
-                    hebrewDescription: result.item.hebrewDescription || '',
-                    englishDescription: result.item.englishDescription || '',
-                    importMarkup: parseFloat(result.item.importMarkup).toFixed(2) || '1.30',
-                    hsCode: result.item.hsCode || '',
-                    image: result.item.image || '',
-                    qtyInStock: parseInt(result.item.qtyInStock) || 0,
-                    soldThisYear: parseInt(result.item.soldThisYear) || 0,
-                    soldLastYear: parseInt(result.item.soldLastYear) || 0,
-                    retailPrice: result.item.retailPrice !== null && result.item.retailPrice !== undefined ? 
-                        parseFloat(result.item.retailPrice).toFixed(2) : null,
+                    itemID: result.itemID || '',
+                    hebrewDescription: result.hebrewDescription || '',
+                    englishDescription: result.englishDescription || '',
+                    importMarkup: parseFloat(result.importMarkup).toFixed(2) || '1.30',
+                    hsCode: result.hsCode || '',
+                    image: result.image || '',
+                    qtyInStock: parseInt(result.qtyInStock) || 0,
+                    soldThisYear: parseInt(result.soldThisYear) || 0,
+                    soldLastYear: parseInt(result.soldLastYear) || 0,
+                    retailPrice: result.retailPrice !== null && result.retailPrice !== undefined ? 
+                        parseFloat(result.retailPrice) : null,
                     // Preserve reference change data
-                    referenceChange: result.item.referenceChange,
-                    referencedBy: result.item.referencedBy
+                    referenceChange: result.referenceChange,
+                    referencedBy: result.referencedBy,
+                    lastUpdated: result.lastUpdated
                 },
-                // Include price history, supplier prices and promotions
-                priceHistory: result.priceHistory || [],
-                supplierPrices: result.supplierPrices || [],
-                promotions: result.promotions || []
+                // Include the arrays from the query
+                priceHistory: result.priceHistory,
+                supplierPrices: result.supplierPrices,
+                promotions: result.promotions
             };
+
+            console.log('Formatted result:', JSON.stringify(formattedResult, null, 2));
+            console.log('Response data types:', {
+                referenceChange: typeof formattedResult.item.referenceChange,
+                referencedBy: typeof formattedResult.item.referencedBy,
+                priceHistory: typeof formattedResult.priceHistory,
+                supplierPrices: typeof formattedResult.supplierPrices,
+                promotions: typeof formattedResult.promotions
+            });
+
             res.json(formattedResult);
         } catch (err) {
             console.error('Error fetching item details:', err);
-            res.status(500).json({ 
-                error: 'Failed to fetch item details',
-                details: err.message,
-                suggestion: 'Please try again or contact support if the issue persists'
-            });
+            if (err.message === 'Item not found') {
+                res.status(404).json({ 
+                    error: 'Item not found',
+                    details: `No item exists with ID: ${req.params.id}`,
+                    suggestion: 'Please verify the item ID and try again'
+                });
+            } else {
+                res.status(500).json({ 
+                    error: 'Failed to fetch item details',
+                    details: err.message,
+                    suggestion: 'Please try again or contact support if the issue persists'
+                });
+            }
         }
     });
 
@@ -159,22 +183,30 @@ module.exports = (itemModel) => {
             await itemModel.updateItem(req.params.id, updateData);
             const updatedItem = await itemModel.getItemById(req.params.id);
             
-            // Format the response, preserving reference data
+            if (!updatedItem) {
+                return res.status(404).json({ 
+                    error: 'Item not found',
+                    details: `No item exists with ID: ${req.params.id}`,
+                    suggestion: 'Please verify the item ID and try again'
+                });
+            }
+
+            // Format the response
             const formattedItem = {
-                itemID: updatedItem.item.itemID,
-                hebrewDescription: updatedItem.item.hebrewDescription,
-                englishDescription: updatedItem.item.englishDescription || '',
-                importMarkup: parseFloat(updatedItem.item.importMarkup).toFixed(2),
-                hsCode: updatedItem.item.hsCode || '',
-                image: updatedItem.item.image || '',
-                qtyInStock: parseInt(updatedItem.item.qtyInStock) || 0,
-                soldThisYear: parseInt(updatedItem.item.soldThisYear) || 0,
-                soldLastYear: parseInt(updatedItem.item.soldLastYear) || 0,
-                retailPrice: updatedItem.item.retailPrice !== null && updatedItem.item.retailPrice !== undefined ? 
-                    `₪${parseFloat(updatedItem.item.retailPrice).toFixed(2)}` : null,
+                itemID: updatedItem.itemID,
+                hebrewDescription: updatedItem.hebrewDescription,
+                englishDescription: updatedItem.englishDescription || '',
+                importMarkup: parseFloat(updatedItem.importMarkup).toFixed(2),
+                hsCode: updatedItem.hsCode || '',
+                image: updatedItem.image || '',
+                qtyInStock: parseInt(updatedItem.qtyInStock) || 0,
+                soldThisYear: parseInt(updatedItem.soldThisYear) || 0,
+                soldLastYear: parseInt(updatedItem.soldLastYear) || 0,
+                retailPrice: updatedItem.retailPrice !== null && updatedItem.retailPrice !== undefined ? 
+                    parseFloat(updatedItem.retailPrice) : null,
                 // Preserve reference change data
-                referenceChange: updatedItem.item.referenceChange,
-                referencedBy: updatedItem.item.referencedBy
+                referenceChange: updatedItem.referenceChange,
+                referencedBy: updatedItem.referencedBy
             };
 
             res.json({ 
@@ -232,22 +264,30 @@ module.exports = (itemModel) => {
             await itemModel.addReferenceChange(req.params.id, cleanedNewReferenceId, supplierId, notes);
             const updatedItem = await itemModel.getItemById(req.params.id);
             
-            // Format the response, preserving reference data
+            if (!updatedItem) {
+                return res.status(404).json({ 
+                    error: 'Item not found',
+                    details: `No item exists with ID: ${req.params.id}`,
+                    suggestion: 'Please verify the item ID and try again'
+                });
+            }
+
+            // Format the response
             const formattedItem = {
-                itemID: updatedItem.item.itemID,
-                hebrewDescription: updatedItem.item.hebrewDescription,
-                englishDescription: updatedItem.item.englishDescription || '',
-                importMarkup: parseFloat(updatedItem.item.importMarkup).toFixed(2),
-                hsCode: updatedItem.item.hsCode || '',
-                image: updatedItem.item.image || '',
-                qtyInStock: parseInt(updatedItem.item.qtyInStock) || 0,
-                soldThisYear: parseInt(updatedItem.item.soldThisYear) || 0,
-                soldLastYear: parseInt(updatedItem.item.soldLastYear) || 0,
-                retailPrice: updatedItem.item.retailPrice !== null && updatedItem.item.retailPrice !== undefined ? 
-                    `₪${parseFloat(updatedItem.item.retailPrice).toFixed(2)}` : null,
+                itemID: updatedItem.itemID,
+                hebrewDescription: updatedItem.hebrewDescription,
+                englishDescription: updatedItem.englishDescription || '',
+                importMarkup: parseFloat(updatedItem.importMarkup).toFixed(2),
+                hsCode: updatedItem.hsCode || '',
+                image: updatedItem.image || '',
+                qtyInStock: parseInt(updatedItem.qtyInStock) || 0,
+                soldThisYear: parseInt(updatedItem.soldThisYear) || 0,
+                soldLastYear: parseInt(updatedItem.soldLastYear) || 0,
+                retailPrice: updatedItem.retailPrice !== null && updatedItem.retailPrice !== undefined ? 
+                    parseFloat(updatedItem.retailPrice) : null,
                 // Preserve reference change data
-                referenceChange: updatedItem.item.referenceChange,
-                referencedBy: updatedItem.item.referencedBy
+                referenceChange: updatedItem.referenceChange,
+                referencedBy: updatedItem.referencedBy
             };
 
             res.json({ 
