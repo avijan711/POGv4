@@ -39,6 +39,18 @@ module.exports = `
             AND i2.Status = 'new'
         )
     ),
+    PriceHistory AS (
+        SELECT json_group_array(
+            json_object(
+                'date', ih.Date,
+                'price', ih.ILSRetailPrice,
+                'qtyInStock', ih.QtyInStock
+            )
+        ) as PriceHistoryArray
+        FROM ItemHistory ih
+        WHERE ih.ItemID = ?
+        ORDER BY ih.Date DESC
+    ),
     BaseItems AS (
         -- Get items from Item table with latest updates
         SELECT
@@ -53,7 +65,7 @@ module.exports = `
             COALESCE(li.SoldThisYear, h.QtySoldThisYear, 0) as SoldThisYear,
             COALESCE(li.SoldLastYear, h.QtySoldLastYear, 0) as SoldLastYear,
             COALESCE(li.InquiryDate, h.HistoryDate) as LastUpdated,
-            NULL as NewReferenceID, -- Never copy NewReferenceID
+            NULL as NewReferenceID,
             NULL as ReferenceNotes
         FROM Item i
         LEFT JOIN LatestHistory h ON i.ItemID = h.ItemID
@@ -75,7 +87,7 @@ module.exports = `
             COALESCE(li.SoldThisYear, 0) as SoldThisYear,
             COALESCE(li.SoldLastYear, 0) as SoldLastYear,
             li.InquiryDate as LastUpdated,
-            NULL as NewReferenceID, -- Never copy NewReferenceID
+            NULL as NewReferenceID,
             NULL as ReferenceNotes
         FROM LatestInquiryItems li
         WHERE li.ItemID = ? AND li.ItemID NOT IN (SELECT ItemID FROM Item)
@@ -162,8 +174,10 @@ module.exports = `
         CASE 
             WHEN ri.ReferencingItemsArray IS NOT NULL AND ri.ReferencingItemsArray != '[null]' THEN 1
             ELSE 0
-        END as isReferencedBy
+        END as isReferencedBy,
+        ph.PriceHistoryArray as priceHistory
     FROM BaseItems i
     LEFT JOIN LatestReferenceChanges rc1 ON i.ItemID = rc1.OriginalItemID
     LEFT JOIN ReferencingItems ri ON i.ItemID = ri.ItemID
-    LEFT JOIN Supplier s1 ON rc1.SupplierID = s1.SupplierID`;
+    LEFT JOIN Supplier s1 ON rc1.SupplierID = s1.SupplierID
+    CROSS JOIN PriceHistory ph`;

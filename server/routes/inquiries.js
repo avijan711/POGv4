@@ -217,10 +217,8 @@ function createRouter(db) {
             }
 
             try {
-                // Update the item using updateInquiryItem instead of updateQuantity
-                const result = await inquiryItemModel.updateInquiryItem(req.params.id, {
-                    requestedQty: qty
-                });
+                // Use updateQuantity instead of updateInquiryItem
+                const result = await inquiryItemModel.updateQuantity(req.params.id, qty);
 
                 if (result) {
                     res.json({ message: 'Quantity updated successfully' });

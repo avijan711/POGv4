@@ -1,6 +1,14 @@
 -- Enable foreign key support
 PRAGMA foreign_keys = ON;
 
+-- Drop existing tables if they exist
+DROP TABLE IF EXISTS promotion_items;
+DROP TABLE IF EXISTS promotions;
+DROP TABLE IF EXISTS OrderItem;
+DROP TABLE IF EXISTS "Order";
+DROP TABLE IF EXISTS SupplierResponseItem;
+DROP TABLE IF EXISTS SupplierResponse;
+
 -- Create base tables first (no foreign key dependencies)
 CREATE TABLE IF NOT EXISTS Item (
     ItemID TEXT PRIMARY KEY,
@@ -41,10 +49,11 @@ CREATE TABLE IF NOT EXISTS Inquiry (
 
 CREATE TABLE IF NOT EXISTS promotions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    description TEXT,
+    name TEXT NOT NULL,
+    supplier_id INTEGER REFERENCES Supplier(SupplierID),
     start_date DATETIME,
     end_date DATETIME,
+    is_active BOOLEAN DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -52,12 +61,37 @@ CREATE TABLE IF NOT EXISTS promotion_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id TEXT NOT NULL,
     promotion_id INTEGER NOT NULL,
-    promotion_price DECIMAL(10,2),
-    start_date DATETIME,
-    end_date DATETIME,
+    promotion_price DECIMAL(10,2) NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (item_id) REFERENCES Item(ItemID),
-    FOREIGN KEY (promotion_id) REFERENCES promotions(id)
+    FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS "Order" (
+    OrderID INTEGER PRIMARY KEY AUTOINCREMENT,
+    InquiryID INTEGER,
+    SupplierID INTEGER NOT NULL,
+    OrderDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+    Status TEXT DEFAULT 'Pending',
+    Notes TEXT,
+    FOREIGN KEY (InquiryID) REFERENCES Inquiry(InquiryID),
+    FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID)
+);
+
+CREATE TABLE IF NOT EXISTS OrderItem (
+    OrderItemID INTEGER PRIMARY KEY AUTOINCREMENT,
+    OrderID INTEGER NOT NULL,
+    ItemID TEXT NOT NULL,
+    InquiryItemID INTEGER,
+    Quantity INTEGER NOT NULL,
+    PriceQuoted DECIMAL(10,2) NOT NULL,
+    IsPromotion BOOLEAN DEFAULT 0,
+    PromotionGroupID INTEGER,
+    SupplierResponseID INTEGER,
+    FOREIGN KEY (OrderID) REFERENCES "Order"(OrderID) ON DELETE CASCADE,
+    FOREIGN KEY (ItemID) REFERENCES Item(ItemID),
+    FOREIGN KEY (InquiryItemID) REFERENCES InquiryItem(InquiryItemID),
+    FOREIGN KEY (PromotionGroupID) REFERENCES promotions(id),
+    FOREIGN KEY (SupplierResponseID) REFERENCES SupplierResponse(SupplierResponseID)
 );
 
 CREATE TABLE IF NOT EXISTS ItemReferenceChange (
@@ -150,6 +184,8 @@ CREATE INDEX IF NOT EXISTS idx_supplier_prices_supplier ON SupplierPrice(Supplie
 CREATE INDEX IF NOT EXISTS idx_item_history_item ON ItemHistory(ItemID);
 CREATE INDEX IF NOT EXISTS idx_item_history_date ON ItemHistory(Date);
 CREATE INDEX IF NOT EXISTS idx_promotion_dates ON promotions(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_promotion_supplier ON promotions(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_promotion_active ON promotions(is_active);
 CREATE INDEX IF NOT EXISTS idx_promotion_items_item ON promotion_items(item_id);
 CREATE INDEX IF NOT EXISTS idx_promotion_items_promotion ON promotion_items(promotion_id);
 CREATE INDEX IF NOT EXISTS idx_supplier_response_inquiry ON SupplierResponse(InquiryID);
@@ -160,6 +196,13 @@ CREATE INDEX IF NOT EXISTS idx_supplier_response_item_response ON SupplierRespon
 CREATE INDEX IF NOT EXISTS idx_supplier_response_item_item ON SupplierResponseItem(ItemID);
 CREATE INDEX IF NOT EXISTS idx_inquiry_item_retail ON InquiryItem(ItemID, RetailPrice);
 CREATE INDEX IF NOT EXISTS idx_item_history_retail ON ItemHistory(ItemID, ILSRetailPrice);
+CREATE INDEX IF NOT EXISTS idx_order_inquiry ON "Order"(InquiryID);
+CREATE INDEX IF NOT EXISTS idx_order_supplier ON "Order"(SupplierID);
+CREATE INDEX IF NOT EXISTS idx_order_date ON "Order"(OrderDate);
+CREATE INDEX IF NOT EXISTS idx_order_status ON "Order"(Status);
+CREATE INDEX IF NOT EXISTS idx_order_item_order ON OrderItem(OrderID);
+CREATE INDEX IF NOT EXISTS idx_order_item_item ON OrderItem(ItemID);
+CREATE INDEX IF NOT EXISTS idx_order_item_inquiry ON OrderItem(InquiryItemID);
 
 -- Create triggers
 DROP TRIGGER IF EXISTS set_original_item_id;

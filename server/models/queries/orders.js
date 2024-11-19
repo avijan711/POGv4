@@ -22,7 +22,7 @@ const getAllOrdersQuery = `
                 'promotionGroupId', oi.PromotionGroupID
             )
         ) as Items
-    FROM \`Order\` o
+    FROM "Order" o
     JOIN Supplier s ON o.SupplierID = s.SupplierID
     JOIN OrderItem oi ON o.OrderID = oi.OrderID
     JOIN Item i ON oi.ItemID = i.ItemID
@@ -54,7 +54,7 @@ const getOrderByIdQuery = `
                 'promotionGroupId', oi.PromotionGroupID
             )
         ) as Items
-    FROM \`Order\` o
+    FROM "Order" o
     JOIN Supplier s ON o.SupplierID = s.SupplierID
     JOIN OrderItem oi ON o.OrderID = oi.OrderID
     JOIN Item i ON oi.ItemID = i.ItemID
@@ -62,7 +62,7 @@ const getOrderByIdQuery = `
     GROUP BY o.OrderID
 `;
 
-const createOrderQuery = 'INSERT INTO `Order` (InquiryID, SupplierID, Status) VALUES (?, ?, ?)';
+const createOrderQuery = 'INSERT INTO "Order" (InquiryID, SupplierID, Status) VALUES (?, ?, ?)';
 
 const createOrderItemQuery = {
     promotion: `
@@ -110,8 +110,8 @@ const createOrderItemQuery = {
 const updateInquiryStatusQuery = 'UPDATE Inquiry SET Status = ? WHERE InquiryID = ?';
 
 const updateOrderStatusQuery = {
-    withNotes: 'UPDATE `Order` SET Status = ?, Notes = ? WHERE OrderID = ?',
-    withoutNotes: 'UPDATE `Order` SET Status = ? WHERE OrderID = ?'
+    withNotes: 'UPDATE "Order" SET Status = ?, Notes = ? WHERE OrderID = ?',
+    withoutNotes: 'UPDATE "Order" SET Status = ? WHERE OrderID = ?'
 };
 
 module.exports = {

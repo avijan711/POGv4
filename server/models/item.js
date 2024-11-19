@@ -28,8 +28,8 @@ class ItemModel extends BaseModel {
             debug.time('getItemById');
             debug.log('Getting item by ID:', itemId);
 
-            // The query needs itemId twice for the UNION
-            const params = [itemId, itemId];
+            // The query needs itemId three times - for PriceHistory and twice for BaseItems
+            const params = [itemId, itemId, itemId];
             const row = await this.executeQuerySingle(getItemByIdQuery, params);
 
             if (!row) {

@@ -26,6 +26,7 @@ import {
     KeyboardArrowUp as KeyboardArrowUpIcon,
 } from '@mui/icons-material';
 import { formatDate } from '../utils/dateUtils';
+import { API_BASE_URL } from '../config';
 
 // Row component for each order
 function OrderRow({ order, onStatusChange }) {
@@ -148,9 +149,10 @@ export default function OrderList() {
 
     const fetchOrders = async () => {
         try {
-            const response = await fetch('/api/orders');
+            const response = await fetch(`${API_BASE_URL}/api/orders`);
             if (!response.ok) {
-                throw new Error('Failed to fetch orders');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to fetch orders');
             }
             const data = await response.json();
             setOrders(data);
@@ -164,7 +166,7 @@ export default function OrderList() {
 
     const handleStatusChange = async (orderId, newStatus) => {
         try {
-            const response = await fetch(`/api/orders/${orderId}/status`, {
+            const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/status`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -173,7 +175,8 @@ export default function OrderList() {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to update order status');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to update order status');
             }
 
             // Update local state

@@ -170,6 +170,7 @@ function validateDataTypes(data, typeValidations) {
 }
 
 const typeValidations = {
+    // General validations
     itemId: {
         type: 'string',
         validator: value => value && value.trim().length > 0
@@ -235,6 +236,41 @@ const typeValidations = {
     referenceNotes: {
         type: 'string',
         validator: value => true // Optional field
+    },
+
+    // Promotion-specific validations
+    promotionPrice: {
+        type: 'number',
+        validator: value => {
+            const num = parseFloat(String(value).replace(/,/g, '.'));
+            return !isNaN(num) && num > 0;
+        }
+    }
+};
+
+// Specific validation sets for different types of data
+const validationSets = {
+    promotion: {
+        required: ['itemId', 'promotionPrice'],
+        types: {
+            itemId: typeValidations.itemId,
+            promotionPrice: typeValidations.promotionPrice
+        }
+    },
+    inquiry: {
+        required: ['itemId', 'hebrewDescription', 'requestedQuantity'],
+        types: {
+            itemId: typeValidations.itemId,
+            hebrewDescription: typeValidations.hebrewDescription,
+            englishDescription: typeValidations.englishDescription,
+            requestedQuantity: typeValidations.requestedQuantity,
+            importMarkup: typeValidations.importMarkup,
+            hsCode: typeValidations.hsCode,
+            currentStock: typeValidations.currentStock,
+            retailPrice: typeValidations.retailPrice,
+            soldThisYear: typeValidations.soldThisYear,
+            soldLastYear: typeValidations.soldLastYear
+        }
     }
 };
 
@@ -243,5 +279,6 @@ module.exports = {
     validateColumnMapping,
     validateDataTypes,
     typeValidations,
+    validationSets,
     VALID_EXCEL_MIMETYPES
 };

@@ -255,6 +255,71 @@ class OrderModel {
         });
     }
 
+    createOrder(data) {
+        return new Promise((resolve, reject) => {
+            this.db.serialize(() => {
+                this.db.run('BEGIN TRANSACTION');
+
+                // Create the order
+                this.db.run(
+                    'INSERT INTO "Order" (SupplierID, Status) VALUES (?, ?)',
+                    [data.supplierId, 'Pending'],
+                    function(err) {
+                        if (err) {
+                            console.error('Error creating order:', err);
+                            this.db.run('ROLLBACK');
+                            reject(new Error('Failed to create order'));
+                            return;
+                        }
+
+                        const orderId = this.lastID;
+
+                        // Create order items
+                        const insertItem = this.db.prepare(
+                            'INSERT INTO OrderItem (OrderID, ItemID, Quantity, PriceQuoted, IsPromotion, PromotionGroupID) VALUES (?, ?, ?, ?, ?, ?)'
+                        );
+
+                        try {
+                            data.items.forEach(item => {
+                                insertItem.run(
+                                    orderId,
+                                    item.itemId,
+                                    item.quantity,
+                                    item.priceQuoted,
+                                    item.isPromotion ? 1 : 0,
+                                    item.promotionGroupId || null
+                                );
+                            });
+
+                            insertItem.finalize();
+
+                            this.db.run('COMMIT', async (err) => {
+                                if (err) {
+                                    console.error('Error committing transaction:', err);
+                                    this.db.run('ROLLBACK');
+                                    reject(new Error('Failed to commit transaction'));
+                                    return;
+                                }
+
+                                try {
+                                    // Get the created order
+                                    const order = await this.getOrderById(orderId);
+                                    resolve(order);
+                                } catch (err) {
+                                    reject(err);
+                                }
+                            });
+                        } catch (err) {
+                            console.error('Error inserting order items:', err);
+                            this.db.run('ROLLBACK');
+                            reject(new Error('Failed to create order items'));
+                        }
+                    }
+                );
+            });
+        });
+    }
+
     updateOrderStatus(orderId, status, notes = null) {
         return new Promise((resolve, reject) => {
             const query = notes ? updateOrderStatusQuery.withNotes : updateOrderStatusQuery.withoutNotes;

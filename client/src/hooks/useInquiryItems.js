@@ -19,7 +19,9 @@ export const useInquiryItems = (inquiryId) => {
       setError('');
       perfDebug.time(timerId);
       
+      console.log('Fetching inquiry items for ID:', inquiryId);
       const response = await axios.get(`${API_BASE_URL}/api/inquiries/${inquiryId}`);
+      console.log('Fetch response:', response.data);
       
       let inquiryData = response.data.inquiry;
       let itemsData = response.data.items || [];
@@ -147,10 +149,12 @@ export const useInquiryItems = (inquiryId) => {
       );
 
       if (sortedItems && sortedItems.length > 0) {
+        console.log('Setting items:', sortedItems.length);
         setItems(sortedItems);
         setInquiryStatus(inquiryData.status || 'New');
         setInquiryDate(new Date(inquiryData.date || new Date()).toLocaleDateString());
       } else {
+        console.log('No items found');
         setItems([]);
         setInquiryStatus('New');
         setInquiryDate(new Date().toLocaleDateString());
@@ -174,9 +178,11 @@ export const useInquiryItems = (inquiryId) => {
 
   const handleUpdateQuantity = async (inquiryItemId, newQty) => {
     try {
+      console.log('Updating quantity:', { inquiryItemId, newQty });
       await axios.put(`${API_BASE_URL}/api/inquiries/inquiry-items/${inquiryItemId}/quantity`, {
         requestedQty: newQty
       });
+      console.log('Quantity update successful');
       await fetchItems();
       setError('');
       return true;
@@ -191,6 +197,7 @@ export const useInquiryItems = (inquiryId) => {
     if (!itemToDelete) return false;
 
     try {
+      console.log('Deleting item:', itemToDelete.inquiryItemID);
       await axios.delete(`${API_BASE_URL}/api/inquiries/inquiry-items/${itemToDelete.inquiryItemID}`);
       await fetchItems();
       setError('');

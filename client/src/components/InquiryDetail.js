@@ -91,7 +91,6 @@ function InquiryDetail() {
     const success = await handleUpdateQuantity(itemId, newQty);
     if (success) {
       dialogStates.setEditingQty(null);
-      await fetchItems();
     }
     return success;
   };
@@ -104,7 +103,6 @@ function InquiryDetail() {
     if (success) {
       dialogStates.setDeleteConfirmOpen(false);
       dialogStates.setItemToDelete(null);
-      await fetchItems();
     }
     return success;
   };

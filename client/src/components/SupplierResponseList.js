@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Paper,
   Box,
@@ -15,7 +15,7 @@ import {
 } from './SupplierResponse';
 import { useParams } from 'react-router-dom';
 
-function SupplierResponseList({ responses = [] }) {
+function SupplierResponseList({ responses = [], onRefresh }) {
   const { inquiryId } = useParams();
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
   const [statsDialogTitle, setStatsDialogTitle] = useState('');
@@ -46,27 +46,17 @@ function SupplierResponseList({ responses = [] }) {
   }).filter(Boolean) : [];
 
   const {
-    processedResponses,
     deleteDialogOpen,
     deleteType,
     itemToDelete,
     error,
     isDeleting,
     isLoading,
-    hasMore,
     handleDeleteClick,
     handleDeleteConfirm,
     closeDeleteDialog,
-    handleLoadMore,
-    refresh,
     setError
   } = useSupplierResponses(inquiryId, safeResponses);
-
-  useEffect(() => {
-    if (inquiryId) {
-      refresh();
-    }
-  }, [inquiryId, refresh]);
 
   const handleShowStats = (title, items, type) => {
     // Ensure items is an array and all items have required properties
@@ -91,7 +81,7 @@ function SupplierResponseList({ responses = [] }) {
 
   return (
     <Paper sx={{ p: 3, backgroundColor: '#f8f9fa' }} elevation={0}>
-      <ResponseHeader responsesCount={processedResponses?.length || 0} />
+      <ResponseHeader responsesCount={safeResponses?.length || 0} />
 
       {error && (
         <Alert 
@@ -103,7 +93,7 @@ function SupplierResponseList({ responses = [] }) {
         </Alert>
       )}
 
-      {isLoading && processedResponses.length === 0 ? (
+      {isLoading && safeResponses.length === 0 ? (
         <Box sx={{ width: '100%', textAlign: 'center', py: 4 }}>
           <LinearProgress 
             sx={{ 
@@ -120,7 +110,7 @@ function SupplierResponseList({ responses = [] }) {
         </Box>
       ) : (
         <>
-          {processedResponses.map((response) => (
+          {safeResponses.map((response) => (
             <ResponseAccordion
               key={`${response.date}-${response.supplierId}`}
               response={response}
@@ -130,7 +120,7 @@ function SupplierResponseList({ responses = [] }) {
             />
           ))}
           
-          {isLoading && processedResponses.length > 0 && (
+          {isLoading && safeResponses.length > 0 && (
             <Box sx={{ width: '100%', textAlign: 'center', py: 2 }}>
               <LinearProgress 
                 sx={{ 
@@ -140,18 +130,6 @@ function SupplierResponseList({ responses = [] }) {
                   borderRadius: 2
                 }}
               />
-            </Box>
-          )}
-
-          {!isLoading && hasMore && (
-            <Box sx={{ width: '100%', textAlign: 'center', py: 2 }}>
-              <Typography
-                color="primary"
-                sx={{ cursor: 'pointer' }}
-                onClick={handleLoadMore}
-              >
-                Load more responses
-              </Typography>
             </Box>
           )}
         </>

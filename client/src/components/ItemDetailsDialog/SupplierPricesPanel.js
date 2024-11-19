@@ -8,9 +8,10 @@ import {
   IconButton,
   Box,
   Typography,
-  Popover
+  Popover,
+  Chip
 } from '@mui/material';
-import { History as HistoryIcon } from '@mui/icons-material';
+import { History as HistoryIcon, LocalOffer as PromotionIcon } from '@mui/icons-material';
 import { formatEurPrice, formatPercentage } from '../../utils/priceUtils';
 
 const EUR_TO_ILS = 3.95;
@@ -33,6 +34,9 @@ function SupplierPricesPanel({ supplierPrices, itemDetails }) {
   const getSupplierDiscounts = () => {
     const discounts = {};
     supplierPrices?.forEach(price => {
+      // Skip promotion prices in best price calculation
+      if (price.isPromotion) return;
+      
       const discount = calculateDiscount(
         price.price,
         parseFloat(itemDetails?.importMarkup),
@@ -72,6 +76,7 @@ function SupplierPricesPanel({ supplierPrices, itemDetails }) {
   const supplierPricesWithChanges = supplierPrices?.map((price, index, arr) => {
     const prevPrice = arr.find(p => 
       p.supplierName === price.supplierName && 
+      !p.isPromotion && // Only compare with regular prices
       new Date(p.date) < new Date(price.date)
     );
     const change = prevPrice?.price ? ((price.price - prevPrice.price) / prevPrice.price) : null;
@@ -117,14 +122,35 @@ function SupplierPricesPanel({ supplierPrices, itemDetails }) {
               parseFloat(itemDetails?.importMarkup),
               parseFloat(itemDetails?.retailPrice)
             );
-            const isBestSupplier = price.supplierName === bestSupplier;
+            const isBestSupplier = !price.isPromotion && price.supplierName === bestSupplier;
             
             return (
               <TableRow 
                 key={index}
-                sx={isBestSupplier ? { backgroundColor: 'rgba(76, 175, 80, 0.08)' } : {}}
+                sx={{
+                  backgroundColor: price.isPromotion ? 'rgba(156, 39, 176, 0.08)' : 
+                                 isBestSupplier ? 'rgba(76, 175, 80, 0.08)' : 
+                                 undefined
+                }}
               >
-                <TableCell>{price.supplierName}</TableCell>
+                <TableCell>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {price.supplierName}
+                    {price.isPromotion && (
+                      <Chip
+                        icon={<PromotionIcon />}
+                        label="Promotion"
+                        size="small"
+                        color="secondary"
+                        sx={{ 
+                          height: 20,
+                          '& .MuiChip-label': { px: 1 },
+                          '& .MuiChip-icon': { fontSize: 16 }
+                        }}
+                      />
+                    )}
+                  </Box>
+                </TableCell>
                 <TableCell>{new Date(price.date).toLocaleDateString()}</TableCell>
                 <TableCell align="right">
                   {formatEurPrice(price.price) || (
@@ -133,7 +159,16 @@ function SupplierPricesPanel({ supplierPrices, itemDetails }) {
                     </Typography>
                   )}
                 </TableCell>
-                <TableCell>{price.notes || '-'}</TableCell>
+                <TableCell>
+                  {price.isPromotion ? (
+                    <Typography variant="body2" color="secondary">
+                      {price.promotionName || 'Promotion'} 
+                      {price.notes ? ` - ${price.notes}` : ''}
+                    </Typography>
+                  ) : (
+                    price.notes || '-'
+                  )}
+                </TableCell>
                 <TableCell 
                   align="right"
                   sx={{ 
@@ -141,10 +176,10 @@ function SupplierPricesPanel({ supplierPrices, itemDetails }) {
                            price.change < 0 ? 'error.main' : 'text.primary'
                   }}
                 >
-                  {price.change !== null ? formatPercentage(price.change) : '-'}
+                  {!price.isPromotion && price.change !== null ? formatPercentage(price.change) : '-'}
                 </TableCell>
                 <TableCell align="right">
-                  {discount !== null ? `${discount.toFixed(1)}%` : '-'}
+                  {!price.isPromotion && discount !== null ? `${discount.toFixed(1)}%` : '-'}
                 </TableCell>
                 <TableCell align="right">
                   {isBestSupplier && delta ? `${delta}%` : '-'}
@@ -154,6 +189,7 @@ function SupplierPricesPanel({ supplierPrices, itemDetails }) {
                     size="small"
                     onClick={(e) => handleHistoryClick(e, price.supplierName)}
                     title="View price history"
+                    disabled={price.isPromotion}
                   >
                     <HistoryIcon fontSize="small" />
                   </IconButton>
@@ -191,28 +227,30 @@ function SupplierPricesPanel({ supplierPrices, itemDetails }) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {getSupplierPriceHistory(selectedSupplier)?.map((price, index) => (
-                <TableRow key={index}>
-                  <TableCell>{new Date(price.date).toLocaleDateString()}</TableCell>
-                  <TableCell align="right">
-                    {formatEurPrice(price.price) || (
-                      <Typography variant="body2" color="error">
-                        No Price
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>{price.notes || '-'}</TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ 
-                      color: price.change > 0 ? 'success.main' : 
-                             price.change < 0 ? 'error.main' : 'text.primary'
-                    }}
-                  >
-                    {price.change !== null ? formatPercentage(price.change) : '-'}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {getSupplierPriceHistory(selectedSupplier)
+                ?.filter(price => !price.isPromotion) // Exclude promotions from history
+                .map((price, index) => (
+                  <TableRow key={index}>
+                    <TableCell>{new Date(price.date).toLocaleDateString()}</TableCell>
+                    <TableCell align="right">
+                      {formatEurPrice(price.price) || (
+                        <Typography variant="body2" color="error">
+                          No Price
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>{price.notes || '-'}</TableCell>
+                    <TableCell 
+                      align="right"
+                      sx={{ 
+                        color: price.change > 0 ? 'success.main' : 
+                               price.change < 0 ? 'error.main' : 'text.primary'
+                      }}
+                    >
+                      {price.change !== null ? formatPercentage(price.change) : '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
             </TableBody>
           </Table>
         </Box>

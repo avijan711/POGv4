@@ -30,6 +30,59 @@ module.exports = (orderModel) => {
     });
 
     /**
+     * Create a new order
+     * POST /api/orders
+     */
+    router.post('/', async (req, res) => {
+        try {
+            const { supplierId, items } = req.body;
+
+            if (!supplierId) {
+                return res.status(400).json({ 
+                    error: 'Missing supplier ID',
+                    details: 'A supplier ID is required to create an order'
+                });
+            }
+
+            if (!items || !Array.isArray(items) || items.length === 0) {
+                return res.status(400).json({ 
+                    error: 'Invalid items',
+                    details: 'At least one item is required to create an order'
+                });
+            }
+
+            // Validate each item
+            for (const item of items) {
+                if (!item.itemId || !item.quantity || !item.priceQuoted) {
+                    return res.status(400).json({ 
+                        error: 'Invalid item data',
+                        details: 'Each item must have an itemId, quantity, and priceQuoted'
+                    });
+                }
+            }
+
+            const order = await orderModel.createOrder({
+                supplierId,
+                items: items.map(item => ({
+                    itemId: item.itemId,
+                    quantity: parseInt(item.quantity),
+                    priceQuoted: parseFloat(item.priceQuoted),
+                    isPromotion: item.isPromotion || false,
+                    promotionGroupId: item.promotionGroupId
+                }))
+            });
+
+            res.status(201).json(order);
+        } catch (error) {
+            console.error('Error creating order:', error);
+            res.status(500).json({ 
+                error: error.message,
+                details: 'Failed to create order'
+            });
+        }
+    });
+
+    /**
      * Get replacements for an inquiry
      * GET /api/orders/:inquiryId/replacements
      */
