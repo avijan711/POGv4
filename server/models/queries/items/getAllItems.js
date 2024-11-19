@@ -1,6 +1,6 @@
-const getAllItemsQuery = `
+module.exports = `
     WITH LatestHistory AS (
-        SELECT 
+        SELECT
             ih.ItemID,
             ih.ILSRetailPrice,
             ih.QtyInStock,
@@ -15,7 +15,7 @@ const getAllItemsQuery = `
         ) latest ON ih.ItemID = latest.ItemID AND ih.Date = latest.MaxDate
     ),
     LatestInquiryItems AS (
-        SELECT 
+        SELECT
             ii.ItemID,
             ii.HebrewDescription,
             ii.EnglishDescription,
@@ -41,7 +41,7 @@ const getAllItemsQuery = `
     ),
     BaseItems AS (
         -- Get items from Item table with latest updates
-        SELECT 
+        SELECT
             i.ItemID,
             COALESCE(li.HebrewDescription, i.HebrewDescription) as HebrewDescription,
             COALESCE(li.EnglishDescription, i.EnglishDescription, '') as EnglishDescription,
@@ -62,7 +62,7 @@ const getAllItemsQuery = `
         UNION
 
         -- Get new items from InquiryItem that don't exist in Item table
-        SELECT 
+        SELECT
             li.ItemID,
             li.HebrewDescription,
             COALESCE(li.EnglishDescription, '') as EnglishDescription,
@@ -74,13 +74,13 @@ const getAllItemsQuery = `
             COALESCE(li.SoldThisYear, 0) as SoldThisYear,
             COALESCE(li.SoldLastYear, 0) as SoldLastYear,
             li.InquiryDate as LastUpdated,
-            li.NewReferenceID,
-            li.ReferenceNotes
+            NULL as NewReferenceID, -- Never copy NewReferenceID for new items
+            NULL as ReferenceNotes
         FROM LatestInquiryItems li
         WHERE li.ItemID NOT IN (SELECT ItemID FROM Item)
     ),
     LatestReferenceChanges AS (
-        SELECT 
+        SELECT
             OriginalItemID,
             NewReferenceID,
             ChangedByUser,
@@ -92,9 +92,35 @@ const getAllItemsQuery = `
             SELECT MAX(ChangeDate)
             FROM ItemReferenceChange irc2
             WHERE irc2.OriginalItemID = irc1.OriginalItemID
-            OR irc2.NewReferenceID = irc1.NewReferenceID
         )
-        AND OriginalItemID != NewReferenceID
+    ),
+    ReferencingItems AS (
+        SELECT 
+            rc.NewReferenceID as ItemID,
+            json_group_array(
+                CASE 
+                    WHEN rc.OriginalItemID != rc.NewReferenceID THEN
+                        json_object(
+                            'itemID', rc.OriginalItemID,
+                            'hebrewDescription', i.HebrewDescription,
+                            'englishDescription', i.EnglishDescription,
+                            'changedByUser', rc.ChangedByUser,
+                            'changeDate', rc.ChangeDate,
+                            'notes', rc.Notes,
+                            'supplierName', s.Name,
+                            'source', CASE
+                                WHEN rc.SupplierID IS NOT NULL THEN 'supplier'
+                                WHEN rc.ChangedByUser = 1 THEN 'user'
+                                ELSE NULL
+                            END
+                        )
+                    ELSE NULL
+                END
+            ) as ReferencingItemsArray
+        FROM ItemReferenceChange rc
+        LEFT JOIN Item i ON rc.OriginalItemID = i.ItemID
+        LEFT JOIN Supplier s ON rc.SupplierID = s.SupplierID
+        GROUP BY rc.NewReferenceID
     )
     SELECT DISTINCT
         i.ItemID as itemID,
@@ -108,14 +134,16 @@ const getAllItemsQuery = `
         i.SoldThisYear as soldThisYear,
         i.SoldLastYear as soldLastYear,
         i.LastUpdated as lastUpdated,
-        CASE 
-            WHEN rc1.NewReferenceID IS NOT NULL OR i.NewReferenceID IS NOT NULL THEN json_object(
+        CASE
+            WHEN (rc1.NewReferenceID IS NOT NULL AND rc1.NewReferenceID != i.ItemID) 
+                 OR (i.NewReferenceID IS NOT NULL AND i.NewReferenceID != i.ItemID) 
+            THEN json_object(
                 'newReferenceID', COALESCE(rc1.NewReferenceID, i.NewReferenceID),
                 'changedByUser', COALESCE(rc1.ChangedByUser, 1),
                 'changeDate', COALESCE(rc1.ChangeDate, i.LastUpdated),
                 'notes', COALESCE(rc1.Notes, i.ReferenceNotes),
                 'supplierName', s1.Name,
-                'source', CASE 
+                'source', CASE
                     WHEN rc1.SupplierID IS NOT NULL THEN 'supplier'
                     WHEN rc1.ChangedByUser = 1 OR i.NewReferenceID IS NOT NULL THEN 'user'
                     ELSE NULL
@@ -123,27 +151,19 @@ const getAllItemsQuery = `
             )
             ELSE NULL
         END as referenceChange,
+        COALESCE(ri.ReferencingItemsArray, '[]') as referencingItems,
         CASE 
-            WHEN rc2.OriginalItemID IS NOT NULL THEN json_object(
-                'originalItemID', rc2.OriginalItemID,
-                'changedByUser', rc2.ChangedByUser,
-                'changeDate', rc2.ChangeDate,
-                'notes', rc2.Notes,
-                'supplierName', s2.Name,
-                'source', CASE 
-                    WHEN rc2.SupplierID IS NOT NULL THEN 'supplier'
-                    WHEN rc2.ChangedByUser = 1 THEN 'user'
-                    ELSE NULL
-                END
-            )
-            ELSE NULL
-        END as referencedBy
+            WHEN (rc1.NewReferenceID IS NOT NULL AND rc1.NewReferenceID != i.ItemID) 
+                 OR (i.NewReferenceID IS NOT NULL AND i.NewReferenceID != i.ItemID) 
+            THEN 1
+            ELSE 0
+        END as hasReferenceChange,
+        CASE 
+            WHEN ri.ReferencingItemsArray IS NOT NULL AND ri.ReferencingItemsArray != '[null]' THEN 1
+            ELSE 0
+        END as isReferencedBy
     FROM BaseItems i
     LEFT JOIN LatestReferenceChanges rc1 ON i.ItemID = rc1.OriginalItemID
-    LEFT JOIN LatestReferenceChanges rc2 ON i.ItemID = rc2.NewReferenceID
+    LEFT JOIN ReferencingItems ri ON i.ItemID = ri.ItemID
     LEFT JOIN Supplier s1 ON rc1.SupplierID = s1.SupplierID
-    LEFT JOIN Supplier s2 ON rc2.SupplierID = s2.SupplierID
-    ORDER BY i.ItemID
-`;
-
-module.exports = getAllItemsQuery;
+    ORDER BY i.ItemID`;

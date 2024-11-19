@@ -77,6 +77,12 @@ const createOrderItemQuery = {
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
     regular: `
+        WITH check_tables AS (
+            SELECT EXISTS (
+                SELECT 1 FROM sqlite_master 
+                WHERE type = 'table' AND name = 'SupplierResponse'
+            ) as has_supplier_response
+        )
         INSERT INTO OrderItem (
             OrderID, 
             ItemID, 
@@ -85,11 +91,19 @@ const createOrderItemQuery = {
             PriceQuoted,
             SupplierResponseID
         ) 
-        SELECT ?, ?, ?, ?, ?, SupplierResponseID
-        FROM SupplierResponse
-        WHERE ItemID = ? AND SupplierID = ? AND Status = 'Active'
-        ORDER BY ResponseDate DESC
-        LIMIT 1
+        SELECT 
+            ?, ?, ?, ?, ?,
+            CASE 
+                WHEN ct.has_supplier_response = 1 THEN (
+                    SELECT SupplierResponseID
+                    FROM SupplierResponse
+                    WHERE ItemID = ? AND SupplierID = ? AND Status = 'Active'
+                    ORDER BY ResponseDate DESC
+                    LIMIT 1
+                )
+                ELSE NULL
+            END
+        FROM check_tables ct
     `
 };
 

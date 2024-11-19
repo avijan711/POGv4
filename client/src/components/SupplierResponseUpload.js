@@ -22,26 +22,37 @@ import { API_BASE_URL } from '../config';
 
 const steps = ['Select File & Supplier', 'Map Columns', 'Upload'];
 
+const defaultColumnMapping = {
+    itemID: '',
+    newReferenceID: '',
+    price: '',
+    notes: '',
+    hsCode: '',
+    englishDescription: ''
+};
+
 const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) => {
     const [activeStep, setActiveStep] = useState(0);
     const [selectedFile, setSelectedFile] = useState(null);
     const [selectedSupplier, setSelectedSupplier] = useState('');
     const [suppliers, setSuppliers] = useState([]);
     const [error, setError] = useState(null);
+    const [errorSuggestion, setErrorSuggestion] = useState(null);
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [availableColumns, setAvailableColumns] = useState([]);
     const [tempFile, setTempFile] = useState(null);
-    const [columnMapping, setColumnMapping] = useState({
-        itemID: '',
-        newReferenceID: '',
-        price: '',
-        notes: '',
-        hsCode: '',
-        englishDescription: ''
-    });
+    const [columnMapping, setColumnMapping] = useState(defaultColumnMapping);
 
-    // Fetch suppliers when component mounts or dialog opens
+    // Validate required props
+    React.useEffect(() => {
+        if (!inquiryId) {
+            console.error('InquiryId is required for SupplierResponseUpload');
+            setError('Missing inquiry ID');
+            setErrorSuggestion('Please ensure you are uploading a response for a valid inquiry');
+        }
+    }, [inquiryId]);
+
     React.useEffect(() => {
         if (open) {
             fetchSuppliers();
@@ -51,16 +62,15 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
     const fetchSuppliers = async () => {
         try {
             setLoading(true);
-            console.log('Fetching suppliers');
             const response = await fetch(`${API_BASE_URL}/api/suppliers`);
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.message || 'Failed to fetch suppliers');
             }
             const data = await response.json();
-            console.log('Fetched suppliers:', data);
             setSuppliers(data || []);
             setError(null);
+            setErrorSuggestion(null);
         } catch (error) {
             console.error('Error fetching suppliers:', error);
             setSuppliers([]);
@@ -77,8 +87,8 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
             if (ext.endsWith('.xlsx') || ext.endsWith('.xls')) {
                 setSelectedFile(file);
                 setError(null);
+                setErrorSuggestion(null);
 
-                // Get columns from the file
                 const formData = new FormData();
                 formData.append('file', file);
 
@@ -88,21 +98,41 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
                         body: formData
                     });
 
-                    const data = await response.json();
                     if (!response.ok) {
-                        throw new Error(data.message || data.error || 'Failed to read columns');
+                        const errorData = await response.json();
+                        throw {
+                            message: errorData.message || errorData.error || 'Failed to read columns',
+                            suggestion: errorData.suggestion
+                        };
                     }
 
-                    setAvailableColumns(data.columns);
+                    const data = await response.json();
+                    
+                    // Process columns to ensure they are strings
+                    const processedColumns = (data.columns || [])
+                        .filter(col => col != null)
+                        .map(col => String(col).trim())
+                        .filter(col => col.length > 0);
+
+                    if (processedColumns.length === 0) {
+                        throw {
+                            message: 'No valid columns found in the file',
+                            suggestion: 'Please ensure your Excel file has headers in the first row'
+                        };
+                    }
+
+                    setAvailableColumns(processedColumns);
                     setTempFile(data.tempFile);
                 } catch (error) {
                     console.error('Error reading columns:', error);
                     setError(error.message || 'Failed to read file columns');
+                    setErrorSuggestion(error.suggestion);
                     setSelectedFile(null);
                     event.target.value = '';
                 }
             } else {
                 setError('Please select an Excel file (.xlsx or .xls)');
+                setErrorSuggestion('Only Excel files with extensions .xlsx or .xls are supported');
                 setSelectedFile(null);
                 event.target.value = '';
             }
@@ -112,60 +142,84 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
     const handleNext = () => {
         if (activeStep === 0 && (!selectedFile || !selectedSupplier)) {
             setError('Please select both a file and a supplier');
+            setErrorSuggestion('You must choose a supplier and upload an Excel file before proceeding');
             return;
         }
         if (activeStep === 1 && !columnMapping.itemID) {
             setError('Please map at least the Item ID column');
+            setErrorSuggestion('The Item ID column is required to match items in the system');
             return;
         }
         setActiveStep((prev) => prev + 1);
         setError(null);
+        setErrorSuggestion(null);
     };
 
     const handleBack = () => {
         setActiveStep((prev) => prev - 1);
         setError(null);
+        setErrorSuggestion(null);
     };
 
     const handleColumnMappingChange = (field, value) => {
+        // Ensure value is a string
+        const safeValue = value != null ? String(value) : '';
         setColumnMapping(prev => ({
             ...prev,
-            [field]: value
+            [field]: safeValue
         }));
     };
 
     const handleUpload = async () => {
+        if (!inquiryId) {
+            setError('Missing inquiry ID');
+            setErrorSuggestion('Please ensure you are uploading a response for a valid inquiry');
+            return;
+        }
+
         setUploading(true);
         setError(null);
+        setErrorSuggestion(null);
 
         try {
+            // Validate column mapping before sending
+            const validMapping = Object.entries(columnMapping).reduce((acc, [key, value]) => {
+                // Only include non-empty values and ensure they are strings
+                if (value) {
+                    acc[key] = String(value);
+                }
+                return acc;
+            }, {});
+
+            // Create FormData and append all necessary data
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('columnMapping', JSON.stringify(validMapping));
+            formData.append('supplierId', selectedSupplier);
+            formData.append('inquiryId', inquiryId);
+
             const response = await fetch(`${API_BASE_URL}/api/supplier-responses/upload`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    tempFile,
-                    columnMapping,
-                    supplierId: selectedSupplier,
-                    inquiryId
-                })
+                body: formData
             });
 
-            const data = await response.json();
-            console.log('Upload response:', data);
-
             if (!response.ok) {
-                throw new Error(data.message || data.error || 'Upload failed');
+                const errorData = await response.json();
+                throw {
+                    message: errorData.message || errorData.error || 'Upload failed',
+                    suggestion: errorData.suggestion
+                };
             }
 
+            const data = await response.json();
             if (onUploadSuccess) {
                 onUploadSuccess(data);
             }
             handleClose();
         } catch (error) {
             console.error('Upload error:', error);
-            setError(error.message || 'Failed to upload file. Please try again.');
+            setError(error.message || 'Failed to upload file');
+            setErrorSuggestion(error.suggestion || 'Please try again or contact support if the issue persists');
         } finally {
             setUploading(false);
         }
@@ -175,17 +229,11 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
         setSelectedFile(null);
         setSelectedSupplier('');
         setError(null);
+        setErrorSuggestion(null);
         setActiveStep(0);
         setAvailableColumns([]);
         setTempFile(null);
-        setColumnMapping({
-            itemID: '',
-            newReferenceID: '',
-            price: '',
-            notes: '',
-            hsCode: '',
-            englishDescription: ''
-        });
+        setColumnMapping(defaultColumnMapping);
         onClose();
     };
 
@@ -403,6 +451,11 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
                 {error && (
                     <Alert severity="error" sx={{ mt: 2 }}>
                         {error}
+                        {errorSuggestion && (
+                            <Typography variant="body2" sx={{ mt: 1 }}>
+                                Suggestion: {errorSuggestion}
+                            </Typography>
+                        )}
                     </Alert>
                 )}
             </DialogContent>
@@ -423,7 +476,7 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
                     <Button
                         onClick={handleUpload}
                         variant="contained"
-                        disabled={uploading || loading}
+                        disabled={uploading || loading || !inquiryId}
                         startIcon={uploading ? <CircularProgress size={20} /> : null}
                     >
                         {uploading ? 'Uploading...' : 'Upload'}

@@ -20,6 +20,7 @@ import {
   DialogActions,
   Button,
   Stack,
+  LinearProgress,
 } from '@mui/material';
 import {
   Visibility as ViewIcon,
@@ -36,6 +37,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import { formatIlsPrice } from '../utils/priceUtils';
+import { dataDebug, perfDebug } from '../utils/debug';
 
 function InquiryItemsDialog({ open, onClose, items, onViewDetails }) {
   const [sortField, setSortField] = useState('itemID');
@@ -159,10 +161,28 @@ function InquiryItemsDialog({ open, onClose, items, onViewDetails }) {
   );
 }
 
+function LoadingProgress({ value, message }) {
+  return (
+    <Box sx={{ width: '100%', mt: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="body2" color="text.secondary">
+          {message}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {Math.round(value)}%
+        </Typography>
+      </Box>
+      <LinearProgress variant="determinate" value={value} />
+    </Box>
+  );
+}
+
 function InquiryList() {
   const navigate = useNavigate();
   const [inquiries, setInquiries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [inquiryItems, setInquiryItems] = useState([]);
@@ -173,10 +193,6 @@ function InquiryList() {
   const [inquiryToDelete, setInquiryToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-
-  useEffect(() => {
-    fetchInquiries();
-  }, []);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -217,35 +233,98 @@ function InquiryList() {
   };
 
   const fetchInquiries = async () => {
+    const timerLabel = 'fetchInquiries';
+    perfDebug.time(timerLabel);
+    setLoading(true);
+    setLoadingProgress(0);
+    setLoadingMessage('Fetching inquiries...');
+
     try {
+      const progressInterval = setInterval(() => {
+        setLoadingProgress(prev => {
+          const next = prev + (100 - prev) * 0.1;
+          return Math.min(next, 90);
+        });
+      }, 300);
+
       const response = await axios.get(`${API_BASE_URL}/api/inquiries`);
+      clearInterval(progressInterval);
+      
+      dataDebug.log('Fetched inquiries:', response.data?.length || 0);
       setInquiries(response.data || []);
+      setLoadingProgress(100);
       setError('');
     } catch (err) {
       console.error('Error fetching inquiries:', err);
       setError('Failed to load inquiries. Please try again later.');
     } finally {
-      setLoading(false);
+      perfDebug.timeEnd(timerLabel);
+      setTimeout(() => {
+        setLoading(false);
+      }, 500);
     }
   };
+
+  useEffect(() => {
+    let isMounted = true;
+    
+    const fetchData = async () => {
+      if (isMounted) {
+        await fetchInquiries();
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleViewInquiry = async (inquiryId) => {
     try {
       setCurrentInquiryId(inquiryId);
+      setLoadingMessage('Loading inquiry details...');
+      setLoadingProgress(0);
+      
+      const progressInterval = setInterval(() => {
+        setLoadingProgress(prev => {
+          const next = prev + (100 - prev) * 0.1;
+          return Math.min(next, 90);
+        });
+      }, 200);
+
       const response = await axios.get(`${API_BASE_URL}/api/inquiries/${inquiryId}`);
+      clearInterval(progressInterval);
+      
       setInquiryItems(response.data.items || []);
+      setLoadingProgress(100);
       setDialogOpen(true);
     } catch (err) {
       console.error('Error fetching inquiry details:', err);
+      setError('Failed to load inquiry details. Please try again later.');
     }
   };
 
   const handleExportInquiry = async (inquiryId) => {
     try {
       setIsExporting(true);
+      setLoadingMessage('Preparing export...');
+      setLoadingProgress(0);
+      
+      const progressInterval = setInterval(() => {
+        setLoadingProgress(prev => {
+          const next = prev + (100 - prev) * 0.1;
+          return Math.min(next, 90);
+        });
+      }, 200);
+
       const response = await axios.get(`${API_BASE_URL}/api/inquiries/${inquiryId}/export`, {
         responseType: 'blob'
       });
+      clearInterval(progressInterval);
+      setLoadingProgress(100);
+
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -276,7 +355,20 @@ function InquiryList() {
   const handleDeleteInquiry = async () => {
     try {
       setIsDeleting(true);
+      setLoadingMessage('Deleting inquiry...');
+      setLoadingProgress(0);
+      
+      const progressInterval = setInterval(() => {
+        setLoadingProgress(prev => {
+          const next = prev + (100 - prev) * 0.1;
+          return Math.min(next, 90);
+        });
+      }, 200);
+
       await axios.delete(`${API_BASE_URL}/api/inquiries/${inquiryToDelete.inquiryID}`);
+      clearInterval(progressInterval);
+      setLoadingProgress(100);
+      
       setDeleteConfirmOpen(false);
       setInquiryToDelete(null);
       fetchInquiries();
@@ -308,8 +400,11 @@ function InquiryList() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-        <CircularProgress />
+      <Box sx={{ width: '100%', p: 2 }}>
+        <Typography variant="h5" gutterBottom>
+          Inquiries
+        </Typography>
+        <LoadingProgress value={loadingProgress} message={loadingMessage} />
       </Box>
     );
   }
@@ -497,6 +592,10 @@ function InquiryList() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {(isExporting || isDeleting) && (
+        <LoadingProgress value={loadingProgress} message={loadingMessage} />
+      )}
     </Box>
   );
 }

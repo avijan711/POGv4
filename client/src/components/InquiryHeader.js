@@ -8,6 +8,7 @@ import {
   Alert,
   Grid,
   Paper,
+  LinearProgress,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -49,21 +50,99 @@ function InquiryHeader({
     }
   };
 
-  const StatBox = ({ icon: Icon, label, value, color = 'primary' }) => (
-    <Paper elevation={0} sx={{ p: 1.5, bgcolor: `${color}.50`, borderRadius: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Icon sx={{ color: `${color}.main` }} />
-        <Box>
-          <Typography variant="body2" color="text.secondary">
+  const StatBox = ({ icon: Icon, label, value, color = 'primary', showProgress = false, progress = 0 }) => (
+    <Paper 
+      elevation={0} 
+      sx={{ 
+        p: 2.5,
+        bgcolor: `${color}.50`,
+        borderRadius: 2,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        position: 'relative',
+        overflow: 'hidden'
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 1 }}>
+        <Box
+          sx={{
+            bgcolor: `${color}.100`,
+            borderRadius: 1.5,
+            p: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <Icon sx={{ 
+            color: `${color}.main`,
+            fontSize: 24,
+          }} />
+        </Box>
+        <Box sx={{ flex: 1 }}>
+          <Typography 
+            variant="body2" 
+            color="text.secondary"
+            sx={{ mb: 0.5, fontWeight: 500 }}
+          >
             {label}
           </Typography>
-          <Typography variant="h6" color={`${color}.main`} sx={{ fontWeight: 'medium' }}>
+          <Typography 
+            variant="h6" 
+            color={`${color}.main`} 
+            sx={{ 
+              fontWeight: 600,
+              lineHeight: 1.2
+            }}
+          >
             {value}
           </Typography>
         </Box>
       </Box>
+      {showProgress && (
+        <Box sx={{ mt: 'auto' }}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'flex-end', 
+            alignItems: 'center',
+            mb: 1
+          }}>
+            <Typography 
+              variant="caption" 
+              color={`${color}.700`}
+              sx={{
+                fontWeight: 600,
+                fontSize: '0.75rem'
+              }}
+            >
+              {Math.round(progress)}%
+            </Typography>
+          </Box>
+          <LinearProgress 
+            variant="determinate" 
+            value={progress} 
+            color={color}
+            sx={{ 
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: `${color}.100`,
+              '& .MuiLinearProgress-bar': {
+                borderRadius: 4,
+                transition: 'transform 0.4s ease'
+              }
+            }}
+          />
+        </Box>
+      )}
     </Paper>
   );
+
+  // Calculate progress for suppliers responded
+  const suppliersProgress = statistics.totalSuppliers 
+    ? (statistics.suppliersResponded / statistics.totalSuppliers) * 100 
+    : 0;
 
   return (
     <Box sx={{ mb: 3 }}>
@@ -139,7 +218,7 @@ function InquiryHeader({
       </Box>
 
       {/* Statistics Section */}
-      <Grid container spacing={2} sx={{ mt: 2, mb: 2 }}>
+      <Grid container spacing={3} sx={{ mt: 1, mb: 2 }}>
         <Grid item xs={3}>
           <StatBox
             icon={InventoryIcon}
@@ -153,6 +232,8 @@ function InquiryHeader({
             label="Suppliers Responded"
             value={`${statistics.suppliersResponded || 0} / ${statistics.totalSuppliers || 0}`}
             color="success"
+            showProgress={true}
+            progress={suppliersProgress}
           />
         </Grid>
         <Grid item xs={3}>

@@ -1,38 +1,83 @@
-// Create debugger for different parts of the application
-const createDebugger = (subNamespace) => {
-  const prefix = `[${subNamespace.toUpperCase()}]`;
-  
-  return {
-    log: (...args) => console.log(prefix, 'LOG:', ...args),
-    error: (...args) => console.error(prefix, 'ERROR:', ...args),
-    warn: (...args) => console.warn(prefix, 'WARN:', ...args),
-    info: (...args) => console.info(prefix, 'INFO:', ...args),
-    debug: (...args) => console.debug(prefix, 'DEBUG:', ...args),
-    
-    // Performance monitoring
-    time: (label) => {
-      console.log(prefix, `TIME_START: ${label}`);
-      console.time(label);
+// Debug logging utilities
+const DEBUG_ENABLED = false; // Disabled by default
+
+// UI-related debug logs
+export const uiDebug = {
+    log: (...args) => {
+        if (DEBUG_ENABLED) {
+            console.log('[UI] LOG:', ...args);
+        }
     },
-    timeEnd: (label) => {
-      console.log(prefix, `TIME_END: ${label}`);
-      console.timeEnd(label);
+    error: (...args) => {
+        if (DEBUG_ENABLED) {
+            console.error('[UI] ERROR:', ...args);
+        }
     },
-    
-    // Group related logs
-    group: (label) => {
-      console.log(prefix, `GROUP_START: ${label}`);
-      console.group(label);
+    warn: (...args) => {
+        if (DEBUG_ENABLED) {
+            console.warn('[UI] WARN:', ...args);
+        }
     },
-    groupEnd: () => {
-      console.log(prefix, 'GROUP_END');
-      console.groupEnd();
+    info: (...args) => {
+        if (DEBUG_ENABLED) {
+            console.info('[UI] INFO:', ...args);
+        }
     }
-  };
 };
 
-// Create debuggers for different modules
-export const uiDebug = createDebugger('ui');
-export const apiDebug = createDebugger('api');
-export const dataDebug = createDebugger('data');
-export const perfDebug = createDebugger('performance');
+// Data-related debug logs
+export const dataDebug = {
+    log: (...args) => {
+        if (DEBUG_ENABLED) {
+            console.log('[DATA] LOG:', ...args);
+        }
+    },
+    error: (...args) => {
+        if (DEBUG_ENABLED) {
+            console.error('[DATA] ERROR:', ...args);
+        }
+    },
+    warn: (...args) => {
+        if (DEBUG_ENABLED) {
+            console.warn('[DATA] WARN:', ...args);
+        }
+    },
+    info: (...args) => {
+        if (DEBUG_ENABLED) {
+            console.info('[DATA] INFO:', ...args);
+        }
+    },
+    // Special method for logging data structures
+    logData: (label, data) => {
+        if (DEBUG_ENABLED) {
+            console.group('[DATA] ' + label);
+            console.log('Raw:', data);
+            if (data) {
+                console.log('Type:', typeof data);
+                if (typeof data === 'object') {
+                    console.log('Keys:', Object.keys(data));
+                    console.log('Values:', Object.values(data));
+                }
+            }
+            console.groupEnd();
+        }
+    }
+};
+
+// Performance-related debug logs
+export const perfDebug = {
+    time: (label) => {
+        if (DEBUG_ENABLED) {
+            console.time(label);
+        }
+    },
+    timeEnd: (label) => {
+        if (DEBUG_ENABLED) {
+            console.timeEnd(label);
+            const entries = performance.getEntriesByName(label);
+            if (entries.length > 0) {
+                console.log(`[PERFORMANCE] ${label}: ${entries[entries.length - 1].duration} ms`);
+            }
+        }
+    }
+};

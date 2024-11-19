@@ -32,7 +32,7 @@ import axios from 'axios';
 import ColumnMappingDialog from './ColumnMappingDialog';
 
 // API base URL
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5002';
 
 function FileUpload() {
   const [file, setFile] = useState(null);
@@ -92,7 +92,17 @@ function FileUpload() {
           withCredentials: true
         });
 
-        setExcelColumns(response.data.columns);
+        // Ensure columns are strings
+        const processedColumns = response.data.columns
+          .filter(col => col != null)
+          .map(col => String(col).trim())
+          .filter(col => col.length > 0);
+
+        if (processedColumns.length === 0) {
+          throw new Error('No valid columns found in the Excel file');
+        }
+
+        setExcelColumns(processedColumns);
         setShowMappingDialog(true);
       } catch (error) {
         console.error('Failed to read Excel columns:', error);
@@ -108,7 +118,13 @@ function FileUpload() {
   };
 
   const handleMappingConfirm = (mapping) => {
-    setColumnMapping(mapping);
+    // Ensure all mapping values are strings
+    const processedMapping = Object.entries(mapping).reduce((acc, [key, value]) => {
+      acc[key] = value ? String(value).trim() : '';
+      return acc;
+    }, {});
+
+    setColumnMapping(processedMapping);
     setShowMappingDialog(false);
     if (activeStep === 0) setActiveStep(1);
   };

@@ -2,78 +2,93 @@ import React from 'react';
 import {
   DialogTitle,
   IconButton,
-  Typography,
   Box,
-  Chip
+  Alert,
+  Typography,
+  Chip,
 } from '@mui/material';
-import { Close as CloseIcon } from '@mui/icons-material';
-import { uiDebug } from '../../utils/debug';
+import { 
+  Close as CloseIcon,
+} from '@mui/icons-material';
 
-const DialogHeader = ({ 
-  itemDetails, 
-  hasReferenceChange, 
-  isReferencedBy, 
-  getChangeSource, 
-  getBackgroundColor, 
-  onClose 
-}) => {
-  uiDebug.log('Rendering DialogHeader', { itemID: itemDetails?.itemID });
+function DialogHeader({ item, onClose }) {
+  const isReplaced = item?.referenceChange?.newReferenceID;
+  // Filter out self-references
+  const replacedItems = item?.referencingItems?.filter(ref => ref.itemID !== item.itemID) || [];
+  const isReplacement = replacedItems.length > 0;
+
+  // If this item has a self-reference, it's a new item and should only show what it replaces
+  const isSelfReferenced = isReplaced && item?.referenceChange?.newReferenceID === item.itemID;
 
   return (
-    <DialogTitle 
-      component="div"
-      sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'flex-start',
+    <>
+      <DialogTitle sx={{ 
+        m: 0, 
         p: 2,
-        backgroundColor: getBackgroundColor()
-      }}
-    >
-      <Box>
-        <Typography variant="h6" component="div">
-          {itemDetails?.itemID} - {itemDetails?.hebrewDescription}
+        pr: 6, // Make room for the close button
+        display: 'flex',
+        alignItems: 'center',
+        gap: 2
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {item?.itemID}
+          {isReplacement && (
+            <Chip
+              size="small"
+              label="New Item"
+              sx={{ 
+                backgroundColor: '#e8f5e9',
+                color: '#2e7d32',
+                '.MuiChip-label': { px: 1 }
+              }}
+            />
+          )}
+        </Box>
+        <Typography variant="h6" component="span" sx={{ flex: 1 }}>
+          {item?.hebrewDescription || 'New Item'}
         </Typography>
-        {hasReferenceChange && (
-          <Box>
-            <Chip 
-              label={`→ ${itemDetails.referenceChange.newReferenceID}`}
-              color="warning"
-              variant="outlined"
-              size="small"
-              sx={{ mt: 1 }}
-            />
-            <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
-              {getChangeSource(itemDetails.referenceChange)}
-            </Typography>
-          </Box>
-        )}
-        {isReferencedBy && (
-          <Box sx={{ mt: hasReferenceChange ? 1 : 0 }}>
-            <Chip 
-              label={`← ${itemDetails.referencingItems.map(i => i.itemID).join(', ')}`}
-              color="success"
-              variant="outlined"
-              size="small"
-            />
-            {itemDetails.referencingItems.map((refItem) => (
-              <Typography 
-                key={`${refItem.itemID}-${refItem.referenceChange?.changeDate || ''}-${refItem.referenceChange?.source || ''}`}
-                variant="caption" 
-                display="block" 
-                sx={{ mt: 0.5 }}
-              >
-                {getChangeSource(refItem.referenceChange)}
-              </Typography>
-            ))}
-          </Box>
-        )}
-      </Box>
-      <IconButton onClick={onClose} size="small">
-        <CloseIcon />
-      </IconButton>
-    </DialogTitle>
-  );
-};
+        <IconButton
+          aria-label="close"
+          onClick={onClose}
+          sx={{
+            position: 'absolute',
+            right: 8,
+            top: 8,
+            color: (theme) => theme.palette.grey[500],
+          }}
+        >
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
 
-export default React.memo(DialogHeader);
+      {((isReplaced && !isSelfReferenced) || isReplacement) && (
+        <Box sx={{ px: 2, pt: 1, pb: 2 }}>
+          {isReplaced && !isSelfReferenced && (
+            <Alert 
+              severity="warning" 
+              sx={{ mb: isReplacement ? 1 : 0 }}
+            >
+              Replaced by: {item.referenceChange.newReferenceID}
+            </Alert>
+          )}
+          {isReplacement && replacedItems.length > 0 && (
+            <Alert 
+              severity="success"
+              sx={{ 
+                backgroundColor: '#e8f5e9',
+                color: '#1b5e20',
+                '& .MuiAlert-icon': {
+                  color: '#2e7d32'
+                }
+              }}
+            >
+              Replaces: {replacedItems.map(item => item.itemID).join(', ')}
+            </Alert>
+          )}
+        </Box>
+      )}
+    </>
+  );
+}
+
+export default DialogHeader;

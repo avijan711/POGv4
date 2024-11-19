@@ -1,242 +1,181 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const debug = require('../utils/debug');
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-}
+// List of valid Excel MIME types
+const VALID_EXCEL_MIMETYPES = [
+    'application/vnd.ms-excel',                                           // .xls
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+    'application/vnd.ms-excel.sheet.macroEnabled.12',                    // .xlsm
+    'application/vnd.ms-excel.sheet.binary.macroEnabled.12',             // .xlsb
+    'application/vnd.ms-excel.template.macroEnabled.12',                 // .xltm
+    'application/vnd.ms-excel.template',                                 // .xlt
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.template' // .xltx
+];
 
 // Configure multer storage
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        console.log('Saving file to:', uploadsDir);
-        cb(null, uploadsDir);
+    destination: function (req, file, cb) {
+        const uploadDir = path.join(__dirname, '..', 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
     },
-    filename: (req, file, cb) => {
-        // Generate a unique filename with timestamp and original extension
+    filename: function (req, file, cb) {
+        // Generate unique filename with timestamp and original extension
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
         const ext = path.extname(file.originalname);
-        const filename = uniqueSuffix + ext;
-        console.log('Generated filename:', filename);
+        const filename = 'file-' + uniqueSuffix + ext;
+        
+        // Store the filename in the request for later use
+        req.uploadedFile = {
+            filename,
+            path: path.join(__dirname, '..', 'uploads', filename)
+        };
+        
         cb(null, filename);
     }
 });
 
-// Create multer upload instance with error handling
-const upload = multer({
+// Configure multer upload
+const uploadConfig = {
     storage: storage,
-    fileFilter: (req, file, cb) => {
-        console.log('Received file:', file.originalname);
-        console.log('File mimetype:', file.mimetype);
-        console.log('Request body:', req.body);
-        
-        // Check file type
-        const allowedTypes = [
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/vnd.ms-excel',
-            'application/octet-stream'
-        ];
-        const allowedExtensions = /\.(xlsx|xls)$/i;
-        
-        if (!allowedTypes.includes(file.mimetype) && 
-            !allowedExtensions.test(file.originalname)) {
-            return cb(new Error('Only Excel files (.xlsx or .xls) are allowed'));
+    fileFilter: function (req, file, cb) {
+        debug.log('File upload request:', {
+            originalname: file.originalname,
+            mimetype: file.mimetype,
+            fieldname: file.fieldname
+        });
+
+        // Check file extension
+        const ext = path.extname(file.originalname).toLowerCase();
+        const isValidExt = ['.xlsx', '.xls'].includes(ext);
+
+        // Check MIME type
+        const isValidMime = VALID_EXCEL_MIMETYPES.includes(file.mimetype);
+
+        // Log validation details
+        debug.log('File validation:', {
+            extension: ext,
+            isValidExt,
+            mimetype: file.mimetype,
+            isValidMime
+        });
+
+        if (isValidExt || isValidMime) {
+            debug.log('File accepted:', file.originalname);
+            return cb(null, true);
         }
 
-        cb(null, true);
+        debug.error('File rejected:', {
+            originalname: file.originalname,
+            mimetype: file.mimetype,
+            extension: ext
+        });
+
+        // Return error through callback
+        return cb({
+            message: 'Only Excel files (.xlsx, .xls) are allowed',
+            code: 'INVALID_FILE_TYPE'
+        });
     },
     limits: {
         fileSize: 50 * 1024 * 1024 // 50MB limit
     }
-}).single('file');
-
-// Basic file upload handler without additional validation
-const handleBasicUpload = (req, res, next) => {
-    console.log('Handling basic upload request');
-    
-    upload(req, res, (err) => {
-        if (err instanceof multer.MulterError) {
-            console.error('Multer error:', err);
-            if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(400).json({
-                    error: 'File too large',
-                    details: 'Maximum file size is 50MB',
-                    suggestion: 'Please reduce the file size or split into multiple files'
-                });
-            }
-            return res.status(400).json({
-                error: 'File upload error',
-                details: err.message,
-                suggestion: 'Please try again with a smaller file or contact support if the issue persists'
-            });
-        } else if (err) {
-            console.error('Upload error:', err);
-            return res.status(400).json({
-                error: 'File upload failed',
-                details: err.message,
-                suggestion: 'Please ensure you are uploading a valid Excel file'
-            });
-        }
-
-        if (!req.file) {
-            console.error('No file uploaded');
-            return res.status(400).json({
-                error: 'No file uploaded',
-                details: 'Please select a file to upload',
-                suggestion: 'Click the browse button to select a file'
-            });
-        }
-
-        next();
-    });
 };
 
-// Full upload handler with inquiry validation
-const handleUpload = (req, res, next) => {
-    console.log('Handling upload request');
-    console.log('Request headers:', req.headers);
-    
-    upload(req, res, (err) => {
-        if (err instanceof multer.MulterError) {
-            console.error('Multer error:', err);
-            if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(400).json({
-                    error: 'File too large',
-                    details: 'Maximum file size is 50MB',
-                    suggestion: 'Please reduce the file size or split into multiple files'
-                });
-            }
+// Error handler middleware
+const handleUploadError = (err, req, res, next) => {
+    if (err) {
+        debug.error('Upload error:', err);
+        if (err.code === 'LIMIT_FILE_SIZE') {
             return res.status(400).json({
-                error: 'File upload error',
-                details: err.message,
-                suggestion: 'Please try again with a smaller file or contact support if the issue persists'
-            });
-        } else if (err) {
-            console.error('Upload error:', err);
-            return res.status(400).json({
-                error: 'File upload failed',
-                details: err.message,
-                suggestion: 'Please ensure you are uploading a valid Excel file'
+                error: 'File too large',
+                message: 'Maximum file size is 50MB',
+                suggestion: 'Please reduce the file size or split into multiple files'
             });
         }
-
-        if (!req.file) {
-            console.error('No file uploaded');
+        if (err.code === 'INVALID_FILE_TYPE') {
             return res.status(400).json({
-                error: 'No file uploaded',
-                details: 'Please select a file to upload',
-                suggestion: 'Click the browse button to select a file'
+                error: 'Invalid file type',
+                message: err.message,
+                suggestion: 'Please upload a valid Excel file (.xlsx or .xls)'
             });
         }
-
-        // Check if inquiry number is provided
-        if (!req.body.inquiryNumber) {
-            cleanupFile(req.file.path);
-            return res.status(400).json({
-                error: 'Missing inquiry number',
-                details: 'An inquiry number is required',
-                suggestion: 'Please enter an inquiry number'
-            });
-        }
-
-        // Check if column mapping is provided
-        if (!req.body.columnMapping) {
-            cleanupFile(req.file.path);
-            return res.status(400).json({
-                error: 'Missing column mapping',
-                details: 'Column mapping is required',
-                suggestion: 'Please ensure column mapping is provided'
-            });
-        }
-
-        // Try to parse column mapping
-        try {
-            JSON.parse(req.body.columnMapping);
-        } catch (err) {
-            cleanupFile(req.file.path);
-            return res.status(400).json({
-                error: 'Invalid column mapping',
-                details: 'The column mapping format is invalid',
-                suggestion: 'Please ensure the column mapping is properly formatted'
-            });
-        }
-
-        console.log('Upload successful:', {
-            file: req.file,
-            inquiryNumber: req.body.inquiryNumber,
-            columnMapping: req.body.columnMapping
-        });
-
-        next();
-    });
-};
-
-// Middleware to validate Excel files
-const validateExcelFile = (req, res, next) => {
-    console.log('Validating Excel file...');
-    console.log('Request body:', req.body);
-    console.log('Request file:', req.file);
-
-    if (!req.file) {
-        return res.status(400).json({ 
-            error: 'No file uploaded',
-            details: 'Please select a file to upload',
-            suggestion: 'Click the browse button to select a file'
+        return res.status(400).json({
+            error: 'File upload failed',
+            message: err.message,
+            suggestion: 'Please try again or contact support'
         });
     }
-
-    const allowedExtensions = /\.(xlsx|xls)$/i;
-    if (!allowedExtensions.test(req.file.originalname)) {
-        console.log('Invalid file type:', req.file.originalname);
-        cleanupFile(req.file.path);
-        return res.status(400).json({ 
-            error: 'Invalid file type',
-            details: 'Please upload an Excel file (.xlsx or .xls)',
-            suggestion: 'Download the sample file for reference'
-        });
-    }
-
-    // Ensure the file exists on disk
-    if (!fs.existsSync(req.file.path)) {
-        return res.status(400).json({ 
-            error: 'File not found',
-            details: 'The uploaded file could not be processed',
-            suggestion: 'Please try uploading the file again'
-        });
-    }
-
-    // Validate file size
-    const stats = fs.statSync(req.file.path);
-    if (stats.size === 0) {
-        cleanupFile(req.file.path);
-        return res.status(400).json({ 
-            error: 'Empty file',
-            details: 'The uploaded file is empty',
-            suggestion: 'Please ensure the file contains data'
-        });
-    }
-
-    console.log('File validation successful');
     next();
 };
 
-// Function to clean up uploaded files
-const cleanupFile = (filePath) => {
+// Basic upload middleware for single file
+const handleBasicUpload = [
+    multer(uploadConfig).single('file'),
+    handleUploadError
+];
+
+// Enhanced upload middleware with validation
+const handleUpload = [
+    multer(uploadConfig).single('file'),
+    handleUploadError,
+    function validateExcelFile(req, res, next) {
+        try {
+            if (!req.file) {
+                throw new Error('No file uploaded');
+            }
+
+            // Set the full file path in req.file
+            req.file.fullPath = path.join(__dirname, '..', 'uploads', req.file.filename);
+
+            // Log file details
+            debug.log('File upload details:', {
+                originalname: req.file.originalname,
+                filename: req.file.filename,
+                fullPath: req.file.fullPath,
+                mimetype: req.file.mimetype,
+                size: req.file.size
+            });
+
+            // Verify file exists
+            if (!fs.existsSync(req.file.fullPath)) {
+                throw new Error('File not found after upload');
+            }
+
+            next();
+        } catch (error) {
+            debug.error('File validation error:', error);
+            cleanupFile(req.file?.fullPath);
+            res.status(400).json({
+                error: 'File validation failed',
+                message: error.message,
+                suggestion: 'Please ensure you are uploading a valid Excel file'
+            });
+        }
+    }
+];
+
+// Cleanup uploaded file
+function cleanupFile(filePath) {
     if (filePath && fs.existsSync(filePath)) {
         try {
             fs.unlinkSync(filePath);
-            console.log('Cleaned up file:', filePath);
-        } catch (err) {
-            console.error('Error cleaning up file:', err);
+            debug.log('Cleaned up file:', filePath);
+        } catch (error) {
+            debug.error('Error cleaning up file:', error);
         }
     }
-};
+}
 
 module.exports = {
     handleUpload,
     handleBasicUpload,
-    validateExcelFile,
-    cleanupFile
+    validateExcelFile: handleUpload[2],
+    cleanupFile,
+    uploadConfig,
+    VALID_EXCEL_MIMETYPES
 };

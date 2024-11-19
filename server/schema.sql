@@ -39,28 +39,25 @@ CREATE TABLE IF NOT EXISTS Inquiry (
     Date DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS PromotionGroup (
-    PromotionGroupID INTEGER PRIMARY KEY AUTOINCREMENT,
-    Name TEXT NOT NULL,
-    StartDate DATETIME,
-    EndDate DATETIME,
-    IsActive BOOLEAN DEFAULT 1,
-    ExcelFilePath TEXT,
-    CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-    SupplierID INTEGER,
-    FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID)
+CREATE TABLE IF NOT EXISTS promotions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT,
+    start_date DATETIME,
+    end_date DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS Promotion (
-    PromotionID INTEGER PRIMARY KEY AUTOINCREMENT,
-    PromotionGroupID INTEGER NOT NULL,
-    ItemID TEXT NOT NULL,
-    PromoPrice DECIMAL(10,2),
-    MinQuantity INTEGER,
-    IsActive BOOLEAN DEFAULT 1,
-    FOREIGN KEY (PromotionGroupID) REFERENCES PromotionGroup(PromotionGroupID),
-    FOREIGN KEY (ItemID) REFERENCES Item(ItemID)
+CREATE TABLE IF NOT EXISTS promotion_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL,
+    promotion_id INTEGER NOT NULL,
+    promotion_price DECIMAL(10,2),
+    start_date DATETIME,
+    end_date DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (item_id) REFERENCES Item(ItemID),
+    FOREIGN KEY (promotion_id) REFERENCES promotions(id)
 );
 
 CREATE TABLE IF NOT EXISTS ItemReferenceChange (
@@ -74,7 +71,8 @@ CREATE TABLE IF NOT EXISTS ItemReferenceChange (
     FOREIGN KEY (OriginalItemID) REFERENCES Item(ItemID),
     FOREIGN KEY (NewReferenceID) REFERENCES Item(ItemID),
     FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID),
-    CHECK (OriginalItemID != NewReferenceID)
+    CHECK (OriginalItemID != NewReferenceID),
+    UNIQUE(OriginalItemID, NewReferenceID, SupplierID, ChangedByUser)
 );
 
 CREATE TABLE IF NOT EXISTS InquiryItem (
@@ -82,7 +80,7 @@ CREATE TABLE IF NOT EXISTS InquiryItem (
     InquiryID INTEGER NOT NULL,
     ItemID TEXT NOT NULL,
     OriginalItemID TEXT REFERENCES Item(ItemID),
-    RequestedQty INTEGER NOT NULL,
+    RequestedQty INTEGER NOT NULL DEFAULT 0,
     HebrewDescription TEXT,
     EnglishDescription TEXT,
     HSCode TEXT,
@@ -111,17 +109,33 @@ CREATE TABLE IF NOT EXISTS SupplierPrice (
     FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID)
 );
 
+-- New SupplierResponse tables
 CREATE TABLE IF NOT EXISTS SupplierResponse (
     SupplierResponseID INTEGER PRIMARY KEY AUTOINCREMENT,
-    ItemID TEXT NOT NULL,
+    InquiryID INTEGER NOT NULL,
     SupplierID INTEGER NOT NULL,
+    ItemID TEXT NOT NULL,
     PriceQuoted DECIMAL(10,2),
-    Status TEXT DEFAULT 'Active',
-    ResponseDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+    Status TEXT DEFAULT 'pending',
     IsPromotion BOOLEAN DEFAULT 0,
     PromotionName TEXT,
-    FOREIGN KEY (ItemID) REFERENCES Item(ItemID),
-    FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID)
+    ResponseDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (InquiryID) REFERENCES Inquiry(InquiryID),
+    FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID),
+    FOREIGN KEY (ItemID) REFERENCES Item(ItemID)
+);
+
+CREATE TABLE IF NOT EXISTS SupplierResponseItem (
+    ResponseItemID INTEGER PRIMARY KEY AUTOINCREMENT,
+    SupplierResponseID INTEGER NOT NULL,
+    ItemID TEXT NOT NULL,
+    Price DECIMAL(10,2),
+    Notes TEXT,
+    HSCode TEXT,
+    EnglishDescription TEXT,
+    NewReferenceID TEXT,
+    FOREIGN KEY (SupplierResponseID) REFERENCES SupplierResponse(SupplierResponseID),
+    FOREIGN KEY (ItemID) REFERENCES Item(ItemID)
 );
 
 -- Create indexes for better performance
@@ -135,13 +149,15 @@ CREATE INDEX IF NOT EXISTS idx_supplier_prices_item ON SupplierPrice(ItemID);
 CREATE INDEX IF NOT EXISTS idx_supplier_prices_supplier ON SupplierPrice(SupplierID);
 CREATE INDEX IF NOT EXISTS idx_item_history_item ON ItemHistory(ItemID);
 CREATE INDEX IF NOT EXISTS idx_item_history_date ON ItemHistory(Date);
-CREATE INDEX IF NOT EXISTS idx_promotion_group_dates ON PromotionGroup(StartDate, EndDate);
-CREATE INDEX IF NOT EXISTS idx_promotion_group_supplier ON PromotionGroup(SupplierID);
-CREATE INDEX IF NOT EXISTS idx_promotion_item ON Promotion(ItemID);
-CREATE INDEX IF NOT EXISTS idx_promotion_group ON Promotion(PromotionGroupID);
-CREATE INDEX IF NOT EXISTS idx_supplier_response_item ON SupplierResponse(ItemID);
+CREATE INDEX IF NOT EXISTS idx_promotion_dates ON promotions(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_promotion_items_item ON promotion_items(item_id);
+CREATE INDEX IF NOT EXISTS idx_promotion_items_promotion ON promotion_items(promotion_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_response_inquiry ON SupplierResponse(InquiryID);
 CREATE INDEX IF NOT EXISTS idx_supplier_response_supplier ON SupplierResponse(SupplierID);
+CREATE INDEX IF NOT EXISTS idx_supplier_response_item ON SupplierResponse(ItemID);
 CREATE INDEX IF NOT EXISTS idx_supplier_response_date ON SupplierResponse(ResponseDate);
+CREATE INDEX IF NOT EXISTS idx_supplier_response_item_response ON SupplierResponseItem(SupplierResponseID);
+CREATE INDEX IF NOT EXISTS idx_supplier_response_item_item ON SupplierResponseItem(ItemID);
 CREATE INDEX IF NOT EXISTS idx_inquiry_item_retail ON InquiryItem(ItemID, RetailPrice);
 CREATE INDEX IF NOT EXISTS idx_item_history_retail ON ItemHistory(ItemID, ILSRetailPrice);
 
@@ -162,8 +178,8 @@ CREATE TRIGGER update_item_history_on_inquiry
 AFTER INSERT ON InquiryItem
 WHEN NEW.RetailPrice IS NOT NULL OR NEW.ImportMarkup IS NOT NULL
 BEGIN
-    -- Update Item table
-    INSERT OR REPLACE INTO Item (
+    -- Update Item table if it doesn't exist
+    INSERT OR IGNORE INTO Item (
         ItemID,
         HebrewDescription,
         EnglishDescription,
@@ -177,7 +193,7 @@ BEGIN
         NEW.EnglishDescription,
         COALESCE(NEW.ImportMarkup, 1.30),
         NEW.HSCode,
-        (SELECT Image FROM Item WHERE ItemID = NEW.ItemID)
+        NULL
     );
 
     -- Insert into ItemHistory if retail price exists

@@ -7,49 +7,60 @@ import {
   IconButton,
   Tooltip,
   Chip,
+  Stack,
 } from '@mui/material';
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
+  SwapHoriz as SwapHorizIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../../config';
 
-function ItemReference({ item, isNewReference, referencingItems, getChangeSource }) {
+function ItemReference({ item, isNewReference, referencingItems, getChangeSource, onReferenceClick }) {
+  // Filter out self-references
+  const filteredReferencingItems = referencingItems.filter(ref => ref.itemID !== item.itemID);
+  
+  // Check if this item has a self-reference
+  const isSelfReferenced = item.hasReferenceChange && 
+    item.referenceChange.newReferenceID === item.itemID;
+
   return (
     <TableCell>
-      {item.hasReferenceChange && (
-        <Box>
-          <Chip
-            label={`→ ${item.referenceChange.newReferenceID}`}
-            color="warning"
-            variant="outlined"
-            size="small"
-          />
-          <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
-            {getChangeSource(item.referenceChange)}
-          </Typography>
-        </Box>
-      )}
-      {isNewReference && (
-        <Box sx={{ mt: item.hasReferenceChange ? 1 : 0 }}>
-          <Chip
-            label={`← ${referencingItems.map(i => i.itemID).join(', ')}`}
-            color="success"
-            variant="outlined"
-            size="small"
-          />
-          {referencingItems.map((refItem, index) => (
-            <Typography 
-              key={`${refItem.itemID}-${index}`}
-              variant="caption" 
-              display="block" 
-              sx={{ mt: 0.5 }}
-            >
-              {getChangeSource(refItem.referenceChange)}
+      <Stack spacing={0.5}>
+        {item.hasReferenceChange && !isSelfReferenced && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Chip
+              icon={<SwapHorizIcon fontSize="small" />}
+              label={`Replaced by ${item.referenceChange.newReferenceID}`}
+              color="warning"
+              variant="outlined"
+              size="small"
+              onClick={(e) => onReferenceClick(e, item.referenceChange.newReferenceID)}
+              sx={{ cursor: 'pointer' }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              {getChangeSource(item.referenceChange)}
             </Typography>
-          ))}
-        </Box>
-      )}
+          </Box>
+        )}
+        {isNewReference && filteredReferencingItems.length > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Chip
+              icon={<SwapHorizIcon fontSize="small" />}
+              label={`Replaces ${filteredReferencingItems.map(i => i.itemID).join(', ')}`}
+              color="success"
+              variant="outlined"
+              size="small"
+              onClick={(e) => {
+                if (filteredReferencingItems.length === 1) {
+                  onReferenceClick(e, filteredReferencingItems[0].itemID);
+                }
+              }}
+              sx={{ cursor: 'pointer' }}
+            />
+          </Box>
+        )}
+      </Stack>
     </TableCell>
   );
 }
@@ -101,10 +112,31 @@ function ItemTableRow({
   getChangeSource, 
   onRowClick, 
   onEdit, 
-  onDelete 
+  onDelete,
+  onReferenceClick
 }) {
   const generateUniqueKey = (item, index) => {
     return `${item.itemID}-${item.qtyInStock}-${item.soldThisYear}-${item.soldLastYear}-${index}`;
+  };
+
+  const getBackgroundColor = () => {
+    if (isNewReference) {
+      return '#e8f5e9'; // Light green background for new/replacement items
+    }
+    if (item.hasReferenceChange && item.referenceChange.newReferenceID !== item.itemID) {
+      return 'rgba(255, 152, 0, 0.08)'; // Subtle orange for old/replaced items
+    }
+    return 'inherit';
+  };
+
+  const getHoverColor = () => {
+    if (isNewReference) {
+      return '#c8e6c9'; // Slightly darker green on hover
+    }
+    if (item.hasReferenceChange && item.referenceChange.newReferenceID !== item.itemID) {
+      return 'rgba(255, 152, 0, 0.15)'; // Slightly darker orange on hover
+    }
+    return 'rgba(0, 0, 0, 0.04)';
   };
 
   return (
@@ -113,23 +145,53 @@ function ItemTableRow({
       onClick={() => onRowClick(item)}
       sx={{ 
         cursor: 'pointer',
-        backgroundColor: item.hasReferenceChange 
-          ? 'rgba(255, 243, 224, 0.9)'
-          : isNewReference
-            ? '#e8f5e9'
-            : 'inherit',
+        backgroundColor: getBackgroundColor(),
         '&:hover': { 
-          backgroundColor: item.hasReferenceChange 
-            ? 'rgba(255, 243, 224, 1)' 
-            : isNewReference
-              ? '#c8e6c9'
-              : 'rgba(0, 0, 0, 0.04)' 
+          backgroundColor: getHoverColor()
+        },
+        transition: 'background-color 0.2s ease',
+        '& td': {
+          py: 1.5,
+          px: 2,
+          height: 'auto',
+          maxHeight: 'none'
         }
       }}
     >
-      <TableCell>{item.itemID}</TableCell>
-      <TableCell>{item.hebrewDescription}</TableCell>
-      <TableCell>{item.englishDescription}</TableCell>
+      <TableCell>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {item.itemID}
+          {isNewReference && (
+            <Chip
+              size="small"
+              label="New Item"
+              sx={{ 
+                backgroundColor: '#e8f5e9',
+                color: '#2e7d32',
+                '.MuiChip-label': { px: 1 }
+              }}
+            />
+          )}
+        </Box>
+      </TableCell>
+      <TableCell sx={{ 
+        whiteSpace: 'pre-wrap', 
+        wordBreak: 'break-word',
+        minWidth: '180px',
+        maxWidth: '300px',
+        direction: 'rtl', // Right-to-left for Hebrew text
+        textAlign: 'right'
+      }}>
+        {item.hebrewDescription}
+      </TableCell>
+      <TableCell sx={{ 
+        whiteSpace: 'pre-wrap', 
+        wordBreak: 'break-word',
+        minWidth: '180px',
+        maxWidth: '300px'
+      }}>
+        {item.englishDescription}
+      </TableCell>
       <TableCell align="right">{Number(item.importMarkup).toFixed(2)}</TableCell>
       <TableCell>{item.hsCode}</TableCell>
       <TableCell>
@@ -137,7 +199,7 @@ function ItemTableRow({
           <img 
             src={`${API_BASE_URL}/uploads/${item.image}`} 
             alt={item.englishDescription || item.hebrewDescription}
-            style={{ maxWidth: '50px', maxHeight: '50px' }}
+            style={{ maxWidth: '50px', maxHeight: '50px', objectFit: 'contain' }}
           />
         )}
       </TableCell>
@@ -156,6 +218,7 @@ function ItemTableRow({
         isNewReference={isNewReference}
         referencingItems={referencingItems}
         getChangeSource={getChangeSource}
+        onReferenceClick={onReferenceClick}
       />
       <ItemActions 
         onEdit={(e) => onEdit(e, item)}

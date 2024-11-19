@@ -1,6 +1,6 @@
-const getItemByIdQuery = `
+module.exports = `
     WITH LatestHistory AS (
-        SELECT 
+        SELECT
             ih.ItemID,
             ih.ILSRetailPrice,
             ih.QtyInStock,
@@ -11,13 +11,16 @@ const getItemByIdQuery = `
         INNER JOIN (
             SELECT ItemID, MAX(Date) as MaxDate
             FROM ItemHistory
-            WHERE ItemID = ?
             GROUP BY ItemID
         ) latest ON ih.ItemID = latest.ItemID AND ih.Date = latest.MaxDate
     ),
     LatestInquiryItems AS (
-        SELECT 
+        SELECT
             ii.ItemID,
+            ii.HebrewDescription,
+            ii.EnglishDescription,
+            ii.ImportMarkup,
+            ii.HSCode,
             ii.RetailPrice,
             ii.QtyInStock,
             ii.SoldThisYear,
@@ -28,53 +31,57 @@ const getItemByIdQuery = `
         FROM InquiryItem ii
         JOIN Inquiry i ON ii.InquiryID = i.InquiryID
         WHERE i.Status = 'new'
-        AND ii.RetailPrice IS NOT NULL
-        AND ii.ItemID = ?
+        AND i.Date = (
+            SELECT MAX(i2.Date)
+            FROM InquiryItem ii2
+            JOIN Inquiry i2 ON ii2.InquiryID = i2.InquiryID
+            WHERE ii2.ItemID = ii.ItemID
+            AND i2.Status = 'new'
+        )
     ),
-    ItemData AS (
-        SELECT 
+    BaseItems AS (
+        -- Get items from Item table with latest updates
+        SELECT
             i.ItemID,
-            i.HebrewDescription,
-            i.EnglishDescription,
-            COALESCE(CAST(i.ImportMarkup AS REAL), 1.30) as ImportMarkup,
-            i.HSCode,
+            COALESCE(li.HebrewDescription, i.HebrewDescription) as HebrewDescription,
+            COALESCE(li.EnglishDescription, i.EnglishDescription, '') as EnglishDescription,
+            COALESCE(CAST(li.ImportMarkup AS REAL), CAST(i.ImportMarkup AS REAL), 1.30) as ImportMarkup,
+            COALESCE(li.HSCode, i.HSCode, '') as HSCode,
             i.Image,
             COALESCE(li.RetailPrice, h.ILSRetailPrice) as RetailPrice,
             COALESCE(li.QtyInStock, h.QtyInStock, 0) as QtyInStock,
             COALESCE(li.SoldThisYear, h.QtySoldThisYear, 0) as SoldThisYear,
             COALESCE(li.SoldLastYear, h.QtySoldLastYear, 0) as SoldLastYear,
             COALESCE(li.InquiryDate, h.HistoryDate) as LastUpdated,
-            li.NewReferenceID,
-            li.ReferenceNotes
+            NULL as NewReferenceID, -- Never copy NewReferenceID
+            NULL as ReferenceNotes
         FROM Item i
         LEFT JOIN LatestHistory h ON i.ItemID = h.ItemID
         LEFT JOIN LatestInquiryItems li ON i.ItemID = li.ItemID
         WHERE i.ItemID = ?
-        
-        UNION ALL
-        
-        SELECT DISTINCT
-            ii.ItemID,
-            ii.HebrewDescription,
-            ii.EnglishDescription,
-            COALESCE(CAST(ii.ImportMarkup AS REAL), 1.30) as ImportMarkup,
-            ii.HSCode,
+
+        UNION
+
+        -- Get new items from InquiryItem that don't exist in Item table
+        SELECT
+            li.ItemID,
+            li.HebrewDescription,
+            COALESCE(li.EnglishDescription, '') as EnglishDescription,
+            COALESCE(CAST(li.ImportMarkup AS REAL), 1.30) as ImportMarkup,
+            COALESCE(li.HSCode, '') as HSCode,
             NULL as Image,
-            ii.RetailPrice,
-            ii.QtyInStock,
-            ii.SoldThisYear,
-            ii.SoldLastYear,
-            i.Date as LastUpdated,
-            ii.NewReferenceID,
-            ii.ReferenceNotes
-        FROM InquiryItem ii
-        JOIN Inquiry i ON ii.InquiryID = i.InquiryID
-        WHERE i.Status = 'new'
-        AND ii.ItemID = ?
-        AND ii.ItemID NOT IN (SELECT ItemID FROM Item)
+            li.RetailPrice,
+            COALESCE(li.QtyInStock, 0) as QtyInStock,
+            COALESCE(li.SoldThisYear, 0) as SoldThisYear,
+            COALESCE(li.SoldLastYear, 0) as SoldLastYear,
+            li.InquiryDate as LastUpdated,
+            NULL as NewReferenceID, -- Never copy NewReferenceID
+            NULL as ReferenceNotes
+        FROM LatestInquiryItems li
+        WHERE li.ItemID = ? AND li.ItemID NOT IN (SELECT ItemID FROM Item)
     ),
     LatestReferenceChanges AS (
-        SELECT 
+        SELECT
             OriginalItemID,
             NewReferenceID,
             ChangedByUser,
@@ -85,71 +92,59 @@ const getItemByIdQuery = `
         WHERE ChangeDate = (
             SELECT MAX(ChangeDate)
             FROM ItemReferenceChange irc2
-            WHERE (irc2.OriginalItemID = irc1.OriginalItemID
-            OR irc2.NewReferenceID = irc1.NewReferenceID)
-            AND (irc2.OriginalItemID = ? OR irc2.NewReferenceID = ?)
+            WHERE irc2.OriginalItemID = irc1.OriginalItemID
         )
-        AND OriginalItemID != NewReferenceID
     ),
-    PriceHistoryData AS (
+    ReferencingItems AS (
         SELECT 
-            ih.ItemID,
-            ih.Date,
-            ih.ILSRetailPrice as price,
-            ih.QtyInStock,
-            ih.QtySoldThisYear as soldThisYear,
-            ih.QtySoldLastYear as soldLastYear
-        FROM ItemHistory ih
-        WHERE ih.ItemID = ?
-        ORDER BY ih.Date DESC
-    ),
-    SupplierPricesData AS (
-        SELECT 
-            sr.ItemID,
-            s.Name as supplierName,
-            sr.PriceQuoted as price,
-            sr.ResponseDate as date,
-            sr.PromotionName as notes
-        FROM SupplierResponse sr
-        JOIN Supplier s ON sr.SupplierID = s.SupplierID
-        WHERE sr.ItemID = ?
-        ORDER BY sr.ResponseDate DESC
-    ),
-    PromotionsData AS (
-        SELECT 
-            p.ItemID,
-            pg.StartDate as startDate,
-            pg.EndDate as endDate,
-            p.PromoPrice as price,
-            pg.Name as notes
-        FROM Promotion p
-        JOIN PromotionGroup pg ON p.PromotionGroupID = pg.PromotionGroupID
-        WHERE p.ItemID = ?
-        AND p.IsActive = 1
-        AND pg.IsActive = 1
-        AND (pg.EndDate IS NULL OR pg.EndDate >= datetime('now'))
-        ORDER BY pg.StartDate DESC
+            rc.NewReferenceID as ItemID,
+            json_group_array(
+                CASE 
+                    WHEN rc.OriginalItemID != rc.NewReferenceID THEN
+                        json_object(
+                            'itemID', rc.OriginalItemID,
+                            'hebrewDescription', i.HebrewDescription,
+                            'englishDescription', i.EnglishDescription,
+                            'changedByUser', rc.ChangedByUser,
+                            'changeDate', rc.ChangeDate,
+                            'notes', rc.Notes,
+                            'supplierName', s.Name,
+                            'source', CASE
+                                WHEN rc.SupplierID IS NOT NULL THEN 'supplier'
+                                WHEN rc.ChangedByUser = 1 THEN 'user'
+                                ELSE NULL
+                            END
+                        )
+                    ELSE NULL
+                END
+            ) as ReferencingItemsArray
+        FROM ItemReferenceChange rc
+        LEFT JOIN Item i ON rc.OriginalItemID = i.ItemID
+        LEFT JOIN Supplier s ON rc.SupplierID = s.SupplierID
+        GROUP BY rc.NewReferenceID
     )
-    SELECT 
+    SELECT DISTINCT
         i.ItemID as itemID,
         i.HebrewDescription as hebrewDescription,
-        COALESCE(i.EnglishDescription, '') as englishDescription,
+        i.EnglishDescription as englishDescription,
         i.ImportMarkup as importMarkup,
-        COALESCE(i.HSCode, '') as hsCode,
+        i.HSCode as hsCode,
         i.Image as image,
         i.RetailPrice as retailPrice,
         i.QtyInStock as qtyInStock,
         i.SoldThisYear as soldThisYear,
         i.SoldLastYear as soldLastYear,
         i.LastUpdated as lastUpdated,
-        CASE 
-            WHEN rc1.NewReferenceID IS NOT NULL OR i.NewReferenceID IS NOT NULL THEN json_object(
+        CASE
+            WHEN (rc1.NewReferenceID IS NOT NULL AND rc1.NewReferenceID != i.ItemID) 
+                 OR (i.NewReferenceID IS NOT NULL AND i.NewReferenceID != i.ItemID) 
+            THEN json_object(
                 'newReferenceID', COALESCE(rc1.NewReferenceID, i.NewReferenceID),
                 'changedByUser', COALESCE(rc1.ChangedByUser, 1),
                 'changeDate', COALESCE(rc1.ChangeDate, i.LastUpdated),
                 'notes', COALESCE(rc1.Notes, i.ReferenceNotes),
                 'supplierName', s1.Name,
-                'source', CASE 
+                'source', CASE
                     WHEN rc1.SupplierID IS NOT NULL THEN 'supplier'
                     WHEN rc1.ChangedByUser = 1 OR i.NewReferenceID IS NOT NULL THEN 'user'
                     ELSE NULL
@@ -157,69 +152,18 @@ const getItemByIdQuery = `
             )
             ELSE NULL
         END as referenceChange,
+        COALESCE(ri.ReferencingItemsArray, '[]') as referencingItems,
         CASE 
-            WHEN rc2.OriginalItemID IS NOT NULL THEN json_object(
-                'originalItemID', rc2.OriginalItemID,
-                'changedByUser', rc2.ChangedByUser,
-                'changeDate', rc2.ChangeDate,
-                'notes', rc2.Notes,
-                'supplierName', s2.Name,
-                'source', CASE 
-                    WHEN rc2.SupplierID IS NOT NULL THEN 'supplier'
-                    WHEN rc2.ChangedByUser = 1 THEN 'user'
-                    ELSE NULL
-                END
-            )
-            ELSE NULL
-        END as referencedBy,
-        COALESCE(
-            (
-                SELECT json_group_array(
-                    json_object(
-                        'date', ph.Date,
-                        'price', ph.price,
-                        'qtyInStock', ph.QtyInStock,
-                        'soldThisYear', ph.soldThisYear,
-                        'soldLastYear', ph.soldLastYear
-                    )
-                )
-                FROM PriceHistoryData ph
-            ),
-            '[]'
-        ) as priceHistory,
-        COALESCE(
-            (
-                SELECT json_group_array(
-                    json_object(
-                        'supplierName', sp.supplierName,
-                        'price', sp.price,
-                        'date', sp.date,
-                        'notes', sp.notes
-                    )
-                )
-                FROM SupplierPricesData sp
-            ),
-            '[]'
-        ) as supplierPrices,
-        COALESCE(
-            (
-                SELECT json_group_array(
-                    json_object(
-                        'startDate', p.startDate,
-                        'endDate', p.endDate,
-                        'price', p.price,
-                        'notes', p.notes
-                    )
-                )
-                FROM PromotionsData p
-            ),
-            '[]'
-        ) as promotions
-    FROM ItemData i
+            WHEN (rc1.NewReferenceID IS NOT NULL AND rc1.NewReferenceID != i.ItemID) 
+                 OR (i.NewReferenceID IS NOT NULL AND i.NewReferenceID != i.ItemID) 
+            THEN 1
+            ELSE 0
+        END as hasReferenceChange,
+        CASE 
+            WHEN ri.ReferencingItemsArray IS NOT NULL AND ri.ReferencingItemsArray != '[null]' THEN 1
+            ELSE 0
+        END as isReferencedBy
+    FROM BaseItems i
     LEFT JOIN LatestReferenceChanges rc1 ON i.ItemID = rc1.OriginalItemID
-    LEFT JOIN LatestReferenceChanges rc2 ON i.ItemID = rc2.NewReferenceID
-    LEFT JOIN Supplier s1 ON rc1.SupplierID = s1.SupplierID
-    LEFT JOIN Supplier s2 ON rc2.SupplierID = s2.SupplierID
-`;
-
-module.exports = getItemByIdQuery;
+    LEFT JOIN ReferencingItems ri ON i.ItemID = ri.ItemID
+    LEFT JOIN Supplier s1 ON rc1.SupplierID = s1.SupplierID`;

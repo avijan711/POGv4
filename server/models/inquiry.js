@@ -1,464 +1,290 @@
-class InquiryModel {
+const BaseModel = require('./BaseModel');
+const debug = require('../utils/debug');
+const { getInquiriesQuery, getInquiryByIdQuery } = require('./queries/inquiries');
+const ItemModel = require('./item');
+const InquiryItemModel = require('./inquiry/item');
+const itemUtils = require('../utils/itemUtils');
+
+class InquiryModel extends BaseModel {
     constructor(db) {
-        this.db = db;
+        super(db);
+        this.itemModel = new ItemModel(db);
+        this.inquiryItemModel = new InquiryItemModel(db);
     }
 
-    createInquiry(inquiryNumber, items) {
-        return new Promise((resolve, reject) => {
-            const db = this.db;
-            console.log('Starting createInquiry with:', { inquiryNumber, itemCount: items.length });
+    async getAllInquiries(status) {
+        const timerLabel = 'getAllInquiries';
+        debug.time(timerLabel);
+        debug.log('Getting all inquiries with status:', status);
 
-            db.serialize(() => {
-                db.run('BEGIN TRANSACTION', async (err) => {
-                    if (err) {
-                        console.error('Error starting transaction:', err);
-                        reject(new Error('Failed to start transaction'));
-                        return;
-                    }
+        try {
+            const queryTimerLabel = 'getAllInquiries.query';
+            debug.time(queryTimerLabel);
+            const params = status ? [status] : [];
+            const results = await this.executeQuery(getInquiriesQuery(status), params);
+            debug.timeEnd(queryTimerLabel);
 
-                    console.log('Transaction started successfully');
-
-                    try {
-                        // First, ensure all items exist in the Item table
-                        const uniqueItems = [...new Set(items.map(item => item.itemId))];
-                        for (const itemId of uniqueItems) {
-                            const item = items.find(i => i.itemId === itemId);
-                            await new Promise((resolve, reject) => {
-                                db.run(
-                                    `INSERT OR REPLACE INTO Item (
-                                        ItemID,
-                                        HebrewDescription,
-                                        EnglishDescription,
-                                        ImportMarkup,
-                                        HSCode
-                                    ) VALUES (?, ?, ?, ?, ?)`,
-                                    [
-                                        itemId,
-                                        item.hebrewDescription,
-                                        item.englishDescription || '',
-                                        item.importMarkup || 1.3,
-                                        item.hsCode || ''
-                                    ],
-                                    (err) => {
-                                        if (err) {
-                                            reject(err);
-                                        } else {
-                                            resolve();
-                                        }
-                                    }
-                                );
-                            });
-
-                            // Add price history if provided
-                            if (item.retailPrice !== undefined && item.retailPrice !== null) {
-                                await new Promise((resolve, reject) => {
-                                    db.run(
-                                        `INSERT INTO ItemHistory (
-                                            ItemID,
-                                            ILSRetailPrice,
-                                            QtyInStock,
-                                            QtySoldThisYear,
-                                            QtySoldLastYear,
-                                            Date
-                                        ) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-                                        [
-                                            itemId,
-                                            item.retailPrice,
-                                            item.qtyInStock || 0,
-                                            item.soldThisYear || 0,
-                                            item.soldLastYear || 0
-                                        ],
-                                        (err) => {
-                                            if (err) {
-                                                reject(err);
-                                            } else {
-                                                resolve();
-                                            }
-                                        }
-                                    );
-                                });
-                            }
-                        }
-
-                        // Create the inquiry
-                        const inquiryId = await new Promise((resolve, reject) => {
-                            db.run(
-                                'INSERT INTO Inquiry (InquiryNumber, Status) VALUES (?, ?)',
-                                [inquiryNumber, 'new'],
-                                function(err) {
-                                    if (err) {
-                                        reject(err);
-                                    } else {
-                                        resolve(this.lastID);
-                                    }
-                                }
-                            );
-                        });
-
-                        console.log('Created inquiry with ID:', inquiryId);
-
-                        // Now insert all inquiry items
-                        for (const item of items) {
-                            await new Promise((resolve, reject) => {
-                                db.run(
-                                    `INSERT INTO InquiryItem (
-                                        InquiryID,
-                                        ItemID,
-                                        HebrewDescription,
-                                        EnglishDescription,
-                                        ImportMarkup,
-                                        HSCode,
-                                        QtyInStock,
-                                        RetailPrice,
-                                        SoldThisYear,
-                                        SoldLastYear,
-                                        RequestedQty,
-                                        NewReferenceID,
-                                        ReferenceNotes
-                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                                    [
-                                        inquiryId,
-                                        item.itemId,
-                                        item.hebrewDescription,
-                                        item.englishDescription || '',
-                                        item.importMarkup || 1.3,
-                                        item.hsCode || '',
-                                        item.qtyInStock || 0,
-                                        item.retailPrice,
-                                        item.soldThisYear || 0,
-                                        item.soldLastYear || 0,
-                                        item.requestedQty || 0,
-                                        item.newReferenceId || null,
-                                        item.referenceNotes || null
-                                    ],
-                                    (err) => {
-                                        if (err) {
-                                            reject(err);
-                                        } else {
-                                            resolve();
-                                        }
-                                    }
-                                );
-                            });
-                        }
-
-                        // Commit transaction after all items are processed
-                        await new Promise((resolve, reject) => {
-                            db.run('COMMIT', (err) => {
-                                if (err) {
-                                    reject(err);
-                                } else {
-                                    resolve();
-                                }
-                            });
-                        });
-
-                        console.log('Transaction committed successfully');
-                        resolve(inquiryId);
-
-                    } catch (error) {
-                        console.error('Error in transaction:', error);
-                        db.run('ROLLBACK', () => {
-                            reject(error);
-                        });
-                    }
-                });
+            debug.log('getAllInquiries results:', {
+                count: results.length,
+                status
             });
-        });
+
+            debug.timeEnd(timerLabel);
+            return results;
+        } catch (error) {
+            debug.error('Error in getAllInquiries:', error);
+            throw error;
+        }
     }
 
-    getAllInquiries(status) {
-        return new Promise((resolve, reject) => {
-            let query = `
-                WITH ResponseStats AS (
-                    SELECT 
-                        ii.InquiryID,
-                        sr.SupplierID,
-                        COUNT(DISTINCT sr.SupplierResponseID) as ResponseCount,
-                        COUNT(DISTINCT CASE WHEN irc.NewReferenceID IS NOT NULL THEN irc.ChangeID END) as ReplacementCount
-                    FROM InquiryItem ii
-                    LEFT JOIN SupplierResponse sr ON ii.ItemID = sr.ItemID AND sr.Status = 'Active'
-                    LEFT JOIN ItemReferenceChange irc ON sr.ItemID = irc.OriginalItemID 
-                        AND sr.SupplierID = irc.SupplierID
-                    GROUP BY ii.InquiryID, sr.SupplierID
-                )
-                SELECT 
-                    i.InquiryID as inquiryID,
-                    i.InquiryNumber as customNumber,
-                    i.Date as date,
-                    i.Status as status,
-                    COUNT(DISTINCT ii.InquiryItemID) as itemCount,
-                    COUNT(DISTINCT rs.SupplierID) as respondedSuppliersCount,
-                    SUM(CASE WHEN rs.ResponseCount IS NULL THEN 1 ELSE 0 END) as notRespondedItemsCount,
-                    SUM(COALESCE(rs.ReplacementCount, 0)) as totalReplacementsCount
-                FROM Inquiry i
-                LEFT JOIN InquiryItem ii ON i.InquiryID = ii.InquiryID
-                LEFT JOIN ResponseStats rs ON i.InquiryID = rs.InquiryID
-            `;
+    async getInquiryById(inquiryId) {
+        const timerLabel = 'getInquiryById';
+        debug.time(timerLabel);
+        debug.log('Getting inquiry by ID:', inquiryId);
 
-            const params = [];
-            if (status) {
-                query += ' WHERE i.Status = ?';
-                params.push(status);
+        try {
+            const queryTimerLabel = 'getInquiryById.query';
+            debug.time(queryTimerLabel);
+            const results = await this.executeQuery(getInquiryByIdQuery(), [inquiryId, inquiryId, inquiryId]);
+            debug.timeEnd(queryTimerLabel);
+
+            if (!results || results.length === 0) {
+                debug.log('Inquiry not found:', inquiryId);
+                throw new Error('Inquiry not found');
             }
 
-            query += `
-                GROUP BY i.InquiryID
-                ORDER BY i.Date DESC
-            `;
+            const parseTimerLabel = 'getInquiryById.parse';
+            debug.time(parseTimerLabel);
+            const result = results[0];
 
-            this.db.all(query, params, (err, inquiries) => {
-                if (err) {
-                    console.error('Database error in getAllInquiries:', err);
-                    reject(new Error('Failed to fetch inquiries'));
-                    return;
+            const response = {
+                inquiry: JSON.parse(result.inquiry),
+                items: JSON.parse(result.items)
+            };
+
+            debug.timeEnd(parseTimerLabel);
+            debug.timeEnd(timerLabel);
+            return response;
+        } catch (error) {
+            debug.error('Error in getInquiryById:', error);
+            throw error;
+        }
+    }
+
+    async createInquiry(data) {
+        const { inquiryNumber, items } = data;
+        const timerLabel = 'createInquiry';
+        debug.time(timerLabel);
+        debug.log('Creating inquiry:', { inquiryNumber, itemCount: items.length });
+
+        return this.executeTransaction(async (db) => {
+            // First, ensure all items exist in the Item table
+            const uniqueItems = [...new Set(items.map(item => item.itemId))];
+            debug.log('Processing unique items:', uniqueItems.length);
+
+            const itemTimerLabel = 'createInquiry.itemInsert';
+            debug.time(itemTimerLabel);
+
+            // Process each unique item
+            for (const itemId of uniqueItems) {
+                const item = items.find(i => i.itemId === itemId);
+                const itemData = {
+                    itemID: itemId,
+                    hebrewDescription: item.hebrewDescription,
+                    englishDescription: item.englishDescription || '',
+                    importMarkup: item.importMarkup || 1.3,
+                    hsCode: item.hsCode || '',
+                    retailPrice: item.retailPrice,
+                    qtyInStock: item.currentStock || 0,
+                    soldThisYear: item.soldThisYear || 0,
+                    soldLastYear: item.soldLastYear || 0
+                };
+
+                const validation = itemUtils.validateItemData(itemData);
+                if (!validation.isValid) {
+                    debug.error('Invalid item data:', {
+                        itemId,
+                        errors: validation.errors
+                    });
+                    throw new Error(`Invalid item data for ${itemId}: ${validation.errors.join(', ')}`);
                 }
-                resolve(inquiries);
-            });
-        });
-    }
 
-    getInquiryById(inquiryId) {
-        return new Promise((resolve, reject) => {
-            this.db.serialize(() => {
-                // Get inquiry details
-                this.db.get(
-                    `SELECT 
-                        InquiryID as inquiryID,
-                        InquiryNumber as customNumber,
-                        Date as date,
-                        Status as status
-                    FROM Inquiry
-                    WHERE InquiryID = ?`,
-                    [inquiryId],
-                    (err, inquiry) => {
-                        if (err) {
-                            console.error('Database error in getInquiryById:', err);
-                            reject(new Error('Failed to fetch inquiry details'));
-                            return;
-                        }
+                const formattedData = itemUtils.formatItemData(itemData);
 
-                        if (!inquiry) {
-                            reject(new Error('Inquiry not found'));
-                            return;
-                        }
-
-                        // Get inquiry items with reference data
-                        const itemsQuery = `
-                            WITH AllReferenceChanges AS (
-                                SELECT 
-                                    OriginalItemID,
-                                    NewReferenceID,
-                                    ChangedByUser,
-                                    ChangeDate,
-                                    Notes,
-                                    SupplierID,
-                                    ROW_NUMBER() OVER (
-                                        PARTITION BY CASE 
-                                            WHEN OriginalItemID IS NOT NULL THEN OriginalItemID 
-                                            ELSE NewReferenceID 
-                                        END 
-                                        ORDER BY ChangeDate DESC
-                                    ) as rn
-                                FROM ItemReferenceChange
-                                WHERE OriginalItemID IS NOT NULL OR NewReferenceID IS NOT NULL
-                            ),
-                            LatestReferenceChanges AS (
-                                SELECT *
-                                FROM AllReferenceChanges
-                                WHERE rn = 1
-                            )
-                            SELECT 
-                                ii.InquiryItemID as inquiryItemID,
-                                ii.ItemID as itemID,
-                                ii.HebrewDescription as hebrewDescription,
-                                COALESCE(ii.EnglishDescription, '') as englishDescription,
-                                COALESCE(ii.ImportMarkup, 1.30) as importMarkup,
-                                COALESCE(ii.HSCode, '') as hsCode,
-                                COALESCE(ii.QtyInStock, 0) as qtyInStock,
-                                COALESCE(ii.SoldThisYear, 0) as soldThisYear,
-                                COALESCE(ii.SoldLastYear, 0) as soldLastYear,
-                                ii.RetailPrice as retailPrice,
-                                COALESCE(ii.RequestedQty, 0) as requestedQty,
-                                CASE 
-                                    WHEN rc1.NewReferenceID IS NOT NULL THEN json_object(
-                                        'newReferenceID', rc1.NewReferenceID,
-                                        'changedByUser', rc1.ChangedByUser,
-                                        'changeDate', rc1.ChangeDate,
-                                        'notes', rc1.Notes,
-                                        'supplierName', s1.Name,
-                                        'source', CASE 
-                                            WHEN rc1.SupplierID IS NOT NULL THEN 'supplier'
-                                            WHEN rc1.ChangedByUser = 1 THEN 'user'
-                                            ELSE NULL
-                                        END
-                                    )
-                                    ELSE NULL
-                                END as referenceChange,
-                                CASE 
-                                    WHEN rc2.OriginalItemID IS NOT NULL THEN json_object(
-                                        'originalItemID', rc2.OriginalItemID,
-                                        'changedByUser', rc2.ChangedByUser,
-                                        'changeDate', rc2.ChangeDate,
-                                        'notes', rc2.Notes,
-                                        'supplierName', s2.Name,
-                                        'source', CASE 
-                                            WHEN rc2.SupplierID IS NOT NULL THEN 'supplier'
-                                            WHEN rc2.ChangedByUser = 1 THEN 'user'
-                                            ELSE NULL
-                                        END
-                                    )
-                                    ELSE NULL
-                                END as referencedBy
-                            FROM InquiryItem ii
-                            LEFT JOIN LatestReferenceChanges rc1 ON ii.ItemID = rc1.OriginalItemID
-                            LEFT JOIN LatestReferenceChanges rc2 ON ii.ItemID = rc2.NewReferenceID
-                            LEFT JOIN Supplier s1 ON rc1.SupplierID = s1.SupplierID
-                            LEFT JOIN Supplier s2 ON rc2.SupplierID = s2.SupplierID
-                            WHERE ii.InquiryID = ?
-                        `;
-
-                        this.db.all(itemsQuery, [inquiryId], (err, items) => {
-                            if (err) {
-                                console.error('Database error fetching inquiry items:', err);
-                                reject(new Error('Failed to fetch inquiry items'));
-                                return;
-                            }
-
-                            // Parse reference JSON for each item
-                            items = items.map(item => {
-                                if (item.referenceChange) {
-                                    try {
-                                        item.referenceChange = JSON.parse(item.referenceChange);
-                                    } catch (e) {
-                                        console.error('Error parsing reference change:', e);
-                                        item.referenceChange = null;
-                                    }
-                                }
-                                if (item.referencedBy) {
-                                    try {
-                                        item.referencedBy = JSON.parse(item.referencedBy);
-                                    } catch (e) {
-                                        console.error('Error parsing referencedBy:', e);
-                                        item.referencedBy = null;
-                                    }
-                                }
-                                return item;
-                            });
-
-                            resolve({
-                                inquiry,
-                                items
-                            });
-                        });
+                try {
+                    await this._insertOrUpdateItem(db, formattedData);
+                    if (itemUtils.hasRetailPrice(formattedData)) {
+                        await this._insertItemHistory(db, formattedData);
                     }
-                );
-            });
+                } catch (error) {
+                    debug.error('Error processing item:', error);
+                    throw error;
+                }
+            }
+            debug.timeEnd(itemTimerLabel);
+
+            // Create the inquiry with InquiryNumber
+            debug.log('Creating inquiry record');
+            const inquiryTimerLabel = 'createInquiry.inquiryInsert';
+            debug.time(inquiryTimerLabel);
+            const result = await this.executeRun(
+                'INSERT INTO Inquiry (InquiryNumber, Status) VALUES (?, ?)',
+                [inquiryNumber, 'new']
+            );
+            const inquiryId = result.lastID;
+            debug.timeEnd(inquiryTimerLabel);
+
+            // Create inquiry items using InquiryItemModel
+            debug.log('Creating inquiry items');
+            const inquiryItemsTimerLabel = 'createInquiry.itemsInsert';
+            debug.time(inquiryItemsTimerLabel);
+
+            for (const item of items) {
+                try {
+                    await this.inquiryItemModel.createInquiryItem(inquiryId, item);
+                } catch (error) {
+                    debug.error('Error creating inquiry item:', error);
+                    throw error;
+                }
+            }
+            debug.timeEnd(inquiryItemsTimerLabel);
+
+            debug.log('Inquiry creation completed:', { inquiryId });
+            debug.timeEnd(timerLabel);
+            return { id: inquiryId };
         });
     }
 
-    updateInquiryStatus(inquiryId, status) {
-        return new Promise((resolve, reject) => {
-            this.db.run(
+    async _insertOrUpdateItem(db, data) {
+        const query = `
+            INSERT INTO Item (
+                ItemID,
+                HebrewDescription,
+                EnglishDescription,
+                ImportMarkup,
+                HSCode,
+                Image
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ItemID) DO UPDATE SET
+                HebrewDescription = excluded.HebrewDescription,
+                EnglishDescription = excluded.EnglishDescription,
+                ImportMarkup = excluded.ImportMarkup,
+                HSCode = excluded.HSCode
+        `;
+        const params = [
+            data.itemID,
+            data.hebrewDescription,
+            data.englishDescription || '',
+            data.importMarkup || 1.30,
+            data.hsCode || '',
+            data.image || ''
+        ];
+
+        debug.logQuery('Insert or update item', query, params);
+        await this.executeRun(query, params);
+    }
+
+    async _insertItemHistory(db, data) {
+        const query = `
+            INSERT INTO ItemHistory (
+                ItemID,
+                ILSRetailPrice,
+                QtyInStock,
+                QtySoldThisYear,
+                QtySoldLastYear,
+                Date
+            ) VALUES (?, ?, ?, ?, ?, datetime('now'))
+        `;
+        const params = [
+            data.itemID,
+            data.retailPrice,
+            data.qtyInStock || 0,
+            data.soldThisYear || 0,
+            data.soldLastYear || 0
+        ];
+
+        debug.logQuery('Insert item history', query, params);
+        await this.executeRun(query, params);
+    }
+
+    async updateInquiryStatus(inquiryId, status) {
+        const timerLabel = 'updateInquiryStatus';
+        debug.time(timerLabel);
+        debug.log('Updating inquiry status:', { inquiryId, status });
+
+        try {
+            const result = await this.executeRun(
                 'UPDATE Inquiry SET Status = ? WHERE InquiryID = ?',
-                [status, inquiryId],
-                function(err) {
-                    if (err) {
-                        console.error('Database error updating status:', err);
-                        reject(new Error('Failed to update status'));
-                        return;
-                    }
-                    
-                    if (this.changes === 0) {
-                        reject(new Error('Inquiry not found'));
-                        return;
-                    }
-                    
-                    resolve();
-                }
+                [status, inquiryId]
             );
-        });
-    }
 
-    updateInquiryItemQuantity(inquiryItemId, requestedQty) {
-        return new Promise((resolve, reject) => {
-            if (requestedQty < 0) {
-                reject(new Error('Requested quantity cannot be negative'));
-                return;
+            if (result.changes === 0) {
+                throw new Error('Inquiry not found');
             }
 
-            this.db.run(
-                'UPDATE InquiryItem SET RequestedQty = ? WHERE InquiryItemID = ?',
-                [requestedQty, inquiryItemId],
-                function(err) {
-                    if (err) {
-                        console.error('Database error updating quantity:', err);
-                        reject(new Error('Failed to update quantity'));
-                        return;
-                    }
-                    
-                    if (this.changes === 0) {
-                        reject(new Error('Inquiry item not found'));
-                        return;
-                    }
-                    
-                    resolve();
-                }
-            );
-        });
+            debug.timeEnd(timerLabel);
+        } catch (error) {
+            debug.error('Error updating inquiry status:', error);
+            throw error;
+        }
     }
 
-    deleteInquiry(inquiryId) {
-        return new Promise((resolve, reject) => {
-            this.db.serialize(() => {
-                // Start a transaction
-                this.db.run('BEGIN TRANSACTION', (err) => {
-                    if (err) {
-                        console.error('Error starting transaction:', err);
-                        reject(new Error('Failed to start delete transaction'));
-                        return;
-                    }
-
-                    // First delete related inquiry items
-                    this.db.run(
-                        'DELETE FROM InquiryItem WHERE InquiryID = ?',
-                        [inquiryId],
-                        (err) => {
-                            if (err) {
-                                console.error('Error deleting inquiry items:', err);
-                                this.db.run('ROLLBACK');
-                                reject(new Error('Failed to delete inquiry items'));
-                                return;
-                            }
-
-                            // Then delete the inquiry itself
-                            this.db.run(
-                                'DELETE FROM Inquiry WHERE InquiryID = ?',
-                                [inquiryId],
-                                (err) => {
-                                    if (err) {
-                                        console.error('Error deleting inquiry:', err);
-                                        this.db.run('ROLLBACK');
-                                        reject(new Error('Failed to delete inquiry'));
-                                        return;
-                                    }
-
-                                    // Commit the transaction
-                                    this.db.run('COMMIT', (err) => {
-                                        if (err) {
-                                            console.error('Error committing transaction:', err);
-                                            this.db.run('ROLLBACK');
-                                            reject(new Error('Failed to commit delete transaction'));
-                                            return;
-                                        }
-                                        resolve();
-                                    });
-                                }
-                            );
-                        }
-                    );
-                });
+    async updateInquiryItemQuantity(inquiryItemId, requestedQty) {
+        try {
+            await this.inquiryItemModel.updateInquiryItem(inquiryItemId, {
+                requestedQuantity: requestedQty
             });
+        } catch (error) {
+            debug.error('Error updating inquiry item quantity:', error);
+            throw error;
+        }
+    }
+
+    async updateInquiryItemReference(inquiryItemId, itemId, newReferenceId, referenceNotes) {
+        try {
+            await this.inquiryItemModel.updateInquiryItem(inquiryItemId, {
+                itemId,
+                newReferenceID: newReferenceId,
+                referenceNotes
+            });
+        } catch (error) {
+            debug.error('Error updating inquiry item reference:', error);
+            throw error;
+        }
+    }
+
+    async deleteInquiry(inquiryId) {
+        const timerLabel = 'deleteInquiry';
+        debug.time(timerLabel);
+        debug.log('Deleting inquiry:', inquiryId);
+
+        return this.executeTransaction(async () => {
+            try {
+                const deleteItemsTimerLabel = 'deleteInquiry.items';
+                debug.time(deleteItemsTimerLabel);
+                await this.executeRun(
+                    'DELETE FROM InquiryItem WHERE InquiryID = ?',
+                    [inquiryId]
+                );
+                debug.timeEnd(deleteItemsTimerLabel);
+
+                const deleteInquiryTimerLabel = 'deleteInquiry.inquiry';
+                debug.time(deleteInquiryTimerLabel);
+                const result = await this.executeRun(
+                    'DELETE FROM Inquiry WHERE InquiryID = ?',
+                    [inquiryId]
+                );
+                debug.timeEnd(deleteInquiryTimerLabel);
+
+                if (result.changes === 0) {
+                    throw new Error('Inquiry not found');
+                }
+
+                debug.timeEnd(timerLabel);
+            } catch (error) {
+                debug.error('Error deleting inquiry:', error);
+                throw error;
+            }
         });
     }
 }

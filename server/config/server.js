@@ -5,7 +5,7 @@ const bodyParser = require('body-parser');
 
 function configureServer() {
     const app = express();
-    const port = process.env.PORT || 5001;
+    const port = process.env.PORT || 5002;
 
     // CORS configuration
     app.use(cors({

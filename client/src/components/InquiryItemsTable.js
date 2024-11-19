@@ -25,6 +25,8 @@ import {
   ArrowUpward as ArrowUpwardIcon,
   ArrowDownward as ArrowDownwardIcon,
   Close as CloseIcon,
+  ContentCopy as ContentCopyIcon,
+  SwapHoriz as SwapHorizIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
@@ -108,7 +110,14 @@ function InquiryItemsTable({
   const handleDeleteConfirm = async () => {
     try {
       if (deleteType === 'reference') {
-        await axios.delete(`${API_BASE_URL}/api/supplier-responses/reference/${itemToDelete.referenceChange.changeId}`);
+        if (itemToDelete.referenceChange?.source === 'inquiry_item') {
+          await axios.put(`${API_BASE_URL}/api/inquiries/inquiry-items/${itemToDelete.inquiryItemID}/reference`, {
+            newReferenceId: null,
+            referenceNotes: null
+          });
+        } else if (itemToDelete.referenceChange?.changeId) {
+          await axios.delete(`${API_BASE_URL}/api/supplier-responses/reference/${itemToDelete.referenceChange.changeId}`);
+        }
       } else if (deleteType === 'supplier-response') {
         await axios.delete(`${API_BASE_URL}/api/supplier-responses/${itemToDelete.supplierResponseId}`);
       }
@@ -124,12 +133,29 @@ function InquiryItemsTable({
     }
   };
 
+  const getReferenceTooltip = (referenceChange) => {
+    if (!referenceChange) return '';
+    if (referenceChange.source === 'inquiry_item') {
+      return 'Reference from inquiry';
+    }
+    return `Changed by ${referenceChange.supplierName || 'user'}`;
+  };
+
+  // Sort items by Excel row index if no other sort is applied
+  const sortedItems = [...items].sort((a, b) => {
+    if (!sortConfig.field || sortConfig.field === 'excelRowIndex') {
+      return (a.excelRowIndex || 0) - (b.excelRowIndex || 0);
+    }
+    return 0; // Let the existing sort logic handle other cases
+  });
+
   return (
     <>
       <TableContainer>
         <Table sx={{ minWidth: 650 }} aria-label="inquiry items table">
           <TableHead>
             <TableRow>
+              <TableCell>#</TableCell>
               <SortableTableCell
                 field="itemID"
                 currentSort={sortConfig}
@@ -195,14 +221,14 @@ function InquiryItemsTable({
             </TableRow>
           </TableHead>
           <TableBody>
-            {items.length === 0 ? (
+            {sortedItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} align="center">
+                <TableCell colSpan={11} align="center">
                   No items found
                 </TableCell>
               </TableRow>
             ) : (
-              items.map((item) => (
+              sortedItems.map((item, index) => (
                 <TableRow 
                   key={item.inquiryItemID}
                   onClick={() => {
@@ -211,22 +237,36 @@ function InquiryItemsTable({
                     }
                   }}
                   sx={{ 
-                    backgroundColor: item.hasReferenceChange 
-                      ? 'rgba(255, 243, 224, 0.9)'
-                      : item.isReferencedBy
-                        ? '#e8f5e9'
-                        : 'inherit',
-                    '&:hover': { 
-                      backgroundColor: item.hasReferenceChange 
-                        ? 'rgba(255, 243, 224, 1)' 
+                    backgroundColor: item.isDuplicate 
+                      ? 'rgba(255, 152, 0, 0.1)'
+                      : item.hasReferenceChange && item.referenceChange
+                        ? 'rgba(255, 243, 224, 0.9)'
                         : item.isReferencedBy
-                          ? '#c8e6c9'
-                          : 'rgba(0, 0, 0, 0.04)' 
+                          ? '#e8f5e9'
+                          : 'inherit',
+                    '&:hover': { 
+                      backgroundColor: item.isDuplicate
+                        ? 'rgba(255, 152, 0, 0.2)'
+                        : item.hasReferenceChange && item.referenceChange
+                          ? 'rgba(255, 243, 224, 1)' 
+                          : item.isReferencedBy
+                            ? '#c8e6c9'
+                            : 'rgba(0, 0, 0, 0.04)' 
                     },
                     cursor: editingQty === item.inquiryItemID ? 'default' : 'pointer',
                   }}
                 >
-                  <TableCell>{item.itemID}</TableCell>
+                  <TableCell>{(item.excelRowIndex || index) + 1}</TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {item.itemID}
+                      {item.isDuplicate && (
+                        <Tooltip title={`Duplicate of row ${(item.originalRowIndex || 0) + 1}`}>
+                          <ContentCopyIcon color="warning" fontSize="small" />
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </TableCell>
                   <TableCell>{item.hebrewDescription}</TableCell>
                   <TableCell>{item.englishDescription}</TableCell>
                   <TableCell align="right">{Number(item.importMarkup).toFixed(2)}</TableCell>
@@ -266,44 +306,54 @@ function InquiryItemsTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    {item.hasReferenceChange && (
+                    {item.hasReferenceChange && item.referenceChange && (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Tooltip title={`Changed by ${item.referenceChange.supplierName || 'user'}`}>
+                        <Tooltip title={getReferenceTooltip(item.referenceChange)}>
                           <Chip
                             label={`→ ${item.referenceChange.newReferenceID}`}
                             color="warning"
                             variant="outlined"
                             size="small"
-                            onDelete={(e) => {
+                            onDelete={item.referenceChange.source !== 'inquiry_item' ? (e) => {
                               e.stopPropagation();
                               handleDeleteClick(item, 'reference');
-                            }}
-                            deleteIcon={
+                            } : undefined}
+                            deleteIcon={item.referenceChange.source !== 'inquiry_item' ? (
                               <IconButton size="small">
                                 <CloseIcon fontSize="small" />
                               </IconButton>
-                            }
+                            ) : undefined}
+                            icon={<SwapHorizIcon />}
                           />
                         </Tooltip>
                         <Typography variant="caption" display="block">
-                          {getChangeSource(item.referenceChange)}
+                          {item.referenceChange.source === 'inquiry_item' 
+                            ? 'Reference from inquiry'
+                            : getChangeSource(item.referenceChange)}
                         </Typography>
                       </Box>
                     )}
-                    {item.isReferencedBy && (
+                    {item.isReferencedBy && item.referencingItems && (
                       <Box sx={{ mt: item.hasReferenceChange ? 1 : 0 }}>
                         {item.referencingItems.map((refItem, index) => (
                           <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: index > 0 ? 1 : 0 }}>
-                            <Tooltip title={`Changed by ${refItem.referenceChange.supplierName || 'user'}`}>
-                              <Chip
-                                label={`← ${refItem.itemID}`}
-                                color="success"
-                                variant="outlined"
-                                size="small"
-                              />
-                            </Tooltip>
+                            {refItem.referenceChange && (
+                              <Tooltip title={refItem.referenceChange.source === 'inquiry_item' 
+                                ? 'Reference from inquiry'
+                                : `Changed by ${refItem.referenceChange.supplierName || 'user'}`}>
+                                <Chip
+                                  label={`← ${refItem.itemID}`}
+                                  color="success"
+                                  variant="outlined"
+                                  size="small"
+                                  icon={<SwapHorizIcon />}
+                                />
+                              </Tooltip>
+                            )}
                             <Typography variant="caption" display="block">
-                              {getChangeSource(refItem.referenceChange)}
+                              {refItem.referenceChange?.source === 'inquiry_item'
+                                ? 'Reference from inquiry'
+                                : getChangeSource(refItem.referenceChange)}
                             </Typography>
                           </Box>
                         ))}

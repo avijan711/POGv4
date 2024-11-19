@@ -1,30 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const imageUpload = require('../middleware/imageUpload');
+const debug = require('../utils/debug');
 
 module.exports = (itemModel) => {
     // Get all items
     router.get('/', async (req, res) => {
         try {
             const items = await itemModel.getAllItems();
-            // Format items to match the table structure, preserving reference data
-            const formattedItems = items.map(item => ({
-                itemID: item.itemID || '',
-                hebrewDescription: item.hebrewDescription || '',
-                englishDescription: item.englishDescription || '',
-                importMarkup: parseFloat(item.importMarkup).toFixed(2) || '1.30',
-                hsCode: item.hsCode || '',
-                image: item.image || '',
-                qtyInStock: parseInt(item.qtyInStock) || 0,
-                soldThisYear: parseInt(item.soldThisYear) || 0,
-                soldLastYear: parseInt(item.soldLastYear) || 0,
-                retailPrice: item.retailPrice !== null && item.retailPrice !== undefined ? 
-                    parseFloat(item.retailPrice) : null,
-                // Preserve reference change data
-                referenceChange: item.referenceChange,
-                referencedBy: item.referencedBy
-            }));
-            res.json(formattedItems);
+            res.json(items);
         } catch (err) {
             console.error('Error fetching items:', err);
             res.status(500).json({ 
@@ -38,12 +22,11 @@ module.exports = (itemModel) => {
     // Get item by ID
     router.get('/:id', async (req, res) => {
         try {
-            console.log('Fetching item details for ID:', req.params.id);
+            debug.log('Fetching item details for ID:', req.params.id);
             const result = await itemModel.getItemById(req.params.id);
             
-            console.log('Raw result from database:', JSON.stringify(result, null, 2));
-            
             if (!result) {
+                debug.error('Item not found:', req.params.id);
                 return res.status(404).json({ 
                     error: 'Item not found',
                     details: `No item exists with ID: ${req.params.id}`,
@@ -51,43 +34,10 @@ module.exports = (itemModel) => {
                 });
             }
 
-            // Format the response with the expected structure
-            const formattedResult = {
-                item: {
-                    itemID: result.itemID || '',
-                    hebrewDescription: result.hebrewDescription || '',
-                    englishDescription: result.englishDescription || '',
-                    importMarkup: parseFloat(result.importMarkup).toFixed(2) || '1.30',
-                    hsCode: result.hsCode || '',
-                    image: result.image || '',
-                    qtyInStock: parseInt(result.qtyInStock) || 0,
-                    soldThisYear: parseInt(result.soldThisYear) || 0,
-                    soldLastYear: parseInt(result.soldLastYear) || 0,
-                    retailPrice: result.retailPrice !== null && result.retailPrice !== undefined ? 
-                        parseFloat(result.retailPrice) : null,
-                    // Preserve reference change data
-                    referenceChange: result.referenceChange,
-                    referencedBy: result.referencedBy,
-                    lastUpdated: result.lastUpdated
-                },
-                // Include the arrays from the query
-                priceHistory: result.priceHistory,
-                supplierPrices: result.supplierPrices,
-                promotions: result.promotions
-            };
-
-            console.log('Formatted result:', JSON.stringify(formattedResult, null, 2));
-            console.log('Response data types:', {
-                referenceChange: typeof formattedResult.item.referenceChange,
-                referencedBy: typeof formattedResult.item.referencedBy,
-                priceHistory: typeof formattedResult.priceHistory,
-                supplierPrices: typeof formattedResult.supplierPrices,
-                promotions: typeof formattedResult.promotions
-            });
-
-            res.json(formattedResult);
+            debug.log('Item details fetched successfully:', result);
+            res.json(result);
         } catch (err) {
-            console.error('Error fetching item details:', err);
+            debug.error('Error fetching item details:', err);
             if (err.message === 'Item not found') {
                 res.status(404).json({ 
                     error: 'Item not found',
@@ -151,9 +101,20 @@ module.exports = (itemModel) => {
     // Update item
     router.put('/:id', imageUpload.single('image'), async (req, res) => {
         try {
+            // Get current item data first
+            const currentItem = await itemModel.getItemById(req.params.id);
+            if (!currentItem) {
+                return res.status(404).json({ 
+                    error: 'Item not found',
+                    details: `No item exists with ID: ${req.params.id}`,
+                    suggestion: 'Please verify the item ID and try again'
+                });
+            }
+
             // Validate retail price if provided
+            let retailPrice = null;
             if (req.body.retailPrice !== undefined && req.body.retailPrice !== '') {
-                const retailPrice = parseFloat(req.body.retailPrice);
+                retailPrice = parseFloat(req.body.retailPrice);
                 if (isNaN(retailPrice) || retailPrice <= 0) {
                     return res.status(400).json({
                         error: 'Invalid retail price',
@@ -163,16 +124,20 @@ module.exports = (itemModel) => {
                 }
             }
 
+            // Only update fields that are actually provided
             const updateData = {
-                hebrewDescription: req.body.hebrewDescription,
-                englishDescription: req.body.englishDescription,
-                importMarkup: parseFloat(req.body.importMarkup),
-                hsCode: req.body.hsCode,
-                qtyInStock: parseInt(req.body.qtyInStock),
-                soldThisYear: parseInt(req.body.soldThisYear),
-                soldLastYear: parseInt(req.body.soldLastYear),
-                retailPrice: req.body.retailPrice !== undefined && req.body.retailPrice !== '' ? 
-                    parseFloat(req.body.retailPrice) : null
+                hebrewDescription: req.body.hebrewDescription || currentItem.hebrewDescription,
+                englishDescription: req.body.englishDescription !== undefined ? req.body.englishDescription : currentItem.englishDescription,
+                importMarkup: req.body.importMarkup !== undefined && req.body.importMarkup !== '' ? 
+                    parseFloat(req.body.importMarkup) : currentItem.importMarkup,
+                hsCode: req.body.hsCode !== undefined ? req.body.hsCode : currentItem.hsCode,
+                qtyInStock: req.body.qtyInStock !== undefined && req.body.qtyInStock !== '' ? 
+                    parseInt(req.body.qtyInStock) : currentItem.qtyInStock,
+                soldThisYear: req.body.soldThisYear !== undefined && req.body.soldThisYear !== '' ? 
+                    parseInt(req.body.soldThisYear) : currentItem.soldThisYear,
+                soldLastYear: req.body.soldLastYear !== undefined && req.body.soldLastYear !== '' ? 
+                    parseInt(req.body.soldLastYear) : currentItem.soldLastYear,
+                retailPrice: retailPrice !== null ? retailPrice : currentItem.retailPrice
             };
 
             // Only include image if a new one was uploaded
@@ -180,38 +145,17 @@ module.exports = (itemModel) => {
                 updateData.image = req.file.filename;
             }
 
+            debug.log('Updating item with data:', {
+                itemId: req.params.id,
+                updateData
+            });
+
             await itemModel.updateItem(req.params.id, updateData);
             const updatedItem = await itemModel.getItemById(req.params.id);
             
-            if (!updatedItem) {
-                return res.status(404).json({ 
-                    error: 'Item not found',
-                    details: `No item exists with ID: ${req.params.id}`,
-                    suggestion: 'Please verify the item ID and try again'
-                });
-            }
-
-            // Format the response
-            const formattedItem = {
-                itemID: updatedItem.itemID,
-                hebrewDescription: updatedItem.hebrewDescription,
-                englishDescription: updatedItem.englishDescription || '',
-                importMarkup: parseFloat(updatedItem.importMarkup).toFixed(2),
-                hsCode: updatedItem.hsCode || '',
-                image: updatedItem.image || '',
-                qtyInStock: parseInt(updatedItem.qtyInStock) || 0,
-                soldThisYear: parseInt(updatedItem.soldThisYear) || 0,
-                soldLastYear: parseInt(updatedItem.soldLastYear) || 0,
-                retailPrice: updatedItem.retailPrice !== null && updatedItem.retailPrice !== undefined ? 
-                    parseFloat(updatedItem.retailPrice) : null,
-                // Preserve reference change data
-                referenceChange: updatedItem.referenceChange,
-                referencedBy: updatedItem.referencedBy
-            };
-
             res.json({ 
                 message: 'Item updated successfully',
-                item: formattedItem
+                item: updatedItem
             });
         } catch (err) {
             console.error('Error updating item:', err);
@@ -248,51 +192,46 @@ module.exports = (itemModel) => {
 
     // Add reference change
     router.post('/:id/reference', async (req, res) => {
-        const { newReferenceId, supplierId, notes } = req.body;
-
-        if (!newReferenceId) {
-            return res.status(400).json({
-                error: 'Missing reference ID',
-                details: 'New reference ID is required',
-                suggestion: 'Please provide a new reference ID'
-            });
-        }
-
         try {
+            const { newReferenceId, supplierId, notes } = req.body;
+            const originalItemId = req.params.id;
+
+            if (!newReferenceId) {
+                return res.status(400).json({
+                    error: 'Missing reference ID',
+                    details: 'New reference ID is required',
+                    suggestion: 'Please provide a new reference ID'
+                });
+            }
+
             // Clean the new reference ID by removing dots
             const cleanedNewReferenceId = newReferenceId.toString().trim().replace(/\./g, '');
-            await itemModel.addReferenceChange(req.params.id, cleanedNewReferenceId, supplierId, notes);
-            const updatedItem = await itemModel.getItemById(req.params.id);
+
+            // Prevent self-references
+            if (cleanedNewReferenceId === originalItemId) {
+                return res.status(400).json({
+                    error: 'Invalid reference',
+                    details: 'An item cannot reference itself',
+                    suggestion: 'Please provide a different reference ID'
+                });
+            }
+
+            await itemModel.addReferenceChange(originalItemId, cleanedNewReferenceId, supplierId, notes);
+            
+            // Get the updated item with reference information
+            const updatedItem = await itemModel.getItemById(originalItemId);
             
             if (!updatedItem) {
                 return res.status(404).json({ 
                     error: 'Item not found',
-                    details: `No item exists with ID: ${req.params.id}`,
+                    details: `No item exists with ID: ${originalItemId}`,
                     suggestion: 'Please verify the item ID and try again'
                 });
             }
 
-            // Format the response
-            const formattedItem = {
-                itemID: updatedItem.itemID,
-                hebrewDescription: updatedItem.hebrewDescription,
-                englishDescription: updatedItem.englishDescription || '',
-                importMarkup: parseFloat(updatedItem.importMarkup).toFixed(2),
-                hsCode: updatedItem.hsCode || '',
-                image: updatedItem.image || '',
-                qtyInStock: parseInt(updatedItem.qtyInStock) || 0,
-                soldThisYear: parseInt(updatedItem.soldThisYear) || 0,
-                soldLastYear: parseInt(updatedItem.soldLastYear) || 0,
-                retailPrice: updatedItem.retailPrice !== null && updatedItem.retailPrice !== undefined ? 
-                    parseFloat(updatedItem.retailPrice) : null,
-                // Preserve reference change data
-                referenceChange: updatedItem.referenceChange,
-                referencedBy: updatedItem.referencedBy
-            };
-
             res.json({ 
                 message: 'Reference change added successfully',
-                item: formattedItem
+                item: updatedItem
             });
         } catch (err) {
             console.error('Error adding reference change:', err);

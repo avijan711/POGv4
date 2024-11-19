@@ -1,6 +1,9 @@
-const sqlite3 = require('sqlite3').verbose();
+const sqlite3 = require('sqlite3');
 const path = require('path');
 const fs = require('fs');
+
+// Create verbose sqlite3 database instance
+const verbose = sqlite3.verbose();
 
 // Database connection pool
 let db = null;
@@ -11,7 +14,7 @@ async function initializeDatabase() {
         const schemaPath = path.join(__dirname, '..', 'schema.sql');
 
         // Create database connection with optimized settings
-        db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, async (err) => {
+        db = new verbose.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, async (err) => {
             if (err) {
                 console.error('Error connecting to database:', err);
                 reject(err);
@@ -19,16 +22,29 @@ async function initializeDatabase() {
             }
 
             console.log('Connected to SQLite database');
+            
+            // Debug: Log available methods on db instance
+            console.log('Available database methods:', Object.keys(db));
+            console.log('Is "all" method available?', typeof db.all === 'function');
+            console.log('Is "get" method available?', typeof db.get === 'function');
+            console.log('Is "run" method available?', typeof db.run === 'function');
 
             try {
-                // Configure database settings for better concurrency
+                // Configure database settings for better concurrency and enable JSON1 extension
                 await Promise.all([
+                    runStatement("SELECT json_group_array(1) as test;").catch(e => {
+                        if (e.message.includes('no such function')) {
+                            console.error('JSON1 extension not available. Some features may not work.');
+                        }
+                    }),
                     runStatement('PRAGMA journal_mode = WAL;'),           // Enable Write-Ahead Logging
                     runStatement('PRAGMA synchronous = NORMAL;'),         // Faster writes with reasonable safety
-                    runStatement('PRAGMA busy_timeout = 5000;'),          // Wait up to 5 seconds when database is locked
+                    runStatement('PRAGMA busy_timeout = 30000;'),         // Increased timeout to 30 seconds
                     runStatement('PRAGMA foreign_keys = ON;'),            // Enable foreign key constraints
-                    runStatement('PRAGMA cache_size = -2000;'),           // Use 2MB of cache
-                    runStatement('PRAGMA temp_store = MEMORY;')           // Store temp tables in memory
+                    runStatement('PRAGMA cache_size = -4000;'),           // Increased cache to 4MB
+                    runStatement('PRAGMA temp_store = MEMORY;'),          // Store temp tables in memory
+                    runStatement('PRAGMA locking_mode = NORMAL;'),        // Use less aggressive locking
+                    runStatement('PRAGMA mmap_size = 268435456;')         // Use memory mapping for faster reads (256MB)
                 ]);
 
                 // Read schema
@@ -135,12 +151,18 @@ async function initializeDatabase() {
 // Utility function to run SQL statements with proper error handling and retries
 const runStatement = (sql, params = []) => {
     return new Promise((resolve, reject) => {
-        const tryRun = (retries = 3) => {
+        const tryRun = (retries = 5) => {  // Increased retries to 5
             db.run(sql, params, (err) => {
                 if (err) {
+                    console.error('SQL Error:', err.message);
+                    console.error('SQL Statement:', sql);
+                    console.error('Parameters:', params);
+                    
                     if (err.code === 'SQLITE_BUSY' && retries > 0) {
-                        // If database is busy, wait and retry
-                        setTimeout(() => tryRun(retries - 1), 1000);
+                        // If database is busy, wait and retry with exponential backoff
+                        const delay = Math.min(1000 * Math.pow(2, 5 - retries), 8000);  // Max 8 second delay
+                        console.log(`Database busy, retrying in ${delay}ms... (${retries} retries left)`);
+                        setTimeout(() => tryRun(retries - 1), delay);
                     } else {
                         reject(err);
                     }

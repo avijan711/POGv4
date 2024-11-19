@@ -1,321 +1,271 @@
 const express = require('express');
-const path = require('path');
-const { handleUpload, handleBasicUpload, validateExcelFile, cleanupFile } = require('../middleware/upload');
-const ExcelProcessor = require('../utils/excelProcessor');
+const multer = require('multer');
+const ExcelProcessor = require('../utils/excelProcessor/index');
+const { getExcelColumns } = require('../utils/excelProcessor/columnReader');
+const InquiryModel = require('../models/inquiry');
+const InquiryItemModel = require('../models/inquiry/item');
+const Promotion = require('../models/promotion');
+const debug = require('../utils/debug');
+const { handleUpload, cleanupFile } = require('../middleware/upload');
 
-module.exports = function(inquiryModel) {
+function createRouter(db) {
     const router = express.Router();
+    const inquiryModel = new InquiryModel(db);
+    const inquiryItemModel = new InquiryItemModel(db);
 
-    // POST /api/inquiries/columns - Get Excel columns
-    router.post('/columns', handleBasicUpload, async (req, res) => {
+    // Get Excel columns for mapping
+    router.post('/columns', handleUpload, async (req, res, next) => {
         try {
-            console.log('Reading columns from file:', req.file.path);
-            const columns = ExcelProcessor.getExcelColumns(req.file.path);
-            console.log('Found columns:', columns);
-
-            // Clean up the uploaded file
-            cleanupFile(req.file.path);
-
-            res.json({ columns });
-        } catch (error) {
-            console.error('Error reading Excel columns:', error);
-            
-            // Clean up file if it exists
-            if (req.file) {
-                cleanupFile(req.file.path);
-            }
-
-            res.status(500).json({
-                error: 'Failed to read Excel columns',
-                details: error.message,
-                suggestion: 'Please ensure your file is a valid Excel file with headers in the first row'
-            });
-        }
-    });
-
-    // POST /api/inquiries/upload
-    router.post('/upload', handleUpload, validateExcelFile, async (req, res) => {
-        try {
-            const { file, body } = req;
-            console.log('\n=== Excel Upload Debug ===');
-            console.log('Upload request received:', { 
-                filePath: file.path, 
-                fileName: file.originalname,
-                inquiryNumber: body.inquiryNumber,
-                fileSize: file.size
-            });
-
-            // Parse column mapping
-            let columnMapping;
-            try {
-                columnMapping = JSON.parse(body.columnMapping);
-                console.log('\nColumn Mapping:', columnMapping);
-            } catch (error) {
-                console.error('Error parsing column mapping:', error);
-                throw new Error(`Invalid column mapping format: ${error.message}`);
-            }
-
-            // Process Excel data
-            let excelData;
-            let headers;
-            try {
-                console.log('\nReading Excel file...');
-                const result = ExcelProcessor.readExcelFile(file.path);
-                excelData = result.data;
-                headers = result.headers;
-                
-                console.log('Headers found:', headers);
-                console.log('Number of rows:', excelData.length);
-                console.log('First row sample:', JSON.stringify(excelData[0], null, 2));
-
-                // Validate the column mapping
-                ExcelProcessor.validateColumnMapping(headers, columnMapping);
-            } catch (error) {
-                console.error('Error reading Excel file:', error);
-                throw new Error(`Failed to read Excel file: ${error.message}`);
-            }
-
-            // Process items
-            console.log('\nProcessing items...');
-            const processedItems = excelData.map((row, index) => {
-                try {
-                    // Log raw values before processing
-                    console.log(`\nProcessing row ${index + 1}:`, {
-                        itemId: row[columnMapping.itemID],
-                        retailPrice: row[columnMapping.retailPrice],
-                        requestedQty: row[columnMapping.requestedQty],
-                        importMarkup: row[columnMapping.importMarkup]
-                    });
-
-                    // Validate required fields
-                    if (!row[columnMapping.itemID]) {
-                        throw new Error('Item ID is required');
-                    }
-                    if (!row[columnMapping.hebrewDescription]) {
-                        throw new Error('Hebrew Description is required');
-                    }
-                    if (!row[columnMapping.requestedQty] && row[columnMapping.requestedQty] !== 0) {
-                        throw new Error('Requested Quantity is required');
-                    }
-
-                    // Process retail price with proper type conversion
-                    let retailPrice = null;
-                    if (columnMapping.retailPrice && row[columnMapping.retailPrice] !== undefined && row[columnMapping.retailPrice] !== '') {
-                        const rawPrice = row[columnMapping.retailPrice];
-                        if (typeof rawPrice === 'number') {
-                            retailPrice = rawPrice;
-                        } else {
-                            // Remove any non-numeric characters except decimal point and minus
-                            const cleanPrice = rawPrice.toString().replace(/[^\d.-]/g, '');
-                            const parsedPrice = parseFloat(cleanPrice);
-                            if (!isNaN(parsedPrice)) {
-                                retailPrice = parsedPrice;
-                            }
-                        }
-                    }
-
-                    // Map Excel columns to item fields with type conversion logging
-                    const item = {
-                        itemId: String(row[columnMapping.itemID]).trim().replace(/\./g, ''),
-                        hebrewDescription: String(row[columnMapping.hebrewDescription]).trim(),
-                        englishDescription: row[columnMapping.englishDescription] ? String(row[columnMapping.englishDescription]).trim() : '',
-                        importMarkup: row[columnMapping.importMarkup] ? Number(row[columnMapping.importMarkup]) : 1.3,
-                        hsCode: row[columnMapping.hsCode] ? String(row[columnMapping.hsCode]).trim() : '',
-                        qtyInStock: row[columnMapping.qtyInStock] ? Number(row[columnMapping.qtyInStock]) : 0,
-                        retailPrice: retailPrice,
-                        soldThisYear: row[columnMapping.soldThisYear] ? Number(row[columnMapping.soldThisYear]) : 0,
-                        soldLastYear: row[columnMapping.soldLastYear] ? Number(row[columnMapping.soldLastYear]) : 0,
-                        requestedQty: Number(row[columnMapping.requestedQty]) || 0,
-                        newReferenceId: row[columnMapping.newReferenceID] ? String(row[columnMapping.newReferenceID]).trim().replace(/\./g, '') : null,
-                        referenceNotes: row[columnMapping.referenceNotes] ? String(row[columnMapping.referenceNotes]).trim() : null
-                    };
-
-                    // Log processed item for verification
-                    console.log('Processed item:', {
-                        itemId: item.itemId,
-                        retailPrice: item.retailPrice,
-                        requestedQty: item.requestedQty,
-                        importMarkup: item.importMarkup
-                    });
-
-                    // Validate numeric fields
-                    const numericValidation = {
-                        importMarkup: { value: item.importMarkup, min: 1, max: 2, default: 1.3 },
-                        qtyInStock: { value: item.qtyInStock, min: 0, default: 0 },
-                        soldThisYear: { value: item.soldThisYear, min: 0, default: 0 },
-                        soldLastYear: { value: item.soldLastYear, min: 0, default: 0 },
-                        requestedQty: { value: item.requestedQty, min: 0, default: 0 }
-                    };
-
-                    for (const [field, validation] of Object.entries(numericValidation)) {
-                        if (isNaN(validation.value) || validation.value < validation.min || 
-                            (validation.max && validation.value > validation.max)) {
-                            console.log(`Invalid ${field}:`, validation.value, 'using default:', validation.default);
-                            item[field] = validation.default;
-                        }
-                    }
-
-                    // Additional validation for retail price
-                    if (item.retailPrice !== null && (isNaN(item.retailPrice) || item.retailPrice < 0)) {
-                        console.log('Invalid retail price:', item.retailPrice, 'setting to null');
-                        item.retailPrice = null;
-                    }
-
-                    return item;
-                } catch (error) {
-                    console.error(`Error processing row ${index + 1}:`, error);
-                    throw new Error(`Error in row ${index + 2}: ${error.message}`);
-                }
-            });
-
-            // Create inquiry in database
-            console.log('\nSaving to database:', {
-                inquiryNumber: body.inquiryNumber,
-                itemCount: processedItems.length,
-                items: processedItems.map(item => ({
-                    itemId: item.itemId,
-                    retailPrice: item.retailPrice,
-                    requestedQty: item.requestedQty
-                }))
-            });
-
-            let inquiryId;
-            try {
-                inquiryId = await inquiryModel.createInquiry(body.inquiryNumber, processedItems);
-                console.log('Inquiry created with ID:', inquiryId);
-            } catch (error) {
-                console.error('Database error creating inquiry:', error);
-                throw new Error(`Database error: ${error.message}`);
-            }
-
-            // Clean up uploaded file
-            cleanupFile(file.path);
-            console.log('Cleaned up file:', file.path);
-            console.log('=== End Excel Upload Debug ===\n');
-
-            res.status(200).json({
-                message: 'File processed successfully',
-                inquiryId: inquiryId
-            });
-
-        } catch (error) {
-            console.error('Error processing file:', error);
-            
-            // Clean up file if it exists
-            if (req.file) {
-                cleanupFile(req.file.path);
-                console.log('Cleaned up file:', req.file.path);
-            }
-
-            // Send detailed error response
-            res.status(500).json({
-                error: 'Failed to process file',
-                details: error.message,
-                suggestion: error.suggestion || 'Please ensure your file matches the sample format and all required fields are present'
-            });
-        }
-    });
-
-    // GET /api/inquiries
-    router.get('/', async (req, res) => {
-        try {
-            const { status } = req.query;
-            const inquiries = await inquiryModel.getAllInquiries(status);
-            res.json(inquiries);
-        } catch (error) {
-            console.error('Error fetching inquiries:', error);
-            res.status(500).json({ error: 'Failed to fetch inquiries' });
-        }
-    });
-
-    // GET /api/inquiries/:id
-    router.get('/:id', async (req, res) => {
-        try {
-            const inquiryId = req.params.id;
-            const result = await inquiryModel.getInquiryById(inquiryId);
-            
-            if (result && result.inquiry && result.items) {
-                return res.json({
-                    inquiry: {
-                        ...result.inquiry,
-                        status: result.inquiry.status || 'New'
-                    },
-                    items: result.items
+            if (!req.file) {
+                return res.status(400).json({
+                    error: 'No file uploaded',
+                    details: 'Please select a file to upload',
+                    suggestion: 'Make sure you have selected an Excel file'
                 });
             }
 
-            res.status(404).json({ error: 'Inquiry not found' });
-        } catch (error) {
-            console.error('Error fetching inquiry details:', error);
-            res.status(500).json({ error: 'Failed to fetch inquiry details' });
+            debug.log('Reading columns from file:', req.file.path);
+            const columns = await getExcelColumns(req.file.path);
+            
+            // Clean up the file after reading columns
+            cleanupFile(req.file.path);
+            
+            res.json({ columns });
+        } catch (err) {
+            debug.error('Error reading columns:', err);
+            cleanupFile(req.file?.path);
+            next(err);
         }
     });
 
-    // PUT /api/inquiries/:id/status
-    router.put('/:id/status', async (req, res) => {
+    // Upload Excel file
+    router.post('/upload', handleUpload, async (req, res, next) => {
         try {
-            const inquiryId = req.params.id;
-            const { status } = req.body;
-
-            if (!status) {
-                return res.status(400).json({ error: 'Status is required' });
+            if (!req.file) {
+                return res.status(400).json({
+                    error: 'No file uploaded',
+                    details: 'Please select a file to upload',
+                    suggestion: 'Make sure you have selected an Excel file'
+                });
             }
 
-            // Validate status
-            const validStatuses = ['new', 'in_comparison', 'completed'];
-            if (!validStatuses.includes(status.toLowerCase())) {
-                return res.status(400).json({ error: 'Invalid status' });
+            debug.log('Upload request:', {
+                file: req.file,
+                body: req.body
+            });
+
+            const { inquiryNumber, columnMapping } = req.body;
+            if (!inquiryNumber) {
+                return res.status(400).json({
+                    error: 'Missing inquiry number',
+                    details: 'An inquiry number is required',
+                    suggestion: 'Please provide a valid inquiry number'
+                });
             }
 
-            await inquiryModel.updateInquiryStatus(inquiryId, status);
-            res.json({ message: 'Status updated successfully' });
-        } catch (error) {
-            console.error('Error updating status:', error);
-            if (error.message === 'Inquiry not found') {
-                res.status(404).json({ error: 'Inquiry not found' });
-            } else {
-                res.status(500).json({ error: 'Failed to update status' });
+            if (!columnMapping) {
+                return res.status(400).json({
+                    error: 'Missing column mapping',
+                    details: 'Column mapping is required',
+                    suggestion: 'Please map the Excel columns to the required fields'
+                });
             }
+
+            let parsedMapping;
+            try {
+                parsedMapping = JSON.parse(columnMapping);
+            } catch (err) {
+                debug.error('Error parsing column mapping:', err);
+                return res.status(400).json({
+                    error: 'Invalid column mapping format',
+                    details: 'The column mapping could not be parsed',
+                    suggestion: 'Please ensure the column mapping is valid JSON'
+                });
+            }
+            
+            // Validate the mapping
+            ExcelProcessor.validateMapping(parsedMapping, ['itemId', 'hebrewDescription', 'requestedQuantity']);
+            
+            // Process the Excel file using the processInquiry method, passing the db connection
+            const items = await ExcelProcessor.processInquiry(req.file.path, parsedMapping, db);
+            
+            debug.log('Processed items:', {
+                count: items.length,
+                sample: items[0]
+            });
+
+            // Create the inquiry
+            const inquiry = await inquiryModel.createInquiry({
+                inquiryNumber,
+                items
+            });
+
+            // Clean up the uploaded file after processing
+            cleanupFile(req.file.path);
+
+            res.json({
+                message: 'File processed successfully',
+                inquiryId: inquiry.id,
+                itemCount: items.length
+            });
+        } catch (err) {
+            debug.error('Error processing file:', err);
+            cleanupFile(req.file?.path);
+            
+            // Send appropriate error response
+            if (err.message.includes('Missing required column mappings')) {
+                return res.status(400).json({
+                    error: 'Invalid column mapping',
+                    details: err.message,
+                    suggestion: 'Please ensure all required columns are mapped'
+                });
+            }
+            
+            if (err.message.includes('validation failed')) {
+                return res.status(400).json({
+                    error: 'Data validation failed',
+                    details: err.message,
+                    suggestion: 'Please check your Excel file data'
+                });
+            }
+
+            next(err);
         }
     });
 
-    // PUT /api/inquiry-items/:id/quantity
-    router.put('/inquiry-items/:id/quantity', async (req, res) => {
+    // Get all inquiries
+    router.get('/', async (req, res, next) => {
         try {
-            const inquiryItemId = req.params.id;
-            const { requestedQty } = req.body;
-
-            if (requestedQty === undefined) {
-                return res.status(400).json({ error: 'Requested quantity is required' });
-            }
-
-            await inquiryModel.updateInquiryItemQuantity(inquiryItemId, requestedQty);
-            res.json({ message: 'Quantity updated successfully' });
-        } catch (error) {
-            console.error('Error updating quantity:', error);
-            if (error.message === 'Inquiry item not found') {
-                res.status(404).json({ error: 'Inquiry item not found' });
-            } else {
-                res.status(500).json({ error: 'Failed to update quantity' });
-            }
+            const inquiries = await inquiryModel.getAllInquiries();
+            res.json(inquiries);
+        } catch (err) {
+            next(err);
         }
     });
 
-    // DELETE /api/inquiries/:id
-    router.delete('/:id', async (req, res) => {
+    // Get specific inquiry
+    router.get('/:id', async (req, res, next) => {
         try {
-            const inquiryId = req.params.id;
-            await inquiryModel.deleteInquiry(inquiryId);
+            const inquiry = await inquiryModel.getInquiryById(req.params.id);
+            if (!inquiry) {
+                return res.status(404).json({ error: 'Inquiry not found' });
+            }
+            res.json(inquiry);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    // Create new inquiry
+    router.post('/', async (req, res, next) => {
+        try {
+            const inquiry = await inquiryModel.createInquiry(req.body);
+            res.status(201).json(inquiry);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    // Update inquiry
+    router.put('/:id', async (req, res, next) => {
+        try {
+            const inquiry = await inquiryModel.updateInquiry(req.params.id, req.body);
+            if (!inquiry) {
+                return res.status(404).json({ error: 'Inquiry not found' });
+            }
+            res.json(inquiry);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    // Delete inquiry
+    router.delete('/:id', async (req, res, next) => {
+        try {
+            const result = await inquiryModel.deleteInquiry(req.params.id);
+            if (!result) {
+                return res.status(404).json({ error: 'Inquiry not found' });
+            }
             res.json({ message: 'Inquiry deleted successfully' });
-        } catch (error) {
-            console.error('Error deleting inquiry:', error);
-            if (error.message === 'Inquiry not found') {
-                res.status(404).json({ error: 'Inquiry not found' });
-            } else {
-                res.status(500).json({ error: 'Failed to delete inquiry' });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    // Update inquiry item quantity
+    router.put('/inquiry-items/:id/quantity', async (req, res, next) => {
+        try {
+            debug.log('Updating quantity:', {
+                itemId: req.params.id,
+                requestedQty: req.body.requestedQty
+            });
+
+            const { requestedQty } = req.body;
+            if (requestedQty === undefined || requestedQty === null) {
+                return res.status(400).json({
+                    error: 'Invalid quantity',
+                    details: 'Quantity must be provided'
+                });
             }
+
+            const qty = parseInt(requestedQty);
+            if (isNaN(qty) || qty < 0) {
+                return res.status(400).json({
+                    error: 'Invalid quantity',
+                    details: 'Quantity must be a non-negative number'
+                });
+            }
+
+            try {
+                // Update the item using updateInquiryItem instead of updateQuantity
+                const result = await inquiryItemModel.updateInquiryItem(req.params.id, {
+                    requestedQty: qty
+                });
+
+                if (result) {
+                    res.json({ message: 'Quantity updated successfully' });
+                }
+            } catch (error) {
+                if (error.message.includes('not found')) {
+                    return res.status(404).json({ 
+                        error: 'Item not found',
+                        details: error.message
+                    });
+                }
+                throw error;
+            }
+        } catch (err) {
+            debug.error('Error updating quantity:', err);
+            next(err);
+        }
+    });
+
+    // Delete inquiry item
+    router.delete('/inquiry-items/:id', async (req, res, next) => {
+        try {
+            debug.log('Deleting item:', req.params.id);
+            
+            try {
+                const result = await inquiryItemModel.deleteItem(req.params.id);
+                if (result) {
+                    res.json({ message: 'Item deleted successfully' });
+                }
+            } catch (error) {
+                if (error.message.includes('not found')) {
+                    return res.status(404).json({ 
+                        error: 'Item not found',
+                        details: error.message
+                    });
+                }
+                throw error;
+            }
+        } catch (err) {
+            debug.error('Error deleting item:', err);
+            next(err);
         }
     });
 
     return router;
-};
+}
+
+module.exports = createRouter;
