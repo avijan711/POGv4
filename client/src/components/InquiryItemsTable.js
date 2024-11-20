@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogActions,
   Tooltip,
+  Paper,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -24,12 +25,13 @@ import {
   Delete as DeleteIcon,
   ArrowUpward as ArrowUpwardIcon,
   ArrowDownward as ArrowDownwardIcon,
-  Close as CloseIcon,
+  LocalOffer as LocalOfferIcon,
   ContentCopy as ContentCopyIcon,
-  SwapHoriz as SwapHorizIcon,
+  AttachMoney as AttachMoneyIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
+import ReferenceChip from './InquiryItemsTable/ReferenceChip';
 
 function SortableTableCell({ field, children, align = 'left', currentSort, onSort }) {
   const isCurrentField = currentSort.field === field;
@@ -41,8 +43,10 @@ function SortableTableCell({ field, children, align = 'left', currentSort, onSor
       sx={{
         cursor: 'pointer',
         userSelect: 'none',
+        backgroundColor: '#f5f5f5',
+        fontWeight: 'bold',
         '&:hover': {
-          backgroundColor: 'rgba(0, 0, 0, 0.04)',
+          backgroundColor: 'rgba(0, 0, 0, 0.08)',
         },
         position: 'relative',
         paddingRight: isCurrentField ? '24px' : '16px',
@@ -65,6 +69,21 @@ function SortableTableCell({ field, children, align = 'left', currentSort, onSor
         </span>
       )}
     </TableCell>
+  );
+}
+
+function SupplierPriceChip({ supplierPrice }) {
+  return (
+    <Tooltip title={`${supplierPrice.supplierName} - ${new Date(supplierPrice.responseDate).toLocaleDateString()}`}>
+      <Chip
+        icon={<AttachMoneyIcon />}
+        label={`₪${supplierPrice.priceQuoted}`}
+        color={supplierPrice.isPromotion ? "secondary" : "primary"}
+        size="small"
+        variant="outlined"
+        sx={{ margin: '2px' }}
+      />
+    </Tooltip>
   );
 }
 
@@ -133,29 +152,21 @@ function InquiryItemsTable({
     }
   };
 
-  const getReferenceTooltip = (referenceChange) => {
-    if (!referenceChange) return '';
-    if (referenceChange.source === 'inquiry_item') {
-      return 'Reference from inquiry';
-    }
-    return `Changed by ${referenceChange.supplierName || 'user'}`;
-  };
-
   // Sort items by Excel row index if no other sort is applied
   const sortedItems = [...items].sort((a, b) => {
     if (!sortConfig.field || sortConfig.field === 'excelRowIndex') {
       return (a.excelRowIndex || 0) - (b.excelRowIndex || 0);
     }
-    return 0; // Let the existing sort logic handle other cases
+    return 0;
   });
 
   return (
-    <>
+    <Paper elevation={2} sx={{ margin: 2, padding: 2 }}>
       <TableContainer>
         <Table sx={{ minWidth: 650 }} aria-label="inquiry items table">
           <TableHead>
             <TableRow>
-              <TableCell>#</TableCell>
+              <TableCell sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>#</TableCell>
               <SortableTableCell
                 field="itemID"
                 currentSort={sortConfig}
@@ -178,6 +189,36 @@ function InquiryItemsTable({
                 English Description
               </SortableTableCell>
               <SortableTableCell
+                field="requestedQty"
+                align="right"
+                currentSort={sortConfig}
+                onSort={onSort}
+              >
+                Requested Qty
+              </SortableTableCell>
+              <SortableTableCell
+                field="qtyInStock"
+                align="right"
+                currentSort={sortConfig}
+                onSort={onSort}
+              >
+                Stock
+              </SortableTableCell>
+              <SortableTableCell
+                field="retailPrice"
+                align="right"
+                currentSort={sortConfig}
+                onSort={onSort}
+              >
+                Retail Price (ILS)
+              </SortableTableCell>
+              <TableCell align="right" sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
+                Supplier Prices
+              </TableCell>
+              <TableCell align="right" sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
+                Promotion Price
+              </TableCell>
+              <SortableTableCell
                 field="importMarkup"
                 align="right"
                 currentSort={sortConfig}
@@ -192,218 +233,170 @@ function InquiryItemsTable({
               >
                 HS Code
               </SortableTableCell>
-              <SortableTableCell
-                field="qtyInStock"
-                align="right"
-                currentSort={sortConfig}
-                onSort={onSort}
-              >
-                Stock
-              </SortableTableCell>
-              <SortableTableCell
-                field="requestedQty"
-                align="right"
-                currentSort={sortConfig}
-                onSort={onSort}
-              >
-                Requested Qty
-              </SortableTableCell>
-              <SortableTableCell
-                field="retailPrice"
-                align="right"
-                currentSort={sortConfig}
-                onSort={onSort}
-              >
-                Retail Price (ILS)
-              </SortableTableCell>
-              <TableCell>Reference</TableCell>
-              <TableCell align="center">Actions</TableCell>
+              <TableCell align="center" sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
+                Reference
+              </TableCell>
+              <TableCell align="center" sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
+                Actions
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {sortedItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} align="center">
-                  No items found
+                <TableCell colSpan={13} align="center">
+                  <Typography variant="subtitle1" color="textSecondary">
+                    No items found
+                  </Typography>
                 </TableCell>
               </TableRow>
             ) : (
-              sortedItems.map((item, index) => (
-                <TableRow 
-                  key={item.inquiryItemID}
-                  onClick={() => {
-                    if (editingQty !== item.inquiryItemID) {
-                      onViewDetails(item);
-                    }
-                  }}
-                  sx={{ 
-                    backgroundColor: item.isDuplicate 
-                      ? 'rgba(255, 152, 0, 0.1)'
-                      : item.hasReferenceChange && item.referenceChange
-                        ? 'rgba(255, 243, 224, 0.9)'
-                        : item.isReferencedBy
-                          ? '#e8f5e9'
-                          : 'inherit',
-                    '&:hover': { 
-                      backgroundColor: item.isDuplicate
-                        ? 'rgba(255, 152, 0, 0.2)'
+              sortedItems.map((item, index) => {
+                const supplierPrices = item.supplier_prices ? JSON.parse(item.supplier_prices) : [];
+                
+                return (
+                  <TableRow 
+                    key={item.inquiryItemID}
+                    onClick={() => {
+                      if (editingQty !== item.inquiryItemID) {
+                        onViewDetails(item);
+                      }
+                    }}
+                    sx={{ 
+                      backgroundColor: item.isDuplicate 
+                        ? 'rgba(255, 152, 0, 0.1)'
                         : item.hasReferenceChange && item.referenceChange
-                          ? 'rgba(255, 243, 224, 1)' 
+                          ? 'rgba(255, 243, 224, 0.9)'
                           : item.isReferencedBy
-                            ? '#c8e6c9'
-                            : 'rgba(0, 0, 0, 0.04)' 
-                    },
-                    cursor: editingQty === item.inquiryItemID ? 'default' : 'pointer',
-                  }}
-                >
-                  <TableCell>{(item.excelRowIndex || index) + 1}</TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {item.itemID}
-                      {item.isDuplicate && (
-                        <Tooltip title={`Duplicate of row ${(item.originalRowIndex || 0) + 1}`}>
-                          <ContentCopyIcon color="warning" fontSize="small" />
-                        </Tooltip>
-                      )}
-                    </Box>
-                  </TableCell>
-                  <TableCell>{item.hebrewDescription}</TableCell>
-                  <TableCell>{item.englishDescription}</TableCell>
-                  <TableCell align="right">{Number(item.importMarkup).toFixed(2)}</TableCell>
-                  <TableCell>{item.hsCode}</TableCell>
-                  <TableCell align="right">{item.qtyInStock || 0}</TableCell>
-                  <TableCell 
-                    align="right" 
-                    onClick={(e) => e.stopPropagation()}
+                            ? '#e8f5e9'
+                            : item.promotion_id
+                              ? 'rgba(156, 39, 176, 0.1)'
+                              : 'inherit',
+                      '&:hover': { 
+                        backgroundColor: item.isDuplicate
+                          ? 'rgba(255, 152, 0, 0.2)'
+                          : item.hasReferenceChange && item.referenceChange
+                            ? 'rgba(255, 243, 224, 1)' 
+                            : item.isReferencedBy
+                              ? '#c8e6c9'
+                              : item.promotion_id
+                                ? 'rgba(156, 39, 176, 0.2)'
+                                : 'rgba(0, 0, 0, 0.04)' 
+                      },
+                      cursor: editingQty === item.inquiryItemID ? 'default' : 'pointer',
+                    }}
                   >
-                    {editingQty === item.inquiryItemID ? (
-                      <TextField
-                        type="number"
-                        size="small"
-                        value={item.requestedQty || 0}
-                        onChange={(e) => handleQtyChange(item, e.target.value)}
-                        onBlur={() => handleQtyBlur(item)}
-                        onKeyPress={(e) => handleQtyKeyPress(e, item)}
-                        autoFocus
-                        sx={{ width: '80px' }}
-                      />
-                    ) : (
-                      <Box 
-                        onClick={() => onEditQty(item.inquiryItemID)}
-                        sx={{ cursor: 'text' }}
-                      >
-                        {item.requestedQty || 0}
-                      </Box>
-                    )}
-                  </TableCell>
-                  <TableCell align="right">
-                    {item.retailPrice ? (
-                      `₪${item.retailPrice}`
-                    ) : (
-                      <Typography variant="body2" color="error">
-                        No Price
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {item.hasReferenceChange && item.referenceChange && (
+                    <TableCell>{(item.excelRowIndex || index) + 1}</TableCell>
+                    <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Tooltip title={getReferenceTooltip(item.referenceChange)}>
-                          <Chip
-                            label={`→ ${item.referenceChange.newReferenceID}`}
-                            color="warning"
-                            variant="outlined"
-                            size="small"
-                            onDelete={item.referenceChange.source !== 'inquiry_item' ? (e) => {
-                              e.stopPropagation();
-                              handleDeleteClick(item, 'reference');
-                            } : undefined}
-                            deleteIcon={item.referenceChange.source !== 'inquiry_item' ? (
-                              <IconButton size="small">
-                                <CloseIcon fontSize="small" />
-                              </IconButton>
-                            ) : undefined}
-                            icon={<SwapHorizIcon />}
-                          />
-                        </Tooltip>
-                        <Typography variant="caption" display="block">
-                          {item.referenceChange.source === 'inquiry_item' 
-                            ? 'Reference from inquiry'
-                            : getChangeSource(item.referenceChange)}
-                        </Typography>
+                        {item.itemID}
+                        {item.isDuplicate && (
+                          <Tooltip title={`Duplicate of row ${(item.originalRowIndex || 0) + 1}`}>
+                            <ContentCopyIcon color="warning" fontSize="small" />
+                          </Tooltip>
+                        )}
                       </Box>
-                    )}
-                    {item.isReferencedBy && item.referencingItems && (
-                      <Box sx={{ mt: item.hasReferenceChange ? 1 : 0 }}>
-                        {item.referencingItems.map((refItem, index) => (
-                          <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: index > 0 ? 1 : 0 }}>
-                            {refItem.referenceChange && (
-                              <Tooltip title={refItem.referenceChange.source === 'inquiry_item' 
-                                ? 'Reference from inquiry'
-                                : `Changed by ${refItem.referenceChange.supplierName || 'user'}`}>
-                                <Chip
-                                  label={`← ${refItem.itemID}`}
-                                  color="success"
-                                  variant="outlined"
-                                  size="small"
-                                  icon={<SwapHorizIcon />}
-                                />
-                              </Tooltip>
-                            )}
-                            <Typography variant="caption" display="block">
-                              {refItem.referenceChange?.source === 'inquiry_item'
-                                ? 'Reference from inquiry'
-                                : getChangeSource(refItem.referenceChange)}
-                            </Typography>
-                          </Box>
+                    </TableCell>
+                    <TableCell>{item.hebrewDescription}</TableCell>
+                    <TableCell>{item.englishDescription}</TableCell>
+                    <TableCell 
+                      align="right" 
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {editingQty === item.inquiryItemID ? (
+                        <TextField
+                          type="number"
+                          size="small"
+                          value={item.requestedQty || 0}
+                          onChange={(e) => handleQtyChange(item, e.target.value)}
+                          onBlur={() => handleQtyBlur(item)}
+                          onKeyPress={(e) => handleQtyKeyPress(e, item)}
+                          autoFocus
+                          sx={{ width: '80px' }}
+                        />
+                      ) : (
+                        <Box 
+                          onClick={() => onEditQty(item.inquiryItemID)}
+                          sx={{ cursor: 'text' }}
+                        >
+                          {item.requestedQty || 0}
+                        </Box>
+                      )}
+                    </TableCell>
+                    <TableCell align="right">{item.qtyInStock || 0}</TableCell>
+                    <TableCell align="right">₪{Number(item.retailPrice).toFixed(2)}</TableCell>
+                    <TableCell align="right">
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 0.5 }}>
+                        {supplierPrices.map((price, idx) => (
+                          <SupplierPriceChip key={idx} supplierPrice={price} />
                         ))}
                       </Box>
-                    )}
-                  </TableCell>
-                  <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
-                      <Button
-                        variant="contained"
-                        size="small"
-                        color="primary"
-                        onClick={() => onViewDetails(item)}
-                        startIcon={<VisibilityIcon />}
-                        sx={{ 
-                          minWidth: '100px',
-                          padding: '8px 16px',
-                          '&:hover': { 
-                            backgroundColor: 'primary.dark',
-                            transform: 'scale(1.02)',
-                          },
-                          transition: 'all 0.2s',
-                          zIndex: 1,
-                        }}
-                      >
-                        View
-                      </Button>
-                      <IconButton 
-                        size="small" 
-                        onClick={() => onEditItem(item)}
-                        sx={{ '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.1)' } }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton 
-                        size="small" 
-                        onClick={() => onDeleteItem(item)}
-                        sx={{ 
-                          '&:hover': { 
-                            backgroundColor: 'rgba(211, 47, 47, 0.1)',
-                            color: 'error.main',
-                          },
-                        }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    <TableCell align="right">
+                      {item.promotion_id && (
+                        <Tooltip title={`${item.promotion_name} (Valid: ${new Date(item.promotion_start_date).toLocaleDateString()} - ${new Date(item.promotion_end_date).toLocaleDateString()})`}>
+                          <Chip
+                            icon={<LocalOfferIcon />}
+                            label={`₪${item.promotion_price}`}
+                            color="secondary"
+                            size="small"
+                            variant="outlined"
+                          />
+                        </Tooltip>
+                      )}
+                    </TableCell>
+                    <TableCell align="right">{Number(item.importMarkup).toFixed(2)}</TableCell>
+                    <TableCell>{item.hsCode}</TableCell>
+                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                      <ReferenceChip
+                        referenceChange={item.referenceChange}
+                        onDelete={() => handleDeleteClick(item, 'reference')}
+                      />
+                    </TableCell>
+                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          color="primary"
+                          onClick={() => onViewDetails(item)}
+                          startIcon={<VisibilityIcon />}
+                          sx={{ 
+                            minWidth: '100px',
+                            padding: '4px 8px',
+                            '&:hover': { 
+                              backgroundColor: 'primary.dark',
+                              transform: 'scale(1.02)',
+                            },
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          View
+                        </Button>
+                        <IconButton 
+                          size="small" 
+                          onClick={() => onEditItem(item)}
+                          sx={{ '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.1)' } }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton 
+                          size="small" 
+                          onClick={() => onDeleteItem(item)}
+                          sx={{ 
+                            '&:hover': { 
+                              backgroundColor: 'rgba(211, 47, 47, 0.1)',
+                              color: 'error.main',
+                            },
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -441,7 +434,7 @@ function InquiryItemsTable({
           </Button>
         </DialogActions>
       </Dialog>
-    </>
+    </Paper>
   );
 }
 

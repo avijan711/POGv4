@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Button,
     Dialog,
@@ -15,21 +15,26 @@ import {
     CircularProgress,
     Stepper,
     Step,
-    StepLabel
+    StepLabel,
+    Paper
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import axios from 'axios';
 import { API_BASE_URL } from '../config';
 
 const steps = ['Select File & Supplier', 'Map Columns', 'Upload'];
 
 const defaultColumnMapping = {
-    itemID: '',
-    newReferenceID: '',
-    price: '',
-    notes: '',
-    hsCode: '',
-    englishDescription: ''
+    ItemID: '',
+    NewReferenceID: '',
+    Price: '',
+    Notes: '',
+    HSCode: '',
+    EnglishDescription: ''
 };
+
+// Required fields that must always be included in the mapping
+const requiredFields = ['ItemID'];
 
 const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) => {
     const [activeStep, setActiveStep] = useState(0);
@@ -44,37 +49,35 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
     const [tempFile, setTempFile] = useState(null);
     const [columnMapping, setColumnMapping] = useState(defaultColumnMapping);
 
-    // Validate required props
-    React.useEffect(() => {
-        if (!inquiryId) {
-            console.error('InquiryId is required for SupplierResponseUpload');
-            setError('Missing inquiry ID');
-            setErrorSuggestion('Please ensure you are uploading a response for a valid inquiry');
-        }
-    }, [inquiryId]);
-
-    React.useEffect(() => {
+    useEffect(() => {
         if (open) {
             fetchSuppliers();
+            setActiveStep(0);
+            setSelectedFile(null);
+            setSelectedSupplier('');
+            setError(null);
+            setErrorSuggestion(null);
+            setColumnMapping(defaultColumnMapping);
         }
     }, [open]);
 
     const fetchSuppliers = async () => {
         try {
             setLoading(true);
-            const response = await fetch(`${API_BASE_URL}/api/suppliers`);
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to fetch suppliers');
+            const response = await axios.get(`${API_BASE_URL}/api/suppliers`);
+            const data = response.data;
+            if (Array.isArray(data)) {
+                setSuppliers(data.map(supplier => ({
+                    id: supplier.SupplierID,
+                    name: supplier.Name
+                })));
+            } else {
+                throw new Error('Invalid supplier data format');
             }
-            const data = await response.json();
-            setSuppliers(data || []);
-            setError(null);
-            setErrorSuggestion(null);
         } catch (error) {
             console.error('Error fetching suppliers:', error);
-            setSuppliers([]);
-            setError('Failed to load suppliers: ' + error.message);
+            setError('Failed to load suppliers');
+            setErrorSuggestion('Please try refreshing the page or contact support');
         } finally {
             setLoading(false);
         }
@@ -82,60 +85,24 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
 
     const handleFileChange = async (event) => {
         const file = event.target.files[0];
-        if (file) {
-            const ext = file.name.toLowerCase();
-            if (ext.endsWith('.xlsx') || ext.endsWith('.xls')) {
-                setSelectedFile(file);
-                setError(null);
-                setErrorSuggestion(null);
+        if (!file) return;
 
-                const formData = new FormData();
-                formData.append('file', file);
+        setSelectedFile(file);
+        setError(null);
+        setErrorSuggestion(null);
 
-                try {
-                    const response = await fetch(`${API_BASE_URL}/api/supplier-responses/columns`, {
-                        method: 'POST',
-                        body: formData
-                    });
+        const formData = new FormData();
+        formData.append('file', file);
 
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw {
-                            message: errorData.message || errorData.error || 'Failed to read columns',
-                            suggestion: errorData.suggestion
-                        };
-                    }
-
-                    const data = await response.json();
-                    
-                    // Process columns to ensure they are strings
-                    const processedColumns = (data.columns || [])
-                        .filter(col => col != null)
-                        .map(col => String(col).trim())
-                        .filter(col => col.length > 0);
-
-                    if (processedColumns.length === 0) {
-                        throw {
-                            message: 'No valid columns found in the file',
-                            suggestion: 'Please ensure your Excel file has headers in the first row'
-                        };
-                    }
-
-                    setAvailableColumns(processedColumns);
-                    setTempFile(data.tempFile);
-                } catch (error) {
-                    console.error('Error reading columns:', error);
-                    setError(error.message || 'Failed to read file columns');
-                    setErrorSuggestion(error.suggestion);
-                    setSelectedFile(null);
-                    event.target.value = '';
-                }
-            } else {
-                setError('Please select an Excel file (.xlsx or .xls)');
-                setErrorSuggestion('Only Excel files with extensions .xlsx or .xls are supported');
-                setSelectedFile(null);
-                event.target.value = '';
-            }
+        try {
+            const response = await axios.post(`${API_BASE_URL}/api/supplier-responses/columns`, formData);
+            const { columns } = response.data;
+            setAvailableColumns(columns || []);
+        } catch (error) {
+            console.error('Error reading file:', error);
+            setError('Failed to read file columns');
+            setErrorSuggestion('Please ensure the file is a valid Excel file');
+            setSelectedFile(null);
         }
     };
 
@@ -145,7 +112,7 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
             setErrorSuggestion('You must choose a supplier and upload an Excel file before proceeding');
             return;
         }
-        if (activeStep === 1 && !columnMapping.itemID) {
+        if (activeStep === 1 && !columnMapping.ItemID) {
             setError('Please map at least the Item ID column');
             setErrorSuggestion('The Item ID column is required to match items in the system');
             return;
@@ -162,7 +129,6 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
     };
 
     const handleColumnMappingChange = (field, value) => {
-        // Ensure value is a string
         const safeValue = value != null ? String(value) : '';
         setColumnMapping(prev => ({
             ...prev,
@@ -182,59 +148,32 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
         setErrorSuggestion(null);
 
         try {
-            // Validate column mapping before sending
             const validMapping = Object.entries(columnMapping).reduce((acc, [key, value]) => {
-                // Only include non-empty values and ensure they are strings
-                if (value) {
-                    acc[key] = String(value);
+                if (requiredFields.includes(key) || value) {
+                    acc[key] = String(value || '');
                 }
                 return acc;
             }, {});
 
-            // Create FormData and append all necessary data
             const formData = new FormData();
             formData.append('file', selectedFile);
             formData.append('columnMapping', JSON.stringify(validMapping));
             formData.append('supplierId', selectedSupplier);
             formData.append('inquiryId', inquiryId);
 
-            const response = await fetch(`${API_BASE_URL}/api/supplier-responses/upload`, {
-                method: 'POST',
-                body: formData
-            });
+            const response = await axios.post(`${API_BASE_URL}/api/supplier-responses/upload`, formData);
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw {
-                    message: errorData.message || errorData.error || 'Upload failed',
-                    suggestion: errorData.suggestion
-                };
-            }
-
-            const data = await response.json();
             if (onUploadSuccess) {
-                onUploadSuccess(data);
+                onUploadSuccess(response.data);
             }
-            handleClose();
+            onClose();
         } catch (error) {
             console.error('Upload error:', error);
-            setError(error.message || 'Failed to upload file');
-            setErrorSuggestion(error.suggestion || 'Please try again or contact support if the issue persists');
+            setError(error.response?.data?.message || 'Failed to upload file');
+            setErrorSuggestion(error.response?.data?.suggestion || 'Please try again or contact support if the issue persists');
         } finally {
             setUploading(false);
         }
-    };
-
-    const handleClose = () => {
-        setSelectedFile(null);
-        setSelectedSupplier('');
-        setError(null);
-        setErrorSuggestion(null);
-        setActiveStep(0);
-        setAvailableColumns([]);
-        setTempFile(null);
-        setColumnMapping(defaultColumnMapping);
-        onClose();
     };
 
     const renderStepContent = (step) => {
@@ -242,34 +181,35 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
             case 0:
                 return (
                     <Box sx={{ mt: 2 }}>
-                        <FormControl fullWidth sx={{ mb: 3 }} disabled={loading}>
-                            <InputLabel>Select Supplier</InputLabel>
+                        <FormControl fullWidth sx={{ mb: 3 }}>
+                            <InputLabel id="supplier-select-label">Supplier</InputLabel>
                             <Select
+                                labelId="supplier-select-label"
                                 value={selectedSupplier}
                                 onChange={(e) => setSelectedSupplier(e.target.value)}
-                                label="Select Supplier"
+                                label="Supplier"
+                                disabled={loading}
                             >
                                 {suppliers.map((supplier) => (
-                                    <MenuItem key={supplier.SupplierID} value={supplier.SupplierID}>
-                                        {supplier.Name}
+                                    <MenuItem key={supplier.id} value={supplier.id}>
+                                        {supplier.name}
                                     </MenuItem>
                                 ))}
                             </Select>
                         </FormControl>
 
-                        <Box
+                        <Paper
+                            variant="outlined"
                             sx={{
-                                border: '2px dashed #ccc',
-                                borderRadius: 2,
                                 p: 3,
                                 textAlign: 'center',
                                 cursor: 'pointer',
+                                backgroundColor: '#f5f5f5',
                                 '&:hover': {
-                                    borderColor: 'primary.main',
-                                },
-                                backgroundColor: selectedFile ? 'rgba(0, 0, 0, 0.04)' : 'inherit'
+                                    backgroundColor: '#eeeeee'
+                                }
                             }}
-                            onClick={() => !uploading && document.getElementById('file-input').click()}
+                            onClick={() => document.getElementById('file-input').click()}
                         >
                             <input
                                 id="file-input"
@@ -277,16 +217,15 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
                                 accept=".xlsx,.xls"
                                 onChange={handleFileChange}
                                 style={{ display: 'none' }}
-                                disabled={uploading}
                             />
                             <CloudUploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 1 }} />
-                            <Typography>
-                                {selectedFile ? selectedFile.name : 'Click to select Excel file'}
+                            <Typography variant="h6" gutterBottom>
+                                Click to Upload Excel File
                             </Typography>
-                            <Typography variant="caption" color="textSecondary" sx={{ mt: 1, display: 'block' }}>
-                                Only Excel files (.xlsx, .xls) are allowed
+                            <Typography variant="body2" color="textSecondary">
+                                {selectedFile ? selectedFile.name : 'Supported formats: .xlsx, .xls'}
                             </Typography>
-                        </Box>
+                        </Paper>
                     </Box>
                 );
             case 1:
@@ -298,8 +237,8 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
                         <FormControl fullWidth sx={{ mb: 2 }}>
                             <InputLabel>Item ID (Required)</InputLabel>
                             <Select
-                                value={columnMapping.itemID}
-                                onChange={(e) => handleColumnMappingChange('itemID', e.target.value)}
+                                value={columnMapping.ItemID}
+                                onChange={(e) => handleColumnMappingChange('ItemID', e.target.value)}
                                 label="Item ID (Required)"
                             >
                                 <MenuItem value="">
@@ -316,8 +255,8 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
                         <FormControl fullWidth sx={{ mb: 2 }}>
                             <InputLabel>New Reference ID</InputLabel>
                             <Select
-                                value={columnMapping.newReferenceID}
-                                onChange={(e) => handleColumnMappingChange('newReferenceID', e.target.value)}
+                                value={columnMapping.NewReferenceID}
+                                onChange={(e) => handleColumnMappingChange('NewReferenceID', e.target.value)}
                                 label="New Reference ID"
                             >
                                 <MenuItem value="">
@@ -334,8 +273,8 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
                         <FormControl fullWidth sx={{ mb: 2 }}>
                             <InputLabel>Price</InputLabel>
                             <Select
-                                value={columnMapping.price}
-                                onChange={(e) => handleColumnMappingChange('price', e.target.value)}
+                                value={columnMapping.Price}
+                                onChange={(e) => handleColumnMappingChange('Price', e.target.value)}
                                 label="Price"
                             >
                                 <MenuItem value="">
@@ -352,8 +291,8 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
                         <FormControl fullWidth sx={{ mb: 2 }}>
                             <InputLabel>Notes</InputLabel>
                             <Select
-                                value={columnMapping.notes}
-                                onChange={(e) => handleColumnMappingChange('notes', e.target.value)}
+                                value={columnMapping.Notes}
+                                onChange={(e) => handleColumnMappingChange('Notes', e.target.value)}
                                 label="Notes"
                             >
                                 <MenuItem value="">
@@ -370,8 +309,8 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
                         <FormControl fullWidth sx={{ mb: 2 }}>
                             <InputLabel>HS Code</InputLabel>
                             <Select
-                                value={columnMapping.hsCode}
-                                onChange={(e) => handleColumnMappingChange('hsCode', e.target.value)}
+                                value={columnMapping.HSCode}
+                                onChange={(e) => handleColumnMappingChange('HSCode', e.target.value)}
                                 label="HS Code"
                             >
                                 <MenuItem value="">
@@ -388,8 +327,8 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
                         <FormControl fullWidth sx={{ mb: 2 }}>
                             <InputLabel>English Description</InputLabel>
                             <Select
-                                value={columnMapping.englishDescription}
-                                onChange={(e) => handleColumnMappingChange('englishDescription', e.target.value)}
+                                value={columnMapping.EnglishDescription}
+                                onChange={(e) => handleColumnMappingChange('EnglishDescription', e.target.value)}
                                 label="English Description"
                             >
                                 <MenuItem value="">
@@ -411,21 +350,21 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
                             Review your selections and click Upload to process the file.
                         </Typography>
                         <Typography variant="subtitle1" sx={{ mt: 2 }}>Selected Mappings:</Typography>
-                        <Typography variant="body2">Item ID: {columnMapping.itemID}</Typography>
-                        {columnMapping.newReferenceID && (
-                            <Typography variant="body2">New Reference ID: {columnMapping.newReferenceID}</Typography>
+                        <Typography variant="body2">Item ID: {columnMapping.ItemID}</Typography>
+                        {columnMapping.NewReferenceID && (
+                            <Typography variant="body2">New Reference ID: {columnMapping.NewReferenceID}</Typography>
                         )}
-                        {columnMapping.price && (
-                            <Typography variant="body2">Price: {columnMapping.price}</Typography>
+                        {columnMapping.Price && (
+                            <Typography variant="body2">Price: {columnMapping.Price}</Typography>
                         )}
-                        {columnMapping.notes && (
-                            <Typography variant="body2">Notes: {columnMapping.notes}</Typography>
+                        {columnMapping.Notes && (
+                            <Typography variant="body2">Notes: {columnMapping.Notes}</Typography>
                         )}
-                        {columnMapping.hsCode && (
-                            <Typography variant="body2">HS Code: {columnMapping.hsCode}</Typography>
+                        {columnMapping.HSCode && (
+                            <Typography variant="body2">HS Code: {columnMapping.HSCode}</Typography>
                         )}
-                        {columnMapping.englishDescription && (
-                            <Typography variant="body2">English Description: {columnMapping.englishDescription}</Typography>
+                        {columnMapping.EnglishDescription && (
+                            <Typography variant="body2">English Description: {columnMapping.EnglishDescription}</Typography>
                         )}
                     </Box>
                 );
@@ -435,49 +374,64 @@ const SupplierResponseUpload = ({ open, onClose, onUploadSuccess, inquiryId }) =
     };
 
     return (
-        <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+        <Dialog 
+            open={open} 
+            onClose={onClose} 
+            maxWidth="md" 
+            fullWidth
+            PaperProps={{
+                sx: {
+                    minHeight: '60vh'
+                }
+            }}
+        >
             <DialogTitle>Upload Supplier Response</DialogTitle>
             <DialogContent>
-                <Stepper activeStep={activeStep} sx={{ mt: 2, mb: 4 }}>
+                <Stepper activeStep={activeStep} sx={{ pt: 3, pb: 5 }}>
                     {steps.map((label) => (
                         <Step key={label}>
                             <StepLabel>{label}</StepLabel>
                         </Step>
                     ))}
                 </Stepper>
-
-                {renderStepContent(activeStep)}
-
+                {loading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                        <CircularProgress />
+                    </Box>
+                ) : (
+                    renderStepContent(activeStep)
+                )}
                 {error && (
                     <Alert severity="error" sx={{ mt: 2 }}>
                         {error}
                         {errorSuggestion && (
                             <Typography variant="body2" sx={{ mt: 1 }}>
-                                Suggestion: {errorSuggestion}
+                                {errorSuggestion}
                             </Typography>
                         )}
                     </Alert>
                 )}
             </DialogContent>
             <DialogActions>
-                <Button onClick={handleClose} disabled={uploading}>
-                    Cancel
-                </Button>
+                <Button onClick={onClose}>Cancel</Button>
                 {activeStep > 0 && (
-                    <Button onClick={handleBack} disabled={uploading}>
-                        Back
-                    </Button>
+                    <Button onClick={handleBack}>Back</Button>
                 )}
                 {activeStep < steps.length - 1 ? (
-                    <Button onClick={handleNext} variant="contained" disabled={uploading || loading}>
+                    <Button 
+                        onClick={handleNext}
+                        variant="contained"
+                        color="primary"
+                    >
                         Next
                     </Button>
                 ) : (
                     <Button
                         onClick={handleUpload}
                         variant="contained"
-                        disabled={uploading || loading || !inquiryId}
-                        startIcon={uploading ? <CircularProgress size={20} /> : null}
+                        color="primary"
+                        disabled={uploading}
+                        startIcon={uploading ? <CircularProgress size={20} /> : <CloudUploadIcon />}
                     >
                         {uploading ? 'Uploading...' : 'Upload'}
                     </Button>

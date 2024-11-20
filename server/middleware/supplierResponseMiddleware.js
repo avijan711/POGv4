@@ -63,8 +63,8 @@ function validateUpload(req, res, next) {
             }
         });
 
-        // Check required fields
-        if (!columnMapping.itemID) {
+        // Check required fields using database field names
+        if (!columnMapping.ItemID) {
             throw new Error('Item ID column mapping is required');
         }
 

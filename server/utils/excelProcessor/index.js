@@ -113,7 +113,7 @@ class ExcelProcessor {
 
         // Validate file and mapping
         validateFileType(filePath);
-        validateColumnMapping(columnMapping, ['itemId', 'hebrewDescription', 'requestedQuantity']);
+        validateColumnMapping(columnMapping, ['ItemID', 'HebrewDescription', 'RequestedQty']);  // Use database field names
 
         try {
             // Process the data using the new processInquiryData function
@@ -141,26 +141,56 @@ class ExcelProcessor {
             options
         });
 
-        // Validate file and mapping
+        // Validate file first
         validateFileType(filePath);
-        validateColumnMapping(columnMapping, options.requiredFields || ['itemId', 'priceQuoted']);
 
-        // Process data
+        // Convert client-side field names to database field names
+        const requiredFields = (options.requiredFields || ['itemID']).map(field => {
+            switch (field) {
+                case 'itemID':
+                    return 'ItemID';
+                case 'newReferenceID':
+                    return 'NewReferenceID';
+                default:
+                    return field.charAt(0).toUpperCase() + field.slice(1);
+            }
+        });
+        
+        // Validate the mapping with the database field names
+        validateColumnMapping(columnMapping, requiredFields);
+
+        // Process data using the original mapping
         const data = await processSupplierResponse(filePath, columnMapping);
 
-        // Validate data
-        validateData(data, options.requiredFields || ['itemId', 'priceQuoted']);
+        // Validate data with database field names
+        validateData(data, requiredFields);
 
         // Validate data types if specified
         if (options.typeValidations) {
             validateDataTypes(data, options.typeValidations);
         }
 
+        debug.log('Processed supplier response data:', {
+            sampleRow: data[0],
+            totalRows: data.length
+        });
+
         return data;
     }
 
     static validateMapping(columnMapping, requiredFields) {
-        return validateColumnMapping(columnMapping, requiredFields);
+        // Convert required fields to database field names
+        const dbFields = requiredFields.map(field => {
+            switch (field) {
+                case 'itemID':
+                    return 'ItemID';
+                case 'newReferenceID':
+                    return 'NewReferenceID';
+                default:
+                    return field.charAt(0).toUpperCase() + field.slice(1);
+            }
+        });
+        return validateColumnMapping(columnMapping, dbFields);
     }
 
     static validateFile(filename) {

@@ -28,8 +28,16 @@ class ItemModel extends BaseModel {
             debug.time('getItemById');
             debug.log('Getting item by ID:', itemId);
 
-            // The query needs itemId three times - for PriceHistory and twice for BaseItems
-            const params = [itemId, itemId, itemId];
+            // The query needs itemId eight times:
+            // 1. LatestHistory CTE
+            // 2. LatestInquiryItems CTE
+            // 3. PriceHistory CTE
+            // 4. SupplierPrices CTE
+            // 5. ItemPromotions CTE
+            // 6. BaseItems CTE
+            // 7. LatestReferenceChanges CTE
+            // 8. ReferencingItems CTE
+            const params = Array(8).fill(itemId);
             const row = await this.executeQuerySingle(getItemByIdQuery, params);
 
             if (!row) {

@@ -238,12 +238,12 @@ function processSupplierResponse(filePath, columnMapping) {
                 value = value != null ? String(value).trim() : null;
                 
                 switch (field) {
-                    case 'itemId':
+                    case 'itemID':  // Match client-side field name
                         if (!value) {
-                            throw new Error(`Missing required itemId in row ${index + 2}`);
+                            throw new Error(`Missing required itemID in row ${index + 2}`);
                         }
-                        processedRow[field] = value;
-                        processedRow.originalItemId = value; // Always store original ID
+                        processedRow.ItemID = value;  // Use database field name
+                        processedRow.originalItemID = value;
                         
                         // Track duplicates
                         itemIdCounts[value] = (itemIdCounts[value] || 0) + 1;
@@ -260,23 +260,22 @@ function processSupplierResponse(filePath, columnMapping) {
                         if (value) {
                             const price = parseFloat(value.replace(/,/g, '.'));
                             if (!isNaN(price)) {
-                                processedRow[field] = price;
+                                processedRow.Price = price;  // Use database field name
                             }
                         }
                         break;
                         
-                    case 'newReferenceId':
+                    case 'newReferenceID':  // Match client-side field name
                         if (value) {
                             const refId = value.trim();
-                            // Only set reference if it's different from the itemId
-                            if (refId !== processedRow.itemId) {
-                                processedRow[field] = refId;
-                                processedRow['hasReferenceChange'] = true;
-                                processedRow['newReferenceID'] = refId; // Normalize field name
-                                processedRow['referenceChange'] = {
+                            // Only set reference if it's different from the itemID
+                            if (refId !== processedRow.ItemID) {
+                                processedRow.NewReferenceID = refId;  // Use database field name
+                                processedRow.hasReferenceChange = true;
+                                processedRow.referenceChange = {
                                     source: 'supplier',
-                                    newReferenceID: refId,
-                                    notes: processedRow.notes || 'Replacement from supplier response'
+                                    NewReferenceID: refId,  // Use database field name
+                                    Notes: processedRow.Notes || 'Replacement from supplier response'
                                 };
                             } else {
                                 debug.log(`Skipping self-reference for item ${refId} in row ${index + 2}`);
@@ -285,19 +284,38 @@ function processSupplierResponse(filePath, columnMapping) {
                         break;
                         
                     case 'notes':
+                        if (value) {
+                            processedRow.Notes = value;  // Use database field name
+                        }
+                        break;
+
                     case 'hsCode':
+                        if (value) {
+                            processedRow.HSCode = value;  // Use database field name
+                        }
+                        break;
+
                     case 'englishDescription':
                         if (value) {
-                            processedRow[field] = value;
+                            processedRow.EnglishDescription = value;  // Use database field name
                         }
                         break;
 
                     default:
                         if (value) {
-                            processedRow[field] = value;
+                            // Convert field name to PascalCase for database
+                            const dbField = field.charAt(0).toUpperCase() + field.slice(1);
+                            processedRow[dbField] = value;
                         }
                 }
             });
+
+            // Keep metadata fields in camelCase
+            processedRow.excelRowIndex = processedRow.excelRowIndex;
+            processedRow.isDuplicate = processedRow.isDuplicate;
+            processedRow.originalRowIndex = processedRow.originalRowIndex;
+            processedRow.hasReferenceChange = processedRow.hasReferenceChange;
+            processedRow.referenceChange = processedRow.referenceChange;
 
             return processedRow;
         });
@@ -322,12 +340,17 @@ function validateData(data, requiredFields) {
     const errors = [];
     data.forEach((row, index) => {
         requiredFields.forEach(field => {
-            const value = row[field];
+            // Convert client-side field name to database field name
+            const dbField = field === 'itemID' ? 'ItemID' :
+                          field === 'newReferenceID' ? 'NewReferenceID' :
+                          field.charAt(0).toUpperCase() + field.slice(1);
+            
+            const value = row[dbField];
             if (value == null || (typeof value === 'string' && !value.trim())) {
                 errors.push({
                     row: index + 2,
-                    field,
-                    message: `Missing required field: ${field}`
+                    field: dbField,
+                    message: `Missing required field: ${dbField}`
                 });
             }
         });

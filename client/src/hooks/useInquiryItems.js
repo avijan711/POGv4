@@ -115,6 +115,13 @@ export const useInquiryItems = (inquiryId) => {
         // Determine if item is a duplicate
         const isDuplicate = item.itemID && itemIdCounts[item.itemID] > 1 && index !== itemIdFirstIndex[item.itemID];
         const originalRowIndex = isDuplicate ? itemIdFirstIndex[item.itemID] : null;
+
+        // Handle promotion data
+        const promotion_id = item.promotion_id || null;
+        const promotion_name = item.promotion_name || '';
+        const promotion_price = item.promotion_price || null;
+        const promotion_start_date = item.promotion_start_date || null;
+        const promotion_end_date = item.promotion_end_date || null;
         
         return {
           ...item,
@@ -139,7 +146,13 @@ export const useInquiryItems = (inquiryId) => {
           // Add Excel order and duplicate tracking
           excelRowIndex: item.excelRowIndex || index,
           isDuplicate,
-          originalRowIndex
+          originalRowIndex,
+          // Add promotion data
+          promotion_id,
+          promotion_name,
+          promotion_price,
+          promotion_start_date,
+          promotion_end_date
         };
       }).filter(Boolean); // Remove any null items
 

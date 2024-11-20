@@ -38,18 +38,30 @@ async function startServer() {
         });
         console.log('Database initialized successfully');
 
-        // Insert test data with retries
-        console.log('Inserting test data...');
-        await retryOperation(async () => {
-            await insertTestData(getDatabase());
+        // Only insert test data if tables are empty
+        const db = getDatabase();
+        const hasData = await new Promise((resolve, reject) => {
+            db.get('SELECT COUNT(*) as count FROM Item', [], (err, row) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve(row.count > 0);
+            });
         });
-        console.log('Test data inserted successfully');
+
+        if (!hasData) {
+            console.log('Inserting test data...');
+            await retryOperation(async () => {
+                await insertTestData(getDatabase());
+            });
+            console.log('Test data inserted successfully');
+        }
 
         // Configure server
         const { app, port } = configureServer();
 
         // Initialize models with the database instance
-        const db = getDatabase();
         const itemModel = new ItemModel(db);
         const inquiryModel = new InquiryModel(db);
         const orderModel = new OrderModel(db);
@@ -60,55 +72,18 @@ async function startServer() {
                 console.log('Reinitializing database...');
                 await retryOperation(async () => {
                     const db = getDatabase();
-                    // Drop all tables
-                    const tables = [
-                        'ItemHistory',
-                        'InquiryItem',
-                        'Promotion',
-                        'PromotionGroup',
-                        'ItemReferenceChange',
-                        'SupplierPrice',
-                        'SupplierResponse',
-                        'Item',
-                        'Supplier',
-                        'Inquiry'
-                    ];
-
-                    await new Promise((resolve, reject) => {
-                        db.serialize(() => {
-                            db.run('BEGIN IMMEDIATE TRANSACTION');
-                            db.run('PRAGMA foreign_keys = OFF');
-                            
-                            tables.forEach(table => {
-                                db.run(`DROP TABLE IF EXISTS ${table}`);
-                            });
-                            
-                            db.run('PRAGMA foreign_keys = ON');
-                            
-                            db.run('COMMIT', (err) => {
-                                if (err) {
-                                    console.error('Error dropping tables:', err);
-                                    db.run('ROLLBACK');
-                                    reject(err);
-                                } else {
-                                    console.log('All tables dropped successfully');
-                                    resolve();
-                                }
-                            });
-                        });
-                    });
-
-                    // Read and execute schema
+                    
+                    // Read and execute schema without dropping tables
                     const schemaPath = path.join(__dirname, 'schema.sql');
                     const schema = fs.readFileSync(schemaPath, 'utf8');
                     
                     await new Promise((resolve, reject) => {
                         db.exec(schema, (err) => {
                             if (err) {
-                                console.error('Error recreating tables:', err);
+                                console.error('Error executing schema:', err);
                                 reject(err);
                             } else {
-                                console.log('Tables recreated successfully');
+                                console.log('Schema executed successfully');
                                 resolve();
                             }
                         });
@@ -117,7 +92,7 @@ async function startServer() {
                 
                 res.json({ 
                     success: true,
-                    message: 'Database reset to clean state successfully' 
+                    message: 'Database schema updated successfully' 
                 });
             } catch (error) {
                 console.error('Error reinitializing database:', error);
@@ -193,15 +168,6 @@ async function startServer() {
             console.log(`Server running on port ${port}`);
             console.log(`Upload endpoint: http://localhost:${port}/api/inquiries/upload`);
             console.log(`Sample file endpoint: http://localhost:${port}/sample.xlsx`);
-            
-            console.log('\nAvailable routes:');
-            console.log('POST   /api/reinitialize-db');
-            console.log('GET    /api/orders/:inquiryId/replacements');
-            console.log('GET    /api/orders/best-prices/:inquiryId');
-            console.log('POST   /api/orders/from-inquiry/:inquiryId');
-            console.log('GET    /api/orders');
-            console.log('GET    /api/orders/:orderId');
-            console.log('PUT    /api/orders/:orderId/status');
         });
 
         server.on('error', (err) => {
@@ -262,50 +228,6 @@ async function startServer() {
         }
         process.exit(1);
     }
-}
-
-// Function to verify test data
-async function verifyTestData(db) {
-    return new Promise((resolve, reject) => {
-        const queries = [
-            {
-                sql: 'SELECT * FROM Item WHERE ItemID = ?',
-                params: ['171366'],
-                name: 'Item'
-            },
-            {
-                sql: 'SELECT * FROM ItemReferenceChange WHERE OriginalItemID = ?',
-                params: ['171366'],
-                name: 'ItemReferenceChange'
-            },
-            {
-                sql: 'SELECT * FROM InquiryItem WHERE ItemID = ?',
-                params: ['171366'],
-                name: 'InquiryItem'
-            }
-        ];
-
-        let results = {};
-        let completed = 0;
-
-        queries.forEach(query => {
-            db.get(query.sql, query.params, (err, row) => {
-                if (err) {
-                    console.error(`Error verifying ${query.name}:`, err);
-                    reject(err);
-                    return;
-                }
-
-                results[query.name] = row;
-                completed++;
-
-                if (completed === queries.length) {
-                    console.log('Test data verification results:', results);
-                    resolve(results);
-                }
-            });
-        });
-    });
 }
 
 // Start the server

@@ -15,21 +15,21 @@ import {
 } from '@mui/material';
 
 const REQUIRED_FIELDS = [
-  { field: 'itemId', label: 'Item ID', description: 'Unique identifier for each item', hebrewLabels: ['קוד פריט', 'מספר פריט'] },
-  { field: 'hebrewDescription', label: 'Hebrew Description', description: 'Item description in Hebrew', hebrewLabels: ['שם פריט'] },
-  { field: 'requestedQuantity', label: 'Requested Quantity', description: 'Number of items being requested', hebrewLabels: ['כמות', 'כמות שהוזמנה'] }
+  { field: 'itemID', label: 'Item ID', description: 'Unique identifier for each item', hebrewLabels: ['קוד פריט', 'מספר פריט'] },
+  { field: 'HebrewDescription', label: 'Hebrew Description', description: 'Item description in Hebrew', hebrewLabels: ['שם פריט'] },
+  { field: 'RequestedQty', label: 'Requested Quantity', description: 'Number of items being requested', hebrewLabels: ['כמות', 'כמות שהוזמנה'] }
 ];
 
 const OPTIONAL_FIELDS = [
-  { field: 'englishDescription', label: 'English Description', description: 'Item description in English' },
-  { field: 'importMarkup', label: 'Import Markup', description: 'Value between 1.00 and 2.00', hebrewLabels: ['% מס'] },
-  { field: 'hsCode', label: 'HS Code', description: 'Harmonized System code', hebrewLabels: ['קוד יצרן'] },
-  { field: 'currentStock', label: 'Current Stock', description: 'Current quantity in stock', hebrewLabels: ['כמות במלאי'] },
-  { field: 'retailPrice', label: 'Retail Price (ILS)', description: 'Retail price in Israeli Shekels', hebrewLabels: ['מחירון'] },
-  { field: 'soldThisYear', label: 'Sold This Year', description: 'Units sold in current year', hebrewLabels: ['כמות שנמכרה'] },
-  { field: 'soldLastYear', label: 'Sold Last Year', description: 'Units sold in previous year', hebrewLabels: ['כמות נמכרה ש'] },
-  { field: 'newReferenceId', label: 'New Reference ID', description: 'ID of the replacement item' },
-  { field: 'referenceNotes', label: 'Reference Notes', description: 'Additional reference information' }
+  { field: 'EnglishDescription', label: 'English Description', description: 'Item description in English' },
+  { field: 'ImportMarkup', label: 'Import Markup', description: 'Value between 1.00 and 2.00', hebrewLabels: ['% מס'] },
+  { field: 'HSCode', label: 'HS Code', description: 'Harmonized System code', hebrewLabels: ['קוד יצרן'] },
+  { field: 'QtyInStock', label: 'Current Stock', description: 'Current quantity in stock', hebrewLabels: ['כמות במלאי'] },
+  { field: 'RetailPrice', label: 'Retail Price (ILS)', description: 'Retail price in Israeli Shekels', hebrewLabels: ['מחירון'] },
+  { field: 'QtySoldThisYear', label: 'Sold This Year', description: 'Units sold in current year', hebrewLabels: ['כמות שנמכרה'] },
+  { field: 'QtySoldLastYear', label: 'Sold Last Year', description: 'Units sold in previous year', hebrewLabels: ['כמות נמכרה ש'] },
+  { field: 'newReferenceID', label: 'New Reference ID', description: 'ID of the replacement item' },
+  { field: 'ReferenceNotes', label: 'Reference Notes', description: 'Additional reference information' }
 ];
 
 function ColumnMappingDialog({ open, onClose, excelColumns = [], onConfirm }) {

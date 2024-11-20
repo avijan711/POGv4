@@ -181,6 +181,7 @@ function ItemDetailsDialog({ open, onClose, item, onItemClick }) {
                   <SupplierPricesPanel 
                     supplierPrices={itemData.supplierPrices}
                     itemDetails={itemData.item}
+                    promotions={itemData.promotions}
                   />
                 </TabPanel>
                 <TabPanel value={value} index={3}>

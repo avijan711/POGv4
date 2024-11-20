@@ -171,75 +171,75 @@ function validateDataTypes(data, typeValidations) {
 
 const typeValidations = {
     // General validations
-    itemId: {
+    ItemID: {  // Match database field name
         type: 'string',
         validator: value => value && value.trim().length > 0
     },
-    hebrewDescription: {
+    HebrewDescription: {  // Match database field name
         type: 'string',
         validator: value => value && value.trim().length > 0
     },
-    englishDescription: {
+    EnglishDescription: {  // Match database field name
         type: 'string',
         validator: value => true // Optional field
     },
-    requestedQuantity: {
+    RequestedQty: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = Number(value);
             return Number.isInteger(num) && num >= 0;
         }
     },
-    importMarkup: {
+    ImportMarkup: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = parseFloat(String(value).replace(/,/g, '.'));
             return !isNaN(num) && num >= 1.0 && num <= 2.0;
         }
     },
-    hsCode: {
+    HSCode: {  // Match database field name
         type: 'string',
         validator: value => true // Optional field
     },
-    currentStock: {
+    QtyInStock: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = Number(value);
             return Number.isInteger(num) && num >= 0;
         }
     },
-    soldThisYear: {
+    QtySoldThisYear: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = Number(value);
             return Number.isInteger(num) && num >= 0;
         }
     },
-    soldLastYear: {
+    QtySoldLastYear: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = Number(value);
             return Number.isInteger(num) && num >= 0;
         }
     },
-    retailPrice: {
+    RetailPrice: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = parseFloat(String(value).replace(/,/g, '.'));
             return !isNaN(num) && num >= 0;
         }
     },
-    newReferenceId: {
+    NewReferenceID: {  // Match database field name
         type: 'string',
         validator: value => true // Optional field
     },
-    referenceNotes: {
+    ReferenceNotes: {  // Match database field name
         type: 'string',
         validator: value => true // Optional field
     },
 
     // Promotion-specific validations
-    promotionPrice: {
+    PromotionPrice: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = parseFloat(String(value).replace(/,/g, '.'));
@@ -251,25 +251,25 @@ const typeValidations = {
 // Specific validation sets for different types of data
 const validationSets = {
     promotion: {
-        required: ['itemId', 'promotionPrice'],
+        required: ['ItemID', 'PromotionPrice'],  // Match database field names
         types: {
-            itemId: typeValidations.itemId,
-            promotionPrice: typeValidations.promotionPrice
+            ItemID: typeValidations.ItemID,
+            PromotionPrice: typeValidations.PromotionPrice
         }
     },
     inquiry: {
-        required: ['itemId', 'hebrewDescription', 'requestedQuantity'],
+        required: ['ItemID', 'HebrewDescription', 'RequestedQty'],  // Match database field names
         types: {
-            itemId: typeValidations.itemId,
-            hebrewDescription: typeValidations.hebrewDescription,
-            englishDescription: typeValidations.englishDescription,
-            requestedQuantity: typeValidations.requestedQuantity,
-            importMarkup: typeValidations.importMarkup,
-            hsCode: typeValidations.hsCode,
-            currentStock: typeValidations.currentStock,
-            retailPrice: typeValidations.retailPrice,
-            soldThisYear: typeValidations.soldThisYear,
-            soldLastYear: typeValidations.soldLastYear
+            ItemID: typeValidations.ItemID,
+            HebrewDescription: typeValidations.HebrewDescription,
+            EnglishDescription: typeValidations.EnglishDescription,
+            RequestedQty: typeValidations.RequestedQty,
+            ImportMarkup: typeValidations.ImportMarkup,
+            HSCode: typeValidations.HSCode,
+            QtyInStock: typeValidations.QtyInStock,
+            RetailPrice: typeValidations.RetailPrice,
+            QtySoldThisYear: typeValidations.QtySoldThisYear,
+            QtySoldLastYear: typeValidations.QtySoldLastYear
         }
     }
 };

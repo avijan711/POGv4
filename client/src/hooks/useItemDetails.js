@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { uiDebug, dataDebug } from '../utils/debug';
 import inventoryUtils from '../utils/inventoryUtils';
+import axios from 'axios';
+import { API_BASE_URL } from '../config';
 
 /**
  * Custom hook for managing item details
@@ -9,6 +11,31 @@ import inventoryUtils from '../utils/inventoryUtils';
  */
 export const useItemDetails = (item, open) => {
   const [tabValue, setTabValue] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [itemDetails, setItemDetails] = useState(null);
+
+  // Fetch full item details when dialog opens
+  useEffect(() => {
+    if (open && item?.itemID) {
+      const fetchItemDetails = async () => {
+        setLoading(true);
+        try {
+          const response = await axios.get(`${API_BASE_URL}/api/items/${item.itemID}`);
+          setItemDetails(response.data);
+          setError(null);
+        } catch (err) {
+          console.error('Error fetching item details:', err);
+          setError('Failed to load item details');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchItemDetails();
+    } else {
+      setItemDetails(null);
+    }
+  }, [open, item?.itemID]);
 
   // Reset tab when dialog opens
   useEffect(() => {
@@ -20,11 +47,11 @@ export const useItemDetails = (item, open) => {
 
   // Process item data
   const itemData = useMemo(() => {
-    if (!open || !item) {
+    if (!open || !itemDetails) {
       return null;
     }
 
-    dataDebug.logData('Processing item data', item);
+    dataDebug.logData('Processing item data', itemDetails);
 
     // Parse JSON fields if they're strings
     const parseJsonField = (field) => {
@@ -33,63 +60,63 @@ export const useItemDetails = (item, open) => {
     };
 
     // Process reference change
-    const referenceChange = item.referenceChange ? 
-      (typeof item.referenceChange === 'string' ? 
-        JSON.parse(item.referenceChange) : 
-        item.referenceChange) : null;
+    const referenceChange = itemDetails.referenceChange ? 
+      (typeof itemDetails.referenceChange === 'string' ? 
+        JSON.parse(itemDetails.referenceChange) : 
+        itemDetails.referenceChange) : null;
 
     // Process arrays
-    const priceHistory = parseJsonField(item.priceHistory);
-    const supplierPrices = parseJsonField(item.supplierPrices);
-    const promotions = parseJsonField(item.promotions);
-    const referencingItems = parseJsonField(item.referencingItems);
+    const priceHistory = parseJsonField(itemDetails.priceHistory);
+    const supplierPrices = parseJsonField(itemDetails.supplierPrices);
+    const promotions = parseJsonField(itemDetails.promotions);
+    const referencingItems = parseJsonField(itemDetails.referencingItems);
 
     // Create the result structure that ItemDetailsDialog expects
     const result = {
       item: {
-        itemID: item.itemID,
-        hebrewDescription: item.hebrewDescription,
-        englishDescription: item.englishDescription,
-        importMarkup: parseFloat(item.importMarkup) || 1.30,
-        hsCode: item.hsCode || '',
-        image: item.image,
-        retailPrice: item.retailPrice !== null && item.retailPrice !== undefined ? 
-          parseFloat(item.retailPrice) : null,
-        qtyInStock: parseInt(item.qtyInStock) || 0,
-        soldThisYear: parseInt(item.soldThisYear) || 0,
-        soldLastYear: parseInt(item.soldLastYear) || 0,
-        lastUpdated: item.lastUpdated,
+        itemID: itemDetails.itemID,
+        hebrewDescription: itemDetails.hebrewDescription,
+        englishDescription: itemDetails.englishDescription,
+        importMarkup: parseFloat(itemDetails.importMarkup) || 1.30,
+        hsCode: itemDetails.hsCode || '',
+        image: itemDetails.image,
+        retailPrice: itemDetails.retailPrice !== null && itemDetails.retailPrice !== undefined ? 
+          parseFloat(itemDetails.retailPrice) : null,
+        qtyInStock: parseInt(itemDetails.qtyInStock) || 0,
+        soldThisYear: parseInt(itemDetails.soldThisYear) || 0,
+        soldLastYear: parseInt(itemDetails.soldLastYear) || 0,
+        lastUpdated: itemDetails.lastUpdated,
         referenceChange: referenceChange,
         referencingItems: referencingItems
       },
       priceHistory,
       supplierPrices,
       promotions,
-      hasReferenceChange: item.hasReferenceChange || referenceChange !== null,
-      isReferencedBy: item.isReferencedBy || referencingItems.length > 0,
+      hasReferenceChange: itemDetails.hasReferenceChange || referenceChange !== null,
+      isReferencedBy: itemDetails.isReferencedBy || referencingItems.length > 0,
       referenceChange,
       referencingItems,
       getChangeSource: inventoryUtils.getChangeSource,
-      getBackgroundColor: () => inventoryUtils.getBackgroundColor(item)
+      getBackgroundColor: () => inventoryUtils.getBackgroundColor(itemDetails)
     };
 
     dataDebug.logData('Processed item data', result);
     return result;
-  }, [item, open]);
+  }, [itemDetails, open]);
 
   // Compute loading state
   const isLoading = useMemo(() => {
-    const loading = open && !itemData && !item;
-    uiDebug.log('Loading state:', loading);
-    return loading;
-  }, [open, itemData, item]);
+    const loadingState = loading || (open && !itemData && !error);
+    uiDebug.log('Loading state:', loadingState);
+    return loadingState;
+  }, [loading, open, itemData, error]);
 
   // Compute error state
   const hasError = useMemo(() => {
-    const error = open && !itemData && item === null;
-    uiDebug.log('Error state:', error);
-    return error;
-  }, [open, itemData, item]);
+    const errorState = Boolean(error);
+    uiDebug.log('Error state:', errorState);
+    return errorState;
+  }, [error]);
 
   return {
     tabValue,

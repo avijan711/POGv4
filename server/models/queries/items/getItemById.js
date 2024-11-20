@@ -13,6 +13,7 @@ module.exports = `
             FROM ItemHistory
             GROUP BY ItemID
         ) latest ON ih.ItemID = latest.ItemID AND ih.Date = latest.MaxDate
+        WHERE ih.ItemID = ?
     ),
     LatestInquiryItems AS (
         SELECT
@@ -31,6 +32,7 @@ module.exports = `
         FROM InquiryItem ii
         JOIN Inquiry i ON ii.InquiryID = i.InquiryID
         WHERE i.Status = 'new'
+        AND ii.ItemID = ?
         AND i.Date = (
             SELECT MAX(i2.Date)
             FROM InquiryItem ii2
@@ -44,12 +46,54 @@ module.exports = `
             json_object(
                 'date', ih.Date,
                 'price', ih.ILSRetailPrice,
-                'qtyInStock', ih.QtyInStock
+                'qtyInStock', ih.QtyInStock,
+                'source', 'history'
             )
         ) as PriceHistoryArray
         FROM ItemHistory ih
         WHERE ih.ItemID = ?
         ORDER BY ih.Date DESC
+    ),
+    SupplierResponses AS (
+        SELECT json_group_array(
+            json_object(
+                'supplierName', s.Name,
+                'supplierId', sr.SupplierID,
+                'price', sr.PriceQuoted,
+                'date', sr.ResponseDate,
+                'isPromotion', COALESCE(sr.IsPromotion, 0),
+                'promotionName', sr.PromotionName,
+                'status', sr.Status
+            )
+        ) as SupplierPricesArray
+        FROM SupplierResponse sr
+        JOIN Supplier s ON sr.SupplierID = s.SupplierID
+        WHERE sr.ItemID = ?
+        AND sr.Status != 'deleted'
+        ORDER BY sr.ResponseDate DESC
+    ),
+    ActivePromotions AS (
+        SELECT json_group_array(
+            json_object(
+                'id', p.id,
+                'name', p.name,
+                'supplierName', s.Name,
+                'supplierId', p.supplier_id,
+                'startDate', p.start_date,
+                'endDate', p.end_date,
+                'isActive', p.is_active,
+                'createdAt', p.created_at,
+                'price', pi.promotion_price
+            )
+        ) as PromotionsArray
+        FROM promotions p
+        JOIN promotion_items pi ON p.id = pi.promotion_id
+        JOIN Supplier s ON p.supplier_id = s.SupplierID
+        WHERE pi.item_id = ?
+        AND p.is_active = 1
+        AND (p.start_date IS NULL OR p.start_date <= datetime('now'))
+        AND (p.end_date IS NULL OR p.end_date >= datetime('now'))
+        ORDER BY p.created_at DESC
     ),
     BaseItems AS (
         -- Get items from Item table with latest updates
@@ -71,26 +115,6 @@ module.exports = `
         LEFT JOIN LatestHistory h ON i.ItemID = h.ItemID
         LEFT JOIN LatestInquiryItems li ON i.ItemID = li.ItemID
         WHERE i.ItemID = ?
-
-        UNION
-
-        -- Get new items from InquiryItem that don't exist in Item table
-        SELECT
-            li.ItemID,
-            li.HebrewDescription,
-            COALESCE(li.EnglishDescription, '') as EnglishDescription,
-            COALESCE(CAST(li.ImportMarkup AS REAL), 1.30) as ImportMarkup,
-            COALESCE(li.HSCode, '') as HSCode,
-            NULL as Image,
-            li.RetailPrice,
-            COALESCE(li.QtyInStock, 0) as QtyInStock,
-            COALESCE(li.SoldThisYear, 0) as SoldThisYear,
-            COALESCE(li.SoldLastYear, 0) as SoldLastYear,
-            li.InquiryDate as LastUpdated,
-            NULL as NewReferenceID,
-            NULL as ReferenceNotes
-        FROM LatestInquiryItems li
-        WHERE li.ItemID = ? AND li.ItemID NOT IN (SELECT ItemID FROM Item)
     ),
     LatestReferenceChanges AS (
         SELECT
@@ -106,6 +130,7 @@ module.exports = `
             FROM ItemReferenceChange irc2
             WHERE irc2.OriginalItemID = irc1.OriginalItemID
         )
+        AND OriginalItemID = ?
     ),
     ReferencingItems AS (
         SELECT 
@@ -133,6 +158,7 @@ module.exports = `
         FROM ItemReferenceChange rc
         LEFT JOIN Item i ON rc.OriginalItemID = i.ItemID
         LEFT JOIN Supplier s ON rc.SupplierID = s.SupplierID
+        WHERE rc.NewReferenceID = ?
         GROUP BY rc.NewReferenceID
     )
     SELECT DISTINCT
@@ -175,9 +201,13 @@ module.exports = `
             WHEN ri.ReferencingItemsArray IS NOT NULL AND ri.ReferencingItemsArray != '[null]' THEN 1
             ELSE 0
         END as isReferencedBy,
-        ph.PriceHistoryArray as priceHistory
+        ph.PriceHistoryArray as priceHistory,
+        COALESCE(sr.SupplierPricesArray, '[]') as supplierPrices,
+        COALESCE(ap.PromotionsArray, '[]') as promotions
     FROM BaseItems i
     LEFT JOIN LatestReferenceChanges rc1 ON i.ItemID = rc1.OriginalItemID
     LEFT JOIN ReferencingItems ri ON i.ItemID = ri.ItemID
     LEFT JOIN Supplier s1 ON rc1.SupplierID = s1.SupplierID
-    CROSS JOIN PriceHistory ph`;
+    LEFT JOIN PriceHistory ph ON 1=1
+    LEFT JOIN SupplierResponses sr ON 1=1
+    LEFT JOIN ActivePromotions ap ON 1=1`;

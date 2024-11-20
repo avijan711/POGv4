@@ -118,7 +118,7 @@ function Dashboard() {
     setReinitializing(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/reinitialize-db`, {
+      const response = await fetch(`${API_BASE_URL}/api/settings/reset`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -129,7 +129,7 @@ function Dashboard() {
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.details || data.error || 'Failed to reinitialize database');
+        throw new Error(data.details || data.error || 'Failed to reset database');
       }
 
       // Show success message and reload after a short delay
@@ -138,7 +138,7 @@ function Dashboard() {
         window.location.reload();
       }, 2000);
     } catch (error) {
-      console.error('Error reinitializing database:', error);
+      console.error('Error resetting database:', error);
       setError({ severity: 'error', message: error.message });
     } finally {
       setReinitializing(false);

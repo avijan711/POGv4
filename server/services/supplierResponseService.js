@@ -223,14 +223,29 @@ class SupplierResponseService {
         try {
             // Process the uploaded file using ExcelProcessor
             const data = await ExcelProcessor.processResponse(file.path, columnMapping, {
-                requiredFields: ['itemID']
+                requiredFields: ['ItemID']  // Use database field name
             });
 
-            // Filter out self-references
-            const validData = data.map(item => ({
-                ...item,
-                newReferenceID: item.newReferenceID === item.itemID ? null : item.newReferenceID
-            }));
+            debug.log('Processed Excel data:', {
+                sampleRow: data[0],
+                totalRows: data.length
+            });
+
+            // Filter out self-references and use database field names
+            const validData = data.map(item => {
+                // Check if NewReferenceID exists and is different from ItemID
+                const newRef = item.NewReferenceID && item.NewReferenceID !== item.ItemID ? 
+                             item.NewReferenceID : null;
+
+                return {
+                    ItemID: item.ItemID,
+                    Price: item.Price,
+                    Notes: item.Notes,
+                    HSCode: item.HSCode,
+                    EnglishDescription: item.EnglishDescription,
+                    NewReferenceID: newRef
+                };
+            });
 
             // Begin transaction
             await new Promise((resolve, reject) => {
@@ -258,16 +273,16 @@ class SupplierResponseService {
                 // Process items and create unknown items first
                 for (const item of validData) {
                     // Check and create original item if needed
-                    const originalExists = await this.verifyItemExists(item.itemID);
+                    const originalExists = await this.verifyItemExists(item.ItemID);
                     if (!originalExists) {
-                        await this.createUnknownItem(item.itemID);
+                        await this.createUnknownItem(item.ItemID);
                     }
 
                     // Check and create reference item if needed
-                    if (item.newReferenceID) {
-                        const newExists = await this.verifyItemExists(item.newReferenceID);
+                    if (item.NewReferenceID) {
+                        const newExists = await this.verifyItemExists(item.NewReferenceID);
                         if (!newExists) {
-                            await this.createUnknownItem(item.newReferenceID);
+                            await this.createUnknownItem(item.NewReferenceID);
                         }
                     }
                 }
@@ -283,12 +298,12 @@ class SupplierResponseService {
                             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
                             [
                                 responseId,
-                                item.itemID,
-                                item.price || null,
-                                item.notes || null,
-                                item.hsCode || null,
-                                item.englishDescription || null,
-                                item.newReferenceID || null
+                                item.ItemID,
+                                item.Price || null,
+                                item.Notes || null,
+                                item.HSCode || null,
+                                item.EnglishDescription || null,
+                                item.NewReferenceID || null
                             ],
                             err => {
                                 if (err) reject(err);
@@ -298,7 +313,7 @@ class SupplierResponseService {
                     });
 
                     // If there's a new reference ID, create an ItemReferenceChange record
-                    if (item.newReferenceID) {
+                    if (item.NewReferenceID) {
                         await new Promise((resolve, reject) => {
                             this.db.run(
                                 `INSERT INTO ItemReferenceChange (
@@ -306,10 +321,10 @@ class SupplierResponseService {
                                     ChangeDate, ChangedByUser, Notes
                                 ) VALUES (?, ?, ?, datetime('now'), 0, ?)`,
                                 [
-                                    item.itemID,
-                                    item.newReferenceID,
+                                    item.ItemID,
+                                    item.NewReferenceID,
                                     supplierId,
-                                    item.notes || 'Replacement from supplier response'
+                                    item.Notes || 'Replacement from supplier response'
                                 ],
                                 err => {
                                     if (err) reject(err);
@@ -326,9 +341,9 @@ class SupplierResponseService {
                                     ReferenceNotes = ?
                                 WHERE ItemID = ? AND InquiryID = ?`,
                                 [
-                                    item.newReferenceID,
-                                    item.notes || 'Replacement from supplier response',
-                                    item.itemID,
+                                    item.NewReferenceID,
+                                    item.Notes || 'Replacement from supplier response',
+                                    item.ItemID,
                                     inquiryId
                                 ],
                                 err => {

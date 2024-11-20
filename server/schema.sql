@@ -1,14 +1,6 @@
 -- Enable foreign key support
 PRAGMA foreign_keys = ON;
 
--- Drop existing tables if they exist
-DROP TABLE IF EXISTS promotion_items;
-DROP TABLE IF EXISTS promotions;
-DROP TABLE IF EXISTS OrderItem;
-DROP TABLE IF EXISTS "Order";
-DROP TABLE IF EXISTS SupplierResponseItem;
-DROP TABLE IF EXISTS SupplierResponse;
-
 -- Create base tables first (no foreign key dependencies)
 CREATE TABLE IF NOT EXISTS Item (
     ItemID TEXT PRIMARY KEY,
