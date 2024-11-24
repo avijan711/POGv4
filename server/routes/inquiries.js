@@ -7,6 +7,8 @@ const InquiryItemModel = require('../models/inquiry/item');
 const Promotion = require('../models/promotion');
 const debug = require('../utils/debug');
 const { handleUpload, cleanupFile } = require('../middleware/upload');
+const XLSX = require('xlsx');
+const path = require('path');
 
 function createRouter(db) {
     const router = express.Router();
@@ -83,8 +85,8 @@ function createRouter(db) {
                 });
             }
             
-            // Validate the mapping
-            ExcelProcessor.validateMapping(parsedMapping, ['itemId', 'hebrewDescription', 'requestedQuantity']);
+            // Validate the mapping using the correct field names from the database schema
+            ExcelProcessor.validateMapping(parsedMapping, ['itemID', 'HebrewDescription', 'RequestedQty']);
             
             // Process the Excel file using the processInquiry method, passing the db connection
             const items = await ExcelProcessor.processInquiry(req.file.path, parsedMapping, db);
@@ -152,6 +154,67 @@ function createRouter(db) {
             }
             res.json(inquiry);
         } catch (err) {
+            next(err);
+        }
+    });
+
+    // Export inquiry for suppliers
+    router.get('/:id/export', async (req, res, next) => {
+        try {
+            debug.log('Exporting inquiry:', req.params.id);
+            
+            // Get inquiry data
+            const inquiry = await inquiryModel.getInquiryById(req.params.id);
+            if (!inquiry) {
+                return res.status(404).json({ error: 'Inquiry not found' });
+            }
+
+            // Parse items if needed
+            let items = inquiry.items;
+            if (typeof items === 'string') {
+                items = JSON.parse(items);
+            }
+
+            // Create workbook
+            const wb = XLSX.utils.book_new();
+            
+            // Transform items into rows with exact column names
+            const rows = items.map(item => ({
+                ItemID: item.itemID || '',  // Map from lowercase to uppercase
+                Requested: item.requestedQty || ''  // Map from requestedQty to Requested
+            }));
+
+            // Create worksheet with no header row
+            const ws = XLSX.utils.json_to_sheet(rows, { skipHeader: true });
+
+            // Add header row manually
+            XLSX.utils.sheet_add_aoa(ws, [['ItemID', 'Requested']], { origin: 'A1' });
+
+            // Add worksheet to workbook
+            XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+
+            // Generate filename
+            const filename = `inquiry_export_${Date.now()}.xlsx`;
+            const filepath = path.join(__dirname, '..', 'uploads', filename);
+
+            // Write file
+            XLSX.writeFile(wb, filepath);
+
+            // Set headers for file download
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+            // Send file and clean up
+            res.download(filepath, filename, (err) => {
+                // Clean up file after sending
+                cleanupFile(filepath);
+                if (err) {
+                    debug.error('Error sending file:', err);
+                    next(err);
+                }
+            });
+        } catch (err) {
+            debug.error('Error exporting inquiry:', err);
             next(err);
         }
     });

@@ -16,7 +16,15 @@ export const formatEurPrice = (price) => {
   if (price === null || price === undefined || price === '') {
     return null;
   }
-  const numPrice = Number(price);
+  
+  // Handle price if it's a string with comma decimal separator
+  let numPrice;
+  if (typeof price === 'string' && price.includes(',')) {
+    numPrice = Number(price.replace(',', '.'));
+  } else {
+    numPrice = Number(price);
+  }
+  
   if (isNaN(numPrice)) {
     return null;
   }
@@ -44,9 +52,18 @@ export const calculateDiscount = (priceEUR, importMarkup, retailPrice, eurToIls)
     return null;
   }
 
-  const supplierPriceILS = priceEUR * eurToIls * importMarkup;
+  // Handle priceEUR if it's a string with comma decimal separator
+  let numPriceEUR;
+  if (typeof priceEUR === 'string' && priceEUR.includes(',')) {
+    numPriceEUR = Number(priceEUR.replace(',', '.'));
+  } else {
+    numPriceEUR = Number(priceEUR);
+  }
+
+  const supplierPriceILS = numPriceEUR * eurToIls * importMarkup;
   console.log('Discount calculation:', {
     priceEUR,
+    numPriceEUR,
     importMarkup,
     retailPrice,
     supplierPriceILS,

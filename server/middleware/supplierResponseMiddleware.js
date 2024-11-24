@@ -37,7 +37,9 @@ function validateUpload(req, res, next) {
     try {
         // Check if file exists
         if (!req.file) {
-            throw new Error('No file uploaded');
+            const error = new Error('No file uploaded');
+            error.name = 'ValidationError';
+            throw error;
         }
 
         // Validate file type using the actual file path
@@ -45,52 +47,66 @@ function validateUpload(req, res, next) {
 
         // Check column mapping
         if (!req.body.columnMapping) {
-            throw new Error('Column mapping is required');
+            const error = new Error('Column mapping is required');
+            error.name = 'ValidationError';
+            throw error;
         }
 
         let columnMapping;
         try {
             columnMapping = JSON.parse(req.body.columnMapping);
         } catch (error) {
-            throw new Error('Invalid column mapping format');
+            const parseError = new Error('Invalid column mapping format');
+            parseError.name = 'ValidationError';
+            throw parseError;
         }
 
         // Ensure all mapping values are strings
         Object.entries(columnMapping).forEach(([field, value]) => {
             if (value && typeof value !== 'string') {
                 debug.error('Invalid column mapping value:', { field, value });
-                throw new Error(`Invalid column mapping value for field: ${field}`);
+                const error = new Error(`Invalid column mapping value for field: ${field}`);
+                error.name = 'ValidationError';
+                throw error;
             }
         });
 
         // Check required fields using database field names
         if (!columnMapping.ItemID) {
-            throw new Error('Item ID column mapping is required');
+            const error = new Error('Item ID column mapping is required');
+            error.name = 'ValidationError';
+            throw error;
         }
 
         // Check supplier ID
         if (!req.body.supplierId) {
-            throw new Error('Supplier ID is required');
+            const error = new Error('Supplier ID is required');
+            error.name = 'ValidationError';
+            throw error;
         }
 
         // Check inquiry ID
         if (!req.body.inquiryId) {
-            throw new Error('Inquiry ID is required');
+            const error = new Error('Inquiry ID is required');
+            error.name = 'ValidationError';
+            throw error;
         }
 
         next();
     } catch (error) {
         debug.error('Upload validation error:', error);
-        res.status(400).json({
-            error: 'Validation failed',
-            message: error.message,
-            suggestion: 'Please check your file and column mapping'
-        });
+        // Instead of handling the error here, pass it to the next error handler
+        next(error);
     }
 }
 
 function handleErrors(err, req, res, next) {
     debug.error('Error in supplier response middleware:', err);
+    
+    // If error has already been handled, pass it along
+    if (res.headersSent) {
+        return next(err);
+    }
     
     if (err.name === 'ValidationError') {
         return res.status(400).json({
@@ -116,11 +132,10 @@ function handleErrors(err, req, res, next) {
         });
     }
 
-    res.status(500).json({
-        error: 'Internal server error',
-        message: err.message,
-        suggestion: 'Please try again or contact support'
-    });
+    // If we haven't handled the error and headers haven't been sent, pass it to the next handler
+    if (!res.headersSent) {
+        next(err);
+    }
 }
 
 module.exports = {

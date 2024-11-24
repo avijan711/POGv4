@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const Settings = require('../models/settings');
 const { getDatabase } = require('../config/database');
+const fs = require('fs');
+const path = require('path');
 
 // Get all settings
 router.get('/', async (req, res) => {
@@ -50,83 +52,27 @@ router.post('/', async (req, res) => {
 router.post('/reset', async (req, res) => {
     const db = getDatabase();
     try {
-        // Begin transaction
+        // Read the clear_database.sql file
+        const clearDbPath = path.join(__dirname, '..', 'migrations', 'clear_database.sql');
+        const clearDbSql = fs.readFileSync(clearDbPath, 'utf8');
+
+        // Execute the SQL script directly
         await new Promise((resolve, reject) => {
-            db.run('BEGIN TRANSACTION', (err) => {
-                if (err) reject(err);
-                else resolve();
-            });
-        });
-
-        // Define tables in order of dependency (children first, then parents)
-        const tables = [
-            'OrderItem',           // Child of Order, Item, InquiryItem
-            '"Order"',             // Child of Inquiry, Supplier
-            'promotion_items',     // Child of promotions, Item
-            'promotions',          // Child of Supplier
-            'SupplierResponseItem', // Child of SupplierResponse, Item
-            'SupplierResponse',    // Child of Inquiry, Supplier, Item
-            'InquiryItem',         // Child of Inquiry, Item
-            'Inquiry',             // Base table
-            'ItemHistory',         // Child of Item
-            'ItemReferenceChange', // Child of Item, Supplier
-            'SupplierPrice',       // Child of Item, Supplier
-            'Supplier',            // Base table
-            'Item'                 // Base table
-        ];
-
-        // Delete data from each table
-        for (const table of tables) {
-            try {
-                await new Promise((resolve, reject) => {
-                    const query = `DELETE FROM ${table}`;
-                    console.log(`Executing: ${query}`);
-                    db.run(query, (err) => {
-                        if (err) {
-                            console.error(`Error deleting from ${table}:`, err);
-                            reject(err);
-                        } else {
-                            console.log(`Successfully cleared table: ${table}`);
-                            resolve();
-                        }
-                    });
-                });
-            } catch (error) {
-                if (!error.message.includes('no such table')) {
-                    throw error;
+            db.exec(clearDbSql, (err) => {
+                if (err) {
+                    console.error('Error executing clear_database.sql:', err);
+                    reject(err);
                 } else {
-                    console.log(`Table ${table} does not exist, skipping...`);
+                    console.log('Successfully executed clear_database.sql');
+                    resolve();
                 }
-            }
-        }
-
-        // Reset auto-increment counters if sqlite_sequence exists
-        try {
-            await new Promise((resolve, reject) => {
-                db.run('DELETE FROM sqlite_sequence', (err) => {
-                    if (err && !err.message.includes('no such table')) {
-                        reject(err);
-                    } else {
-                        resolve();
-                    }
-                });
-            });
-        } catch (error) {
-            console.log('No sqlite_sequence table found, skipping...');
-        }
-
-        // Commit transaction
-        await new Promise((resolve, reject) => {
-            db.run('COMMIT', (err) => {
-                if (err) reject(err);
-                else resolve();
             });
         });
 
         res.json({ 
             success: true, 
             message: 'Application reset successfully',
-            details: `Cleared ${tables.length} tables in the correct dependency order`
+            details: 'Database cleared and vacuumed successfully'
         });
     } catch (error) {
         // Rollback on error
@@ -136,6 +82,15 @@ router.post('/reset', async (req, res) => {
                 else resolve();
             });
         });
+
+        // Re-enable foreign key constraints even on error
+        await new Promise((resolve, reject) => {
+            db.run('PRAGMA foreign_keys = ON', (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+
         console.error('Error resetting app:', error);
         res.status(500).json({ 
             success: false, 

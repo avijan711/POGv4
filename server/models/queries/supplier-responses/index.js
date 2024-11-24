@@ -43,6 +43,7 @@ function getSupplierResponsesQuery() {
                 LEFT JOIN ItemReferenceChange irc ON sr.ItemID = irc.OriginalItemID 
                     AND sr.SupplierID = irc.SupplierID
                     AND date(sr.ResponseDate) = date(irc.ChangeDate)
+                WHERE sr.InquiryID = ?
             ),
             SupplierStats AS (
                 SELECT 
@@ -154,7 +155,7 @@ function getSupplierResponsesQuery() {
             LIMIT ? OFFSET ?`,
         params: (inquiryId, page = 1, pageSize = 50) => {
             const offset = (page - 1) * pageSize;
-            return [inquiryId, pageSize, offset];
+            return [inquiryId, inquiryId, pageSize, offset];
         }
     };
 }

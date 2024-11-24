@@ -45,7 +45,8 @@ class InquiryModel extends BaseModel {
         try {
             const queryTimerLabel = 'getInquiryById.query';
             debug.time(queryTimerLabel);
-            const results = await this.executeQuery(getInquiryByIdQuery(), [inquiryId, inquiryId, inquiryId]);
+            // Pass inquiryId four times for: InquiryData, ReferenceChanges, SupplierResponses, and ItemsData CTEs
+            const results = await this.executeQuery(getInquiryByIdQuery(), [inquiryId, inquiryId, inquiryId, inquiryId]);
             debug.timeEnd(queryTimerLabel);
 
             if (!results || results.length === 0) {
@@ -78,51 +79,6 @@ class InquiryModel extends BaseModel {
         debug.log('Creating inquiry:', { inquiryNumber, itemCount: items.length });
 
         return this.executeTransaction(async (db) => {
-            // First, ensure all items exist in the Item table
-            const uniqueItems = [...new Set(items.map(item => item.itemId))];
-            debug.log('Processing unique items:', uniqueItems.length);
-
-            const itemTimerLabel = 'createInquiry.itemInsert';
-            debug.time(itemTimerLabel);
-
-            // Process each unique item
-            for (const itemId of uniqueItems) {
-                const item = items.find(i => i.itemId === itemId);
-                const itemData = {
-                    itemID: itemId,
-                    hebrewDescription: item.hebrewDescription,
-                    englishDescription: item.englishDescription || '',
-                    importMarkup: item.importMarkup || 1.3,
-                    hsCode: item.hsCode || '',
-                    retailPrice: item.retailPrice,
-                    qtyInStock: item.currentStock || 0,
-                    soldThisYear: item.soldThisYear || 0,
-                    soldLastYear: item.soldLastYear || 0
-                };
-
-                const validation = itemUtils.validateItemData(itemData);
-                if (!validation.isValid) {
-                    debug.error('Invalid item data:', {
-                        itemId,
-                        errors: validation.errors
-                    });
-                    throw new Error(`Invalid item data for ${itemId}: ${validation.errors.join(', ')}`);
-                }
-
-                const formattedData = itemUtils.formatItemData(itemData);
-
-                try {
-                    await this._insertOrUpdateItem(db, formattedData);
-                    if (itemUtils.hasRetailPrice(formattedData)) {
-                        await this._insertItemHistory(db, formattedData);
-                    }
-                } catch (error) {
-                    debug.error('Error processing item:', error);
-                    throw error;
-                }
-            }
-            debug.timeEnd(itemTimerLabel);
-
             // Create the inquiry with InquiryNumber
             debug.log('Creating inquiry record');
             const inquiryTimerLabel = 'createInquiry.inquiryInsert';
@@ -141,7 +97,25 @@ class InquiryModel extends BaseModel {
 
             for (const item of items) {
                 try {
-                    await this.inquiryItemModel.createInquiryItem(inquiryId, item);
+                    debug.log('Creating inquiry item:', {
+                        itemId: item.ItemID,
+                        newReferenceId: item.NewReferenceID
+                    });
+
+                    await this.inquiryItemModel.createInquiryItem(inquiryId, {
+                        itemId: item.ItemID,  // Keep original case
+                        hebrewDescription: item.HebrewDescription,
+                        englishDescription: item.EnglishDescription,
+                        requestedQuantity: item.RequestedQty || 0,
+                        importMarkup: item.ImportMarkup,
+                        hsCode: item.HSCode,
+                        retailPrice: item.RetailPrice,
+                        qtyInStock: item.QtyInStock,
+                        soldThisYear: item.QtySoldThisYear,
+                        soldLastYear: item.QtySoldLastYear,
+                        newReferenceId: item.NewReferenceID,  // Match InquiryItemModel's expected case
+                        referenceNotes: item.ReferenceNotes
+                    });
                 } catch (error) {
                     debug.error('Error creating inquiry item:', error);
                     throw error;
@@ -153,58 +127,6 @@ class InquiryModel extends BaseModel {
             debug.timeEnd(timerLabel);
             return { id: inquiryId };
         });
-    }
-
-    async _insertOrUpdateItem(db, data) {
-        const query = `
-            INSERT INTO Item (
-                ItemID,
-                HebrewDescription,
-                EnglishDescription,
-                ImportMarkup,
-                HSCode,
-                Image
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(ItemID) DO UPDATE SET
-                HebrewDescription = excluded.HebrewDescription,
-                EnglishDescription = excluded.EnglishDescription,
-                ImportMarkup = excluded.ImportMarkup,
-                HSCode = excluded.HSCode
-        `;
-        const params = [
-            data.itemID,
-            data.hebrewDescription,
-            data.englishDescription || '',
-            data.importMarkup || 1.30,
-            data.hsCode || '',
-            data.image || ''
-        ];
-
-        debug.logQuery('Insert or update item', query, params);
-        await this.executeRun(query, params);
-    }
-
-    async _insertItemHistory(db, data) {
-        const query = `
-            INSERT INTO ItemHistory (
-                ItemID,
-                ILSRetailPrice,
-                QtyInStock,
-                QtySoldThisYear,
-                QtySoldLastYear,
-                Date
-            ) VALUES (?, ?, ?, ?, ?, datetime('now'))
-        `;
-        const params = [
-            data.itemID,
-            data.retailPrice,
-            data.qtyInStock || 0,
-            data.soldThisYear || 0,
-            data.soldLastYear || 0
-        ];
-
-        debug.logQuery('Insert item history', query, params);
-        await this.executeRun(query, params);
     }
 
     async updateInquiryStatus(inquiryId, status) {
@@ -244,7 +166,7 @@ class InquiryModel extends BaseModel {
         try {
             await this.inquiryItemModel.updateInquiryItem(inquiryItemId, {
                 itemId,
-                newReferenceID: newReferenceId,
+                newReferenceId,  // Match InquiryItemModel's expected case
                 referenceNotes
             });
         } catch (error) {

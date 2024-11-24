@@ -61,6 +61,29 @@ function getInquiryByIdQuery() {
             )
             WHERE ii.InquiryID = ?
         ),
+        SupplierResponses AS (
+            SELECT 
+                sr.ItemID,
+                json_group_array(
+                    json_object(
+                        'responseId', sr.SupplierResponseID,
+                        'supplierId', sr.SupplierID,
+                        'supplierName', s.Name,
+                        'date', sr.ResponseDate,
+                        'priceQuoted', COALESCE(sr.PriceQuoted, 0),
+                        'status', sr.Status,
+                        'notes', sri.Notes,
+                        'hsCode', sri.HSCode,
+                        'englishDescription', sri.EnglishDescription,
+                        'newReferenceID', sri.NewReferenceID
+                    )
+                ) as responses
+            FROM SupplierResponse sr
+            JOIN Supplier s ON sr.SupplierID = s.SupplierID
+            JOIN SupplierResponseItem sri ON sr.SupplierResponseID = sri.SupplierResponseID
+            WHERE sr.InquiryID = ?
+            GROUP BY sr.ItemID
+        ),
         ItemsData AS (
             SELECT 
                 ii.InquiryItemID as inquiryItemID,
@@ -129,8 +152,10 @@ function getInquiryByIdQuery() {
                         WHERE rc.NewReferenceID = ii.ItemID OR rc.NewReferenceID = ii.OriginalItemID
                     ),
                     '[]'
-                ) as referencingItems
+                ) as referencingItems,
+                COALESCE(sr.responses, '[]') as supplierResponses
             FROM InquiryItem ii
+            LEFT JOIN SupplierResponses sr ON ii.ItemID = sr.ItemID
             WHERE ii.InquiryID = ?
         )
         SELECT 
@@ -160,7 +185,8 @@ function getInquiryByIdQuery() {
                         'hasReferenceChange', itd.hasReferenceChange,
                         'isReferencedBy', itd.isReferencedBy,
                         'referenceChange', COALESCE(itd.referenceChange, 'null'),
-                        'referencingItems', COALESCE(itd.referencingItems, '[]')
+                        'referencingItems', COALESCE(itd.referencingItems, '[]'),
+                        'supplierResponses', json(itd.supplierResponses)
                     )
                 ),
                 '[]'

@@ -157,9 +157,19 @@ function createRouter(db) {
             // Update req.file with the correct path
             req.file.path = filePath;
 
+            // Parse the column mapping if it's a string
+            let columnMapping;
+            try {
+                columnMapping = typeof req.body.columnMapping === 'string' 
+                    ? JSON.parse(req.body.columnMapping) 
+                    : req.body.columnMapping;
+            } catch (error) {
+                throw new Error('Invalid column mapping format');
+            }
+
             const result = await supplierResponseService.processUpload(
                 req.file,
-                req.body.columnMapping,
+                columnMapping,
                 req.body.supplierId,
                 req.body.inquiryId
             );

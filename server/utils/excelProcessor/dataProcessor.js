@@ -35,12 +35,12 @@ async function processInquiryData(filePath, columnMapping, db) {
                 value = value != null ? String(value).trim() : null;
                 
                 switch (field) {
-                    case 'itemId':
+                    case 'itemID':  // Match client field name
                         if (!value) {
-                            throw new Error(`Missing required itemId in row ${index + 2}`);
+                            throw new Error(`Missing required Item ID in row ${index + 2}`);
                         }
-                        processedRow[field] = value;
-                        processedRow.originalItemId = value; // Always store original ID
+                        processedRow.ItemID = value;  // Use database field name
+                        processedRow.originalItemID = value; // Always store original ID
                         
                         // Track duplicates
                         itemIdCounts[value] = (itemIdCounts[value] || 0) + 1;
@@ -90,51 +90,52 @@ async function processInquiryData(filePath, columnMapping, db) {
                         }
                         break;
 
-                    case 'hebrewDescription':
+                    case 'HebrewDescription':  // Match client field name
                         if (!value) {
                             throw new Error(`Missing required Hebrew description in row ${index + 2}`);
                         }
-                        processedRow[field] = value;
+                        processedRow.HebrewDescription = value;  // Use database field name
                         break;
 
-                    case 'requestedQuantity':
+                    case 'RequestedQty':  // Match client field name
+                        // Default to 0 if value is empty or not provided
                         if (!value) {
-                            throw new Error(`Missing required requested quantity in row ${index + 2}`);
+                            processedRow.RequestedQty = 0;  // Use database field name
+                            break;
                         }
                         const qty = parseInt(value.replace(/,/g, ''), 10);
                         if (isNaN(qty) || qty < 0) {
                             throw new Error(`Invalid requested quantity in row ${index + 2}: ${value}`);
                         }
-                        processedRow[field] = qty;
+                        processedRow.RequestedQty = qty;  // Use database field name
                         break;
 
-                    case 'importMarkup':
+                    case 'ImportMarkup':  // Match client field name
                         if (value) {
                             const markup = parseFloat(value.replace(/,/g, '.'));
                             if (!isNaN(markup) && markup >= 1.0 && markup <= 2.0) {
-                                processedRow[field] = markup;
+                                processedRow.ImportMarkup = markup;  // Use database field name
                             }
                         }
                         break;
 
-                    case 'newReferenceId':
+                    case 'newReferenceID':  // Match client field name
                         if (value) {
                             const refId = value.trim();
                             // Only set reference if it's different from the itemId
-                            if (refId !== processedRow.itemId) {
-                                processedRow[field] = refId;
-                                processedRow.newReferenceID = refId; // Normalize field name
+                            if (refId !== processedRow.ItemID) {
+                                processedRow.NewReferenceID = refId;  // Use database field name
                                 // If there's a notes column mapped, get the notes
-                                const notesCol = columnMapping['referenceNotes'];
+                                const notesCol = columnMapping['ReferenceNotes'];
                                 if (notesCol && row[notesCol]) {
-                                    processedRow['referenceNotes'] = row[notesCol].trim();
+                                    processedRow.ReferenceNotes = row[notesCol].trim();
                                 }
                                 // Create reference change information
-                                processedRow['hasReferenceChange'] = true;
-                                processedRow['referenceChange'] = {
+                                processedRow.hasReferenceChange = true;
+                                processedRow.referenceChange = {
                                     source: 'inquiry_item',
                                     newReferenceID: refId,
-                                    notes: processedRow['referenceNotes'] || 'Replacement from Excel upload'
+                                    notes: processedRow.ReferenceNotes || 'Replacement from Excel upload'
                                 };
                             } else {
                                 debug.log(`Skipping self-reference for item ${refId} in row ${index + 2}`);
@@ -142,22 +143,22 @@ async function processInquiryData(filePath, columnMapping, db) {
                         }
                         break;
 
-                    case 'retailPrice':
-                    case 'currentStock':
-                    case 'soldThisYear':
-                    case 'soldLastYear':
+                    case 'RetailPrice':
+                    case 'QtyInStock':
+                    case 'QtySoldThisYear':
+                    case 'QtySoldLastYear':
                         if (value) {
                             const num = parseFloat(value.replace(/,/g, '.'));
                             if (!isNaN(num) && num >= 0) {
-                                processedRow[field] = num;
+                                processedRow[field] = num;  // Use database field name
                             }
                         }
                         break;
 
-                    case 'englishDescription':
-                    case 'hsCode':
+                    case 'EnglishDescription':
+                    case 'HSCode':
                         if (value) {
-                            processedRow[field] = value;
+                            processedRow[field] = value;  // Use database field name
                         }
                         break;
 
@@ -175,7 +176,7 @@ async function processInquiryData(filePath, columnMapping, db) {
         processedData.forEach(item => {
             if (item.hasReferenceChange) {
                 const referencedItems = processedData.filter(otherItem => 
-                    otherItem.itemId === item.newReferenceID
+                    otherItem.ItemID === item.NewReferenceID
                 );
                 if (referencedItems.length > 0) {
                     referencedItems.forEach(refItem => {
@@ -184,7 +185,7 @@ async function processInquiryData(filePath, columnMapping, db) {
                             refItem.referencingItems = [];
                         }
                         refItem.referencingItems.push({
-                            itemId: item.itemId,
+                            itemId: item.ItemID,
                             referenceChange: item.referenceChange
                         });
                     });
@@ -237,12 +238,27 @@ function processSupplierResponse(filePath, columnMapping) {
                 let value = row[excelCol];
                 value = value != null ? String(value).trim() : null;
                 
-                switch (field) {
-                    case 'itemID':  // Match client-side field name
+                // Map of client-side field names to database field names
+                const fieldMap = {
+                    'itemID': 'ItemID',
+                    'newReferenceID': 'NewReferenceID',
+                    'hsCode': 'HSCode',
+                    'HSCode': 'HSCode',
+                    'englishDescription': 'EnglishDescription',
+                    'EnglishDescription': 'EnglishDescription',
+                    'price': 'Price',
+                    'notes': 'Notes'
+                };
+
+                // Get the database field name, defaulting to PascalCase if not in map
+                const dbField = fieldMap[field] || field.charAt(0).toUpperCase() + field.slice(1);
+                
+                switch (field.toLowerCase()) {
+                    case 'itemid':
                         if (!value) {
                             throw new Error(`Missing required itemID in row ${index + 2}`);
                         }
-                        processedRow.ItemID = value;  // Use database field name
+                        processedRow.ItemID = value;
                         processedRow.originalItemID = value;
                         
                         // Track duplicates
@@ -257,24 +273,50 @@ function processSupplierResponse(filePath, columnMapping) {
                         break;
                         
                     case 'price':
+                        // Initialize Price as null
+                        processedRow.Price = null;
+                        
                         if (value) {
-                            const price = parseFloat(value.replace(/,/g, '.'));
-                            if (!isNaN(price)) {
-                                processedRow.Price = price;  // Use database field name
+                            // Remove any spaces and handle both comma and period as decimal separators
+                            const cleanValue = value.replace(/\s/g, '');
+                            
+                            // Check if the value uses comma as decimal separator
+                            const hasCommaDecimal = /^\d+,\d+$/.test(cleanValue);
+                            const hasPeriodDecimal = /^\d+\.\d+$/.test(cleanValue);
+                            
+                            let numericValue;
+                            if (hasCommaDecimal) {
+                                // Replace comma with period for decimal
+                                numericValue = parseFloat(cleanValue.replace(',', '.'));
+                            } else if (hasPeriodDecimal) {
+                                // Already in correct format
+                                numericValue = parseFloat(cleanValue);
+                            } else {
+                                // Handle whole numbers or other formats
+                                // First remove any thousands separators (both commas and periods)
+                                const stripped = cleanValue.replace(/[,.](?=\d{3})/g, '');
+                                numericValue = parseFloat(stripped);
+                            }
+                            
+                            if (!isNaN(numericValue) && numericValue >= 0) {
+                                processedRow.Price = numericValue;
+                                debug.log(`Processed price for item ${processedRow.ItemID}: ${value} -> ${numericValue}`);
+                            } else {
+                                debug.error(`Invalid price format for item ${processedRow.ItemID}: ${value}`);
                             }
                         }
                         break;
                         
-                    case 'newReferenceID':  // Match client-side field name
+                    case 'newreferenceid':
                         if (value) {
                             const refId = value.trim();
                             // Only set reference if it's different from the itemID
                             if (refId !== processedRow.ItemID) {
-                                processedRow.NewReferenceID = refId;  // Use database field name
+                                processedRow.NewReferenceID = refId;
                                 processedRow.hasReferenceChange = true;
                                 processedRow.referenceChange = {
                                     source: 'supplier',
-                                    NewReferenceID: refId,  // Use database field name
+                                    NewReferenceID: refId,
                                     Notes: processedRow.Notes || 'Replacement from supplier response'
                                 };
                             } else {
@@ -285,26 +327,24 @@ function processSupplierResponse(filePath, columnMapping) {
                         
                     case 'notes':
                         if (value) {
-                            processedRow.Notes = value;  // Use database field name
+                            processedRow.Notes = value;
                         }
                         break;
 
-                    case 'hsCode':
+                    case 'hscode':
                         if (value) {
-                            processedRow.HSCode = value;  // Use database field name
+                            processedRow.HSCode = value;
                         }
                         break;
 
-                    case 'englishDescription':
+                    case 'englishdescription':
                         if (value) {
-                            processedRow.EnglishDescription = value;  // Use database field name
+                            processedRow.EnglishDescription = value;
                         }
                         break;
 
                     default:
                         if (value) {
-                            // Convert field name to PascalCase for database
-                            const dbField = field.charAt(0).toUpperCase() + field.slice(1);
                             processedRow[dbField] = value;
                         }
                 }
@@ -340,10 +380,18 @@ function validateData(data, requiredFields) {
     const errors = [];
     data.forEach((row, index) => {
         requiredFields.forEach(field => {
-            // Convert client-side field name to database field name
-            const dbField = field === 'itemID' ? 'ItemID' :
-                          field === 'newReferenceID' ? 'NewReferenceID' :
-                          field.charAt(0).toUpperCase() + field.slice(1);
+            // Map of client-side field names to database field names
+            const fieldMap = {
+                'itemID': 'ItemID',
+                'newReferenceID': 'NewReferenceID',
+                'hsCode': 'HSCode',
+                'HSCode': 'HSCode',
+                'englishDescription': 'EnglishDescription',
+                'EnglishDescription': 'EnglishDescription'
+            };
+            
+            // Get the database field name, defaulting to PascalCase if not in map
+            const dbField = fieldMap[field] || field.charAt(0).toUpperCase() + field.slice(1);
             
             const value = row[dbField];
             if (value == null || (typeof value === 'string' && !value.trim())) {

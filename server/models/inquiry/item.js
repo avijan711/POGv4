@@ -52,22 +52,37 @@ class InquiryItemModel extends BaseModel {
 
     async createInquiryItem(inquiryId, itemData) {
         try {
-            // Only proceed with reference handling if newReferenceID is different from itemId
-            if (itemData.newReferenceID && itemData.newReferenceID !== itemData.itemId) {
+            debug.log('Creating inquiry item with data:', itemData);
+
+            // Check if main item exists, create if not
+            const itemExists = await this.executeQuerySingle(
+                'SELECT 1 FROM Item WHERE ItemID = ?',
+                [itemData.itemId]
+            );
+            
+            if (!itemExists) {
+                await this.createUnknownItem(
+                    itemData.itemId,
+                    itemData.hebrewDescription || `Unknown Item ${itemData.itemId}`
+                );
+            }
+
+            // Only proceed with reference handling if newReferenceId is different from itemId
+            if (itemData.newReferenceId && itemData.newReferenceId !== itemData.itemId) {
                 const exists = await this.executeQuerySingle(
                     'SELECT 1 FROM Item WHERE ItemID = ?',
-                    [itemData.newReferenceID]
+                    [itemData.newReferenceId]
                 );
                 
                 if (!exists) {
                     await this.createUnknownItem(
-                        itemData.newReferenceID,
+                        itemData.newReferenceId,
                         `Unknown Replacement for ${itemData.itemId}`
                     );
                 }
             } else {
-                // Clear newReferenceID if it's the same as itemId
-                itemData.newReferenceID = null;
+                // Clear newReferenceId if it's the same as itemId
+                itemData.newReferenceId = null;
             }
 
             const query = `
@@ -91,25 +106,30 @@ class InquiryItemModel extends BaseModel {
 
             const params = [
                 inquiryId,
-                itemData.itemId, // Always use the original itemId
-                itemData.itemId, // Store original itemId
+                itemData.itemId,
+                itemData.itemId,
                 itemData.hebrewDescription,
                 itemData.englishDescription || '',
                 itemData.importMarkup || 1.3,
                 itemData.hsCode || '',
-                itemData.currentStock || 0,
+                itemData.qtyInStock || 0,
                 itemData.retailPrice,
                 itemData.soldThisYear || 0,
                 itemData.soldLastYear || 0,
                 itemData.requestedQuantity || 0,
-                itemData.newReferenceID || null,
+                itemData.newReferenceId || null,
                 itemData.referenceNotes || null
             ];
 
+            debug.log('Executing inquiry item insert:', {
+                query,
+                params
+            });
+
             await this.executeRun(query, params);
 
-            // Only create reference change if newReferenceID is different from itemId
-            if (itemData.newReferenceID && itemData.newReferenceID !== itemData.itemId) {
+            // Only create reference change if newReferenceId is different from itemId
+            if (itemData.newReferenceId && itemData.newReferenceId !== itemData.itemId) {
                 const referenceQuery = `
                     INSERT INTO ItemReferenceChange (
                         OriginalItemID,
@@ -120,17 +140,24 @@ class InquiryItemModel extends BaseModel {
                     ) VALUES (?, ?, 1, ?, datetime('now'))
                 `;
 
-                await this.executeRun(referenceQuery, [
+                const referenceParams = [
                     itemData.itemId,
-                    itemData.newReferenceID,
+                    itemData.newReferenceId,
                     itemData.referenceNotes || 'Reference from inquiry upload'
-                ]);
+                ];
+
+                debug.log('Executing reference change insert:', {
+                    query: referenceQuery,
+                    params: referenceParams
+                });
+
+                await this.executeRun(referenceQuery, referenceParams);
             }
 
             debug.log('Created inquiry item:', {
                 inquiryId,
                 itemId: itemData.itemId,
-                referenceId: itemData.newReferenceID
+                referenceId: itemData.newReferenceId
             });
         } catch (error) {
             debug.error('Error creating inquiry item:', error);
@@ -140,9 +167,14 @@ class InquiryItemModel extends BaseModel {
 
     async updateInquiryItem(inquiryItemId, updateData) {
         try {
-            // Only proceed with reference update if newReferenceID is different from itemId
-            if (updateData.newReferenceID && updateData.newReferenceID === updateData.itemId) {
-                updateData.newReferenceID = null;
+            debug.log('Updating inquiry item:', {
+                inquiryItemId,
+                updateData
+            });
+
+            // Only proceed with reference update if newReferenceId is different from itemId
+            if (updateData.newReferenceId && updateData.newReferenceId === updateData.itemId) {
+                updateData.newReferenceId = null;
             }
 
             const query = `
@@ -155,10 +187,15 @@ class InquiryItemModel extends BaseModel {
 
             const params = [
                 updateData.requestedQty,
-                updateData.newReferenceID,
+                updateData.newReferenceId,
                 updateData.referenceNotes,
                 inquiryItemId
             ];
+
+            debug.log('Executing inquiry item update:', {
+                query,
+                params
+            });
 
             const result = await this.executeRun(query, params);
 
@@ -166,16 +203,16 @@ class InquiryItemModel extends BaseModel {
                 throw new Error('Inquiry item not found');
             }
 
-            // Only create reference change if newReferenceID is different from itemId
-            if (updateData.newReferenceID && updateData.newReferenceID !== updateData.itemId) {
+            // Only create reference change if newReferenceId is different from itemId
+            if (updateData.newReferenceId && updateData.newReferenceId !== updateData.itemId) {
                 const exists = await this.executeQuerySingle(
                     'SELECT 1 FROM Item WHERE ItemID = ?',
-                    [updateData.newReferenceID]
+                    [updateData.newReferenceId]
                 );
 
                 if (!exists) {
                     await this.createUnknownItem(
-                        updateData.newReferenceID,
+                        updateData.newReferenceId,
                         `Unknown Replacement for ${updateData.itemId}`
                     );
                 }

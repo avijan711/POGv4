@@ -113,7 +113,8 @@ class ExcelProcessor {
 
         // Validate file and mapping
         validateFileType(filePath);
-        validateColumnMapping(columnMapping, ['ItemID', 'HebrewDescription', 'RequestedQty']);  // Use database field names
+        // Pass the field names directly to validateColumnMapping
+        validateColumnMapping(columnMapping, ['itemID', 'HebrewDescription', 'RequestedQty']);
 
         try {
             // Process the data using the new processInquiryData function
@@ -146,21 +147,55 @@ class ExcelProcessor {
 
         // Convert client-side field names to database field names
         const requiredFields = (options.requiredFields || ['itemID']).map(field => {
-            switch (field) {
-                case 'itemID':
-                    return 'ItemID';
-                case 'newReferenceID':
-                    return 'NewReferenceID';
-                default:
-                    return field.charAt(0).toUpperCase() + field.slice(1);
-            }
+            // Map of client-side field names to database field names
+            const fieldMap = {
+                'itemID': 'ItemID',
+                'newReferenceID': 'NewReferenceID',
+                'hsCode': 'HSCode',
+                'englishDescription': 'EnglishDescription',
+                'hebrewDescription': 'HebrewDescription',
+                'importMarkup': 'ImportMarkup',
+                'requestedQty': 'RequestedQty',
+                'qtyInStock': 'QtyInStock',
+                'retailPrice': 'RetailPrice',
+                'qtySoldThisYear': 'QtySoldThisYear',
+                'qtySoldLastYear': 'QtySoldLastYear',
+                'referenceNotes': 'ReferenceNotes'
+            };
+
+            // If field exists in map, use mapped value, otherwise convert to PascalCase
+            return fieldMap[field.toLowerCase()] || 
+                   field.charAt(0).toUpperCase() + field.slice(1);
+        });
+        
+        // Convert column mapping keys to database field names
+        const convertedMapping = {};
+        Object.entries(columnMapping).forEach(([field, value]) => {
+            const fieldMap = {
+                'itemID': 'ItemID',
+                'newReferenceID': 'NewReferenceID',
+                'hsCode': 'HSCode',
+                'englishDescription': 'EnglishDescription',
+                'hebrewDescription': 'HebrewDescription',
+                'importMarkup': 'ImportMarkup',
+                'requestedQty': 'RequestedQty',
+                'qtyInStock': 'QtyInStock',
+                'retailPrice': 'RetailPrice',
+                'qtySoldThisYear': 'QtySoldThisYear',
+                'qtySoldLastYear': 'QtySoldLastYear',
+                'referenceNotes': 'ReferenceNotes'
+            };
+
+            const dbField = fieldMap[field.toLowerCase()] || 
+                          field.charAt(0).toUpperCase() + field.slice(1);
+            convertedMapping[dbField] = value;
         });
         
         // Validate the mapping with the database field names
-        validateColumnMapping(columnMapping, requiredFields);
+        validateColumnMapping(convertedMapping, requiredFields);
 
-        // Process data using the original mapping
-        const data = await processSupplierResponse(filePath, columnMapping);
+        // Process data using the converted mapping
+        const data = await processSupplierResponse(filePath, convertedMapping);
 
         // Validate data with database field names
         validateData(data, requiredFields);
@@ -179,18 +214,13 @@ class ExcelProcessor {
     }
 
     static validateMapping(columnMapping, requiredFields) {
-        // Convert required fields to database field names
-        const dbFields = requiredFields.map(field => {
-            switch (field) {
-                case 'itemID':
-                    return 'ItemID';
-                case 'newReferenceID':
-                    return 'NewReferenceID';
-                default:
-                    return field.charAt(0).toUpperCase() + field.slice(1);
-            }
+        debug.log('Validating column mapping:', {
+            mapping: columnMapping,
+            requiredFields
         });
-        return validateColumnMapping(columnMapping, dbFields);
+        
+        // Pass the fields directly to validateColumnMapping without conversion
+        return validateColumnMapping(columnMapping, requiredFields);
     }
 
     static validateFile(filename) {

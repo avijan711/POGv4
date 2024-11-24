@@ -28,7 +28,7 @@ const OPTIONAL_FIELDS = [
   { field: 'RetailPrice', label: 'Retail Price (ILS)', description: 'Retail price in Israeli Shekels', hebrewLabels: ['מחירון'] },
   { field: 'QtySoldThisYear', label: 'Sold This Year', description: 'Units sold in current year', hebrewLabels: ['כמות שנמכרה'] },
   { field: 'QtySoldLastYear', label: 'Sold Last Year', description: 'Units sold in previous year', hebrewLabels: ['כמות נמכרה ש'] },
-  { field: 'newReferenceID', label: 'New Reference ID', description: 'ID of the replacement item' },
+  { field: 'NewReferenceID', label: 'New Reference ID', description: 'ID of the replacement item' },
   { field: 'ReferenceNotes', label: 'Reference Notes', description: 'Additional reference information' }
 ];
 

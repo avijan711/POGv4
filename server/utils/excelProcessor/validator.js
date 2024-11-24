@@ -65,16 +65,32 @@ function validateColumnMapping(columnMapping, requiredFields = []) {
     }
 
     try {
-        // Ensure all values in columnMapping are strings
+        // Create a case-insensitive map of column mappings
+        const mappingLookup = {};
         Object.entries(columnMapping).forEach(([field, value]) => {
+            // Store both the original field name and its lowercase version
+            mappingLookup[field.toLowerCase()] = {
+                originalField: field,
+                value: value
+            };
+        });
+
+        debug.log('Column mapping lookup:', mappingLookup);
+
+        // Ensure all values in columnMapping are strings
+        Object.values(mappingLookup).forEach(({ originalField, value }) => {
             if (value && typeof value !== 'string') {
-                debug.error('Invalid column mapping value:', { field, value });
-                throw new Error(`Invalid column mapping value for field: ${field}`);
+                debug.error('Invalid column mapping value:', { field: originalField, value });
+                throw new Error(`Invalid column mapping value for field: ${originalField}`);
             }
         });
 
-        // Check for required fields
-        const missingFields = requiredFields.filter(field => !columnMapping[field]);
+        // Check for required fields using case-insensitive comparison
+        const missingFields = requiredFields.filter(field => {
+            const lookup = mappingLookup[field.toLowerCase()];
+            return !lookup || !lookup.value;
+        });
+
         if (missingFields.length > 0) {
             debug.error('Missing required fields:', missingFields);
             throw new Error(`Missing required column mappings: ${missingFields.join(', ')}`);
@@ -82,7 +98,8 @@ function validateColumnMapping(columnMapping, requiredFields = []) {
 
         debug.log('Column mapping validation passed:', {
             mapping: columnMapping,
-            requiredFields
+            requiredFields,
+            lookup: mappingLookup
         });
 
         return true;
