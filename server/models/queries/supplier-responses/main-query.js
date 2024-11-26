@@ -70,7 +70,7 @@ function getMainQuery() {
                 CASE WHEN sr.item_id IS NOT NULL THEN
                     json_object(
                         'item_id', sr.item_id,
-                        'price_quoted', COALESCE(sr.price_quoted, 0),
+                        'price_quoted', NULLIF(sr.price_quoted, 0),
                         'status', COALESCE(sr.status, 'pending'),
                         'response_id', sr.supplier_response_id,
                         'hebrew_description', COALESCE(sr.hebrew_description, ''),

@@ -47,31 +47,35 @@ module.exports = `
             ph.item_id,
             ph.date,
             ph.ils_retail_price,
-            ph.qty_in_stock
+            ph.qty_in_stock,
+            NULLIF(ph.qty_sold_this_year, 0) as qty_sold_this_year,
+            NULLIF(ph.qty_sold_last_year, 0) as qty_sold_last_year
         FROM price_history ph
         WHERE ph.item_id = ?
         ORDER BY ph.date DESC
     ),
     supplier_price_data AS (
-        SELECT
+        SELECT DISTINCT
             sri.item_id,
-            s.name as supplier_name,
-            sr.supplier_id,
-            sri.price,
-            sr.response_date as date,
-            sr.is_promotion,
-            sr.promotion_name,
-            sr.status,
+            s.name as supplierName,
+            s.supplier_id,
+            sri.price as priceQuoted,
+            sr.response_date as lastUpdated,
+            COALESCE(sr.is_promotion, 0) as isPromotion,
+            sr.promotion_name as promotionName,
+            COALESCE(sr.status, 'active') as status,
             sri.notes,
             sri.hs_code,
             sri.english_description,
             sri.origin,
             sri.new_reference_id
-        FROM supplier_response sr
+        FROM supplier_response_item sri
+        JOIN supplier_response sr ON sri.supplier_response_id = sr.supplier_response_id
         JOIN supplier s ON sr.supplier_id = s.supplier_id
-        JOIN supplier_response_item sri ON sr.supplier_response_id = sri.supplier_response_id
         WHERE sri.item_id = ?
-        AND sr.status = 'active'
+        AND sr.status != 'deleted'
+        AND sri.price IS NOT NULL
+        GROUP BY sri.item_id, s.name, s.supplier_id, sri.price, sr.response_date, sr.is_promotion, sr.promotion_name, sr.status, sri.notes, sri.hs_code, sri.english_description, sri.origin, sri.new_reference_id
         ORDER BY sr.response_date DESC
     ),
     promotion_data AS (
@@ -174,38 +178,27 @@ module.exports = `
         i.english_description,
         i.import_markup,
         i.hs_code,
-        i.origin,
         i.image,
         i.notes,
-        i.retail_price,
-        i.qty_in_stock,
-        i.sold_this_year,
-        i.sold_last_year,
+        i.origin,
         i.last_updated,
-        CASE
-            WHEN (lr.new_reference_id IS NOT NULL AND lr.new_reference_id != i.item_id) 
-                 OR (i.new_reference_id IS NOT NULL AND i.new_reference_id != i.item_id) 
-            THEN json_object(
-                'new_reference_id', COALESCE(lr.new_reference_id, i.new_reference_id),
-                'change_date', COALESCE(lr.change_date, i.last_updated),
-                'notes', COALESCE(lr.reference_notes, i.reference_notes),
-                'supplier_name', lr.supplier_name,
-                'source', CASE
-                    WHEN lr.supplier_id IS NOT NULL THEN 'supplier'
-                    ELSE 'user'
-                END
-            )
-            ELSE NULL
-        END as reference_change,
-        COALESCE(ri.referencing_items_array, '[]') as referencing_items,
+        COALESCE(ph.ils_retail_price, li.retail_price) as retail_price,
+        COALESCE(ph.qty_in_stock, li.qty_in_stock, 0) as qty_in_stock,
+        COALESCE(NULLIF(ph.qty_sold_this_year, 0), NULLIF(li.sold_this_year, 0), 0) as sold_this_year,
+        COALESCE(NULLIF(ph.qty_sold_last_year, 0), NULLIF(li.sold_last_year, 0), 0) as sold_last_year,
+        COALESCE(ph.date, li.inquiry_date) as last_price_update,
+        lr.new_reference_id as reference_id,
+        lr.reference_notes,
+        lr.change_date as reference_change_date,
+        lr.supplier_name as reference_supplier,
+        lr.supplier_status as reference_status,
         CASE 
-            WHEN (lr.new_reference_id IS NOT NULL AND lr.new_reference_id != i.item_id) 
-                 OR (i.new_reference_id IS NOT NULL AND i.new_reference_id != i.item_id) 
-            THEN 1
+            WHEN lr.new_reference_id IS NOT NULL THEN 1
             ELSE 0
         END as has_reference_change,
-        CASE 
-            WHEN ri.referencing_items_array IS NOT NULL AND ri.referencing_items_array != '[null]' THEN 1
+        CASE
+            WHEN ri.referencing_items_array != '[]' 
+            AND ri.referencing_items_array != '[null]' THEN 1
             ELSE 0
         END as is_referenced_by,
         COALESCE(
@@ -213,8 +206,7 @@ module.exports = `
                 json_object(
                     'date', ph.date,
                     'price', ph.ils_retail_price,
-                    'qty_in_stock', ph.qty_in_stock,
-                    'source', 'history'
+                    'stock', ph.qty_in_stock
                 )
             ) FILTER (WHERE ph.item_id IS NOT NULL),
             '[]'
@@ -222,20 +214,19 @@ module.exports = `
         COALESCE(
             json_group_array(
                 json_object(
-                    'supplier_name', sr.supplier_name,
-                    'supplier_id', sr.supplier_id,
-                    'price', sr.price,
-                    'date', sr.date,
-                    'is_promotion', COALESCE(sr.is_promotion, 0),
-                    'promotion_name', sr.promotion_name,
-                    'status', sr.status,
-                    'notes', sr.notes,
-                    'hs_code', sr.hs_code,
-                    'english_description', sr.english_description,
-                    'origin', sr.origin,
-                    'new_reference_id', sr.new_reference_id
+                    'supplierName', sp.supplierName,
+                    'lastUpdated', sp.lastUpdated,
+                    'priceQuoted', sp.priceQuoted,
+                    'isPromotion', sp.isPromotion,
+                    'promotionName', sp.promotionName,
+                    'status', sp.status,
+                    'notes', sp.notes,
+                    'hs_code', sp.hs_code,
+                    'english_description', sp.english_description,
+                    'origin', sp.origin,
+                    'new_reference_id', sp.new_reference_id
                 )
-            ) FILTER (WHERE sr.item_id IS NOT NULL),
+            ) FILTER (WHERE sp.item_id IS NOT NULL),
             '[]'
         ) as supplier_prices,
         COALESCE(
@@ -258,5 +249,8 @@ module.exports = `
     LEFT JOIN latest_references lr ON i.item_id = lr.item_id
     LEFT JOIN referencing_items ri ON i.item_id = ri.item_id
     LEFT JOIN price_history_data ph ON i.item_id = ph.item_id
-    LEFT JOIN supplier_price_data sr ON i.item_id = sr.item_id
-    LEFT JOIN promotion_data p ON i.item_id = p.item_id`;
+    LEFT JOIN supplier_price_data sp ON i.item_id = sp.item_id
+    LEFT JOIN latest_inquiry_items li ON i.item_id = li.item_id
+    LEFT JOIN promotion_data p ON i.item_id = p.item_id
+    GROUP BY i.item_id, ph.date, ph.ils_retail_price, ph.qty_in_stock
+`;
