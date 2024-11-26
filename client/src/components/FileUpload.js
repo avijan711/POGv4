@@ -41,7 +41,7 @@ function FileUpload() {
   const [error, setError] = useState({ message: '', details: '', suggestion: '' });
   const [success, setSuccess] = useState('');
   const [activeStep, setActiveStep] = useState(0);
-  const [excelColumns, setExcelColumns] = useState([]);
+  const [columns, setColumns] = useState([]);
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [columnMapping, setColumnMapping] = useState(null);
 
@@ -102,7 +102,7 @@ function FileUpload() {
           throw new Error('No valid columns found in the Excel file');
         }
 
-        setExcelColumns(processedColumns);
+        setColumns(processedColumns);
         setShowMappingDialog(true);
       } catch (error) {
         console.error('Failed to read Excel columns:', error);
@@ -549,7 +549,7 @@ function FileUpload() {
       <ColumnMappingDialog
         open={showMappingDialog}
         onClose={() => setShowMappingDialog(false)}
-        excelColumns={excelColumns}
+        columns={columns}
         onConfirm={handleMappingConfirm}
       />
     </Box>

@@ -85,8 +85,8 @@ function createRouter(db) {
                 });
             }
             
-            // Validate the mapping using the correct field names from the database schema
-            ExcelProcessor.validateMapping(parsedMapping, ['itemID', 'HebrewDescription', 'RequestedQty']);
+            // Validate the mapping using snake_case field names
+            ExcelProcessor.validateMapping(parsedMapping, ['item_id', 'hebrew_description', 'requested_qty']);
             
             // Process the Excel file using the processInquiry method, passing the db connection
             const items = await ExcelProcessor.processInquiry(req.file.path, parsedMapping, db);
@@ -178,17 +178,17 @@ function createRouter(db) {
             // Create workbook
             const wb = XLSX.utils.book_new();
             
-            // Transform items into rows with exact column names
+            // Transform items into rows with snake_case column names
             const rows = items.map(item => ({
-                ItemID: item.itemID || '',  // Map from lowercase to uppercase
-                Requested: item.requestedQty || ''  // Map from requestedQty to Requested
+                item_id: item.item_id || '',
+                requested_qty: item.requested_qty || ''
             }));
 
             // Create worksheet with no header row
             const ws = XLSX.utils.json_to_sheet(rows, { skipHeader: true });
 
             // Add header row manually
-            XLSX.utils.sheet_add_aoa(ws, [['ItemID', 'Requested']], { origin: 'A1' });
+            XLSX.utils.sheet_add_aoa(ws, [['item_id', 'requested_qty']], { origin: 'A1' });
 
             // Add worksheet to workbook
             XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
@@ -260,18 +260,18 @@ function createRouter(db) {
         try {
             debug.log('Updating quantity:', {
                 itemId: req.params.id,
-                requestedQty: req.body.requestedQty
+                requestedQty: req.body.requested_qty
             });
 
-            const { requestedQty } = req.body;
-            if (requestedQty === undefined || requestedQty === null) {
+            const { requested_qty } = req.body;
+            if (requested_qty === undefined || requested_qty === null) {
                 return res.status(400).json({
                     error: 'Invalid quantity',
                     details: 'Quantity must be provided'
                 });
             }
 
-            const qty = parseInt(requestedQty);
+            const qty = parseInt(requested_qty);
             if (isNaN(qty) || qty < 0) {
                 return res.status(400).json({
                     error: 'Invalid quantity',

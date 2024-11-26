@@ -1,5 +1,5 @@
 const path = require('path');
-const { initializeDatabase, insertTestData, getDatabase } = require('./config/database');
+const { initializeDatabase, getDatabase } = require('./config/database');
 const configureServer = require('./config/server');
 const ItemModel = require('./models/item');
 const InquiryModel = require('./models/inquiry');
@@ -38,25 +38,8 @@ async function startServer() {
         });
         console.log('Database initialized successfully');
 
-        // Only insert test data if tables are empty
+        // Get database instance
         const db = getDatabase();
-        const hasData = await new Promise((resolve, reject) => {
-            db.get('SELECT COUNT(*) as count FROM Item', [], (err, row) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-                resolve(row.count > 0);
-            });
-        });
-
-        if (!hasData) {
-            console.log('Inserting test data...');
-            await retryOperation(async () => {
-                await insertTestData(getDatabase());
-            });
-            console.log('Test data inserted successfully');
-        }
 
         // Configure server
         const { app, port } = configureServer();

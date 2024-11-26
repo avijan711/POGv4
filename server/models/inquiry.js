@@ -37,20 +37,20 @@ class InquiryModel extends BaseModel {
         }
     }
 
-    async getInquiryById(inquiryId) {
+    async getInquiryById(inquiry_id) {
         const timerLabel = 'getInquiryById';
         debug.time(timerLabel);
-        debug.log('Getting inquiry by ID:', inquiryId);
+        debug.log('Getting inquiry by ID:', inquiry_id);
 
         try {
             const queryTimerLabel = 'getInquiryById.query';
             debug.time(queryTimerLabel);
-            // Pass inquiryId four times for: InquiryData, ReferenceChanges, SupplierResponses, and ItemsData CTEs
-            const results = await this.executeQuery(getInquiryByIdQuery(), [inquiryId, inquiryId, inquiryId, inquiryId]);
+            // Pass inquiry_id four times for: InquiryData, ReferenceChanges, SupplierResponses, and ItemsData CTEs
+            const results = await this.executeQuery(getInquiryByIdQuery(), [inquiry_id, inquiry_id, inquiry_id, inquiry_id]);
             debug.timeEnd(queryTimerLabel);
 
             if (!results || results.length === 0) {
-                debug.log('Inquiry not found:', inquiryId);
+                debug.log('Inquiry not found:', inquiry_id);
                 throw new Error('Inquiry not found');
             }
 
@@ -79,15 +79,15 @@ class InquiryModel extends BaseModel {
         debug.log('Creating inquiry:', { inquiryNumber, itemCount: items.length });
 
         return this.executeTransaction(async (db) => {
-            // Create the inquiry with InquiryNumber
+            // Create the inquiry with inquiry_number
             debug.log('Creating inquiry record');
             const inquiryTimerLabel = 'createInquiry.inquiryInsert';
             debug.time(inquiryTimerLabel);
             const result = await this.executeRun(
-                'INSERT INTO Inquiry (InquiryNumber, Status) VALUES (?, ?)',
+                'INSERT INTO inquiry (inquiry_number, status) VALUES (?, ?)',
                 [inquiryNumber, 'new']
             );
-            const inquiryId = result.lastID;
+            const inquiry_id = result.lastID;
             debug.timeEnd(inquiryTimerLabel);
 
             // Create inquiry items using InquiryItemModel
@@ -98,23 +98,23 @@ class InquiryModel extends BaseModel {
             for (const item of items) {
                 try {
                     debug.log('Creating inquiry item:', {
-                        itemId: item.ItemID,
-                        newReferenceId: item.NewReferenceID
+                        item_id: item.item_id,
+                        new_reference_id: item.new_reference_id
                     });
 
-                    await this.inquiryItemModel.createInquiryItem(inquiryId, {
-                        itemId: item.ItemID,  // Keep original case
-                        hebrewDescription: item.HebrewDescription,
-                        englishDescription: item.EnglishDescription,
-                        requestedQuantity: item.RequestedQty || 0,
-                        importMarkup: item.ImportMarkup,
-                        hsCode: item.HSCode,
-                        retailPrice: item.RetailPrice,
-                        qtyInStock: item.QtyInStock,
-                        soldThisYear: item.QtySoldThisYear,
-                        soldLastYear: item.QtySoldLastYear,
-                        newReferenceId: item.NewReferenceID,  // Match InquiryItemModel's expected case
-                        referenceNotes: item.ReferenceNotes
+                    await this.inquiryItemModel.createInquiryItem(inquiry_id, {
+                        item_id: item.item_id,
+                        hebrew_description: item.hebrew_description,
+                        english_description: item.english_description,
+                        requested_qty: item.requested_qty || 0,
+                        import_markup: item.import_markup,
+                        hs_code: item.hs_code,
+                        retail_price: item.retail_price,
+                        qty_in_stock: item.qty_in_stock,
+                        sold_this_year: item.sold_this_year,
+                        sold_last_year: item.sold_last_year,
+                        new_reference_id: item.new_reference_id,
+                        reference_notes: item.reference_notes
                     });
                 } catch (error) {
                     debug.error('Error creating inquiry item:', error);
@@ -123,21 +123,21 @@ class InquiryModel extends BaseModel {
             }
             debug.timeEnd(inquiryItemsTimerLabel);
 
-            debug.log('Inquiry creation completed:', { inquiryId });
+            debug.log('Inquiry creation completed:', { inquiry_id });
             debug.timeEnd(timerLabel);
-            return { id: inquiryId };
+            return { id: inquiry_id };
         });
     }
 
-    async updateInquiryStatus(inquiryId, status) {
+    async updateInquiryStatus(inquiry_id, status) {
         const timerLabel = 'updateInquiryStatus';
         debug.time(timerLabel);
-        debug.log('Updating inquiry status:', { inquiryId, status });
+        debug.log('Updating inquiry status:', { inquiry_id, status });
 
         try {
             const result = await this.executeRun(
-                'UPDATE Inquiry SET Status = ? WHERE InquiryID = ?',
-                [status, inquiryId]
+                'UPDATE inquiry SET status = ? WHERE inquiry_id = ?',
+                [status, inquiry_id]
             );
 
             if (result.changes === 0) {
@@ -151,10 +151,10 @@ class InquiryModel extends BaseModel {
         }
     }
 
-    async updateInquiryItemQuantity(inquiryItemId, requestedQty) {
+    async updateInquiryItemQuantity(inquiry_item_id, requested_qty) {
         try {
-            await this.inquiryItemModel.updateInquiryItem(inquiryItemId, {
-                requestedQuantity: requestedQty
+            await this.inquiryItemModel.updateInquiryItem(inquiry_item_id, {
+                requested_qty
             });
         } catch (error) {
             debug.error('Error updating inquiry item quantity:', error);
@@ -162,12 +162,12 @@ class InquiryModel extends BaseModel {
         }
     }
 
-    async updateInquiryItemReference(inquiryItemId, itemId, newReferenceId, referenceNotes) {
+    async updateInquiryItemReference(inquiry_item_id, item_id, new_reference_id, reference_notes) {
         try {
-            await this.inquiryItemModel.updateInquiryItem(inquiryItemId, {
-                itemId,
-                newReferenceId,  // Match InquiryItemModel's expected case
-                referenceNotes
+            await this.inquiryItemModel.updateInquiryItem(inquiry_item_id, {
+                item_id,
+                new_reference_id,
+                reference_notes
             });
         } catch (error) {
             debug.error('Error updating inquiry item reference:', error);
@@ -175,26 +175,26 @@ class InquiryModel extends BaseModel {
         }
     }
 
-    async deleteInquiry(inquiryId) {
+    async deleteInquiry(inquiry_id) {
         const timerLabel = 'deleteInquiry';
         debug.time(timerLabel);
-        debug.log('Deleting inquiry:', inquiryId);
+        debug.log('Deleting inquiry:', inquiry_id);
 
         return this.executeTransaction(async () => {
             try {
                 const deleteItemsTimerLabel = 'deleteInquiry.items';
                 debug.time(deleteItemsTimerLabel);
                 await this.executeRun(
-                    'DELETE FROM InquiryItem WHERE InquiryID = ?',
-                    [inquiryId]
+                    'DELETE FROM inquiry_item WHERE inquiry_id = ?',
+                    [inquiry_id]
                 );
                 debug.timeEnd(deleteItemsTimerLabel);
 
                 const deleteInquiryTimerLabel = 'deleteInquiry.inquiry';
                 debug.time(deleteInquiryTimerLabel);
                 const result = await this.executeRun(
-                    'DELETE FROM Inquiry WHERE InquiryID = ?',
-                    [inquiryId]
+                    'DELETE FROM inquiry WHERE inquiry_id = ?',
+                    [inquiry_id]
                 );
                 debug.timeEnd(deleteInquiryTimerLabel);
 

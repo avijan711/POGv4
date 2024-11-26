@@ -8,12 +8,27 @@ const verbose = sqlite3.verbose();
 // Database connection pool
 let db = null;
 
+// Helper function to run PRAGMA settings
+const setPragma = (pragma, value) => {
+    return new Promise((resolve, reject) => {
+        const pragmaStatement = `PRAGMA ${pragma} = ${value};`;
+        db.run(pragmaStatement, (err) => {
+            if (err) {
+                console.error(`Error setting ${pragma}:`, err);
+                reject(err);
+            } else {
+                resolve();
+            }
+        });
+    });
+};
+
 async function initializeDatabase() {
     return new Promise((resolve, reject) => {
         const dbPath = path.join(__dirname, '..', 'inventory.db');
         const schemaPath = path.join(__dirname, '..', 'schema.sql');
 
-        // Create database connection with optimized settings
+        // Create database connection
         db = new verbose.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, async (err) => {
             if (err) {
                 console.error('Error connecting to database:', err);
@@ -30,22 +45,39 @@ async function initializeDatabase() {
             console.log('Is "run" method available?', typeof db.run === 'function');
 
             try {
-                // Configure database settings for better concurrency and enable JSON1 extension
-                await Promise.all([
-                    runStatement("SELECT json_group_array(1) as test;").catch(e => {
-                        if (e.message.includes('no such function')) {
-                            console.error('JSON1 extension not available. Some features may not work.');
-                        }
-                    }),
-                    runStatement('PRAGMA journal_mode = WAL;'),           // Enable Write-Ahead Logging
-                    runStatement('PRAGMA synchronous = NORMAL;'),         // Faster writes with reasonable safety
-                    runStatement('PRAGMA busy_timeout = 30000;'),         // Increased timeout to 30 seconds
-                    runStatement('PRAGMA foreign_keys = ON;'),            // Enable foreign key constraints
-                    runStatement('PRAGMA cache_size = -4000;'),           // Increased cache to 4MB
-                    runStatement('PRAGMA temp_store = MEMORY;'),          // Store temp tables in memory
-                    runStatement('PRAGMA locking_mode = NORMAL;'),        // Use less aggressive locking
-                    runStatement('PRAGMA mmap_size = 268435456;')         // Use memory mapping for faster reads (256MB)
-                ]);
+                // First, ensure we're not in a transaction
+                await new Promise((resolve, reject) => {
+                    db.get("PRAGMA query_only = 0;", (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                });
+
+                // Set critical PRAGMA settings first
+                await setPragma('journal_mode', 'WAL');
+                await setPragma('synchronous', 'NORMAL');
+                
+                // Set remaining PRAGMA settings
+                await setPragma('busy_timeout', '30000');
+                await setPragma('foreign_keys', 'ON');
+                await setPragma('cache_size', '-4000');
+                await setPragma('temp_store', 'MEMORY');
+                await setPragma('locking_mode', 'NORMAL');
+                await setPragma('mmap_size', '268435456');
+
+                // Check JSON1 extension
+                try {
+                    await new Promise((resolve, reject) => {
+                        db.get("SELECT json_group_array(1) as test", [], function(err) {
+                            if (err && err.message.includes('no such function')) {
+                                console.error('JSON1 extension not available. Some features may not work.');
+                            }
+                            resolve();
+                        });
+                    });
+                } catch (e) {
+                    console.error('Error checking JSON1 extension:', e);
+                }
 
                 // Read schema
                 const schema = fs.readFileSync(schemaPath, 'utf8');
@@ -72,7 +104,7 @@ async function initializeDatabase() {
                     }
                 });
 
-                // Begin transaction
+                // Begin transaction for schema creation
                 await runStatement('BEGIN IMMEDIATE TRANSACTION;');
 
                 try {
@@ -94,18 +126,25 @@ async function initializeDatabase() {
                         }
                     }
 
-                    // Verify the database setup
+                    // Verify the database setup by checking if the item table exists
                     const verifyDatabase = () => {
                         return new Promise((resolveVerify, rejectVerify) => {
-                            db.get('SELECT COUNT(*) as count FROM ItemReferenceChange', [], async (err, row) => {
+                            db.get('SELECT COUNT(*) as count FROM sqlite_master WHERE type="table" AND name="item"', [], async (err, row) => {
                                 if (err) {
-                                    console.error('Error checking test data:', err);
+                                    console.error('Error verifying database setup:', err);
                                     await runStatement('ROLLBACK;');
                                     rejectVerify(err);
                                     return;
                                 }
 
-                                console.log('Number of reference changes:', row.count);
+                                if (row.count === 0) {
+                                    console.error('Database verification failed: item table not found');
+                                    await runStatement('ROLLBACK;');
+                                    rejectVerify(new Error('Database setup incomplete'));
+                                    return;
+                                }
+
+                                console.log('Database verification successful');
                                 resolveVerify();
                             });
                         });
@@ -114,7 +153,7 @@ async function initializeDatabase() {
                     await verifyDatabase();
                     await runStatement('COMMIT;');
                     
-                    console.log('Database schema and test data initialized successfully');
+                    console.log('Database schema initialized successfully');
                     resolve(db);
                 } catch (error) {
                     console.error('Error during database initialization:', error);
@@ -175,63 +214,6 @@ const runStatement = (sql, params = []) => {
     });
 };
 
-// Add a function to manually insert test data
-async function insertTestData(database) {
-    try {
-        await runStatement('BEGIN IMMEDIATE TRANSACTION');
-
-        // Add items
-        await runStatement(
-            `INSERT OR REPLACE INTO Item (ItemID, HebrewDescription, EnglishDescription) 
-             VALUES (?, ?, ?)`,
-            ['171366', 'בנד אומגה 308\\2008', 'Original Product 1']
-        );
-
-        await runStatement(
-            `INSERT OR REPLACE INTO Item (ItemID, HebrewDescription, EnglishDescription) 
-             VALUES (?, ?, ?)`,
-            ['1692647380', 'בנד אומגה 308\\2008 חדש', 'New Product 1']
-        );
-
-        // Add supplier
-        await runStatement(
-            `INSERT OR REPLACE INTO Supplier (SupplierID, Name, ContactPerson, Email, Phone) 
-             VALUES (?, ?, ?, ?, ?)`,
-            [1, 'Test Supplier 1', 'Contact 1', 'contact1@test.com', '123-456-7890']
-        );
-
-        // Add reference change
-        await runStatement(
-            `INSERT OR REPLACE INTO ItemReferenceChange 
-             (OriginalItemID, NewReferenceID, ChangedByUser, SupplierID, Notes) 
-             VALUES (?, ?, ?, ?, ?)`,
-            ['171366', '1692647380', 1, null, 'Updated to newer version']
-        );
-
-        // Add inquiry
-        await runStatement(
-            `INSERT OR REPLACE INTO Inquiry (InquiryID, Status, CreatedDate) 
-             VALUES (?, ?, datetime('now'))`,
-            [1, 'Active']
-        );
-
-        // Add inquiry item
-        await runStatement(
-            `INSERT OR REPLACE INTO InquiryItem 
-             (InquiryID, ItemID, OriginalItemID, RequestedQty, HebrewDescription) 
-             VALUES (?, ?, ?, ?, ?)`,
-            [1, '171366', '171366', 3, 'בנד אומגה 308\\2008']
-        );
-
-        await runStatement('COMMIT');
-        console.log('Test data inserted successfully');
-    } catch (error) {
-        console.error('Error inserting test data:', error);
-        await runStatement('ROLLBACK');
-        throw error;
-    }
-}
-
 // Export a function to get the database instance
 function getDatabase() {
     if (!db) {
@@ -242,6 +224,5 @@ function getDatabase() {
 
 module.exports = {
     initializeDatabase,
-    insertTestData,
     getDatabase
 };

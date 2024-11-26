@@ -17,14 +17,16 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
   const [editingQty, setEditingQty] = useState(null);
 
   const handleEditItem = (item) => {
+    if (!item) return;
+
     const formattedItem = {
-      itemID: item.itemID,
-      hebrewDescription: item.hebrewDescription,
-      englishDescription: item.englishDescription,
-      importMarkup: item.importMarkup?.toString(),
-      hsCode: item.hsCode || '',
-      retailPrice: item.retailPrice?.toString() || '0',
-      qtyInStock: item.qtyInStock?.toString() || '0',
+      item_id: item.item_id,
+      hebrew_description: item.hebrew_description,
+      english_description: item.english_description,
+      import_markup: item.import_markup?.toString(),
+      hs_code: item.hs_code || '',
+      retail_price: item.retail_price?.toString() || '0',
+      qty_in_stock: item.qty_in_stock?.toString() || '0',
       image: item.image || null,
     };
     setSelectedItem(formattedItem);
@@ -32,8 +34,10 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
   };
 
   const handleSaveItem = async (itemData) => {
+    if (!itemData) return;
+
     try {
-      await axios.put(`${API_BASE_URL}/api/items/${itemData.get('itemID')}`, itemData, {
+      await axios.put(`${API_BASE_URL}/api/items/${itemData.get('item_id')}`, itemData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -49,11 +53,18 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
   };
 
   const handleViewItemDetails = async (item) => {
+    if (!item) return;
+
     setSelectedItemDetails(item);
     setItemDetailsOpen(true);
   };
 
   const handleDeleteInquiry = async (navigate) => {
+    if (!inquiryId) {
+      setError('No inquiry ID provided');
+      return;
+    }
+
     try {
       setIsDeleting(true);
       await axios.delete(`${API_BASE_URL}/api/inquiries/${inquiryId}`);
@@ -77,6 +88,15 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
         setError(`Failed to delete inquiry: ${errorMessage}`);
       }
     }
+  };
+
+  const getChangeSource = (reference_change) => {
+    if (!reference_change) return '';
+    if (reference_change.source === 'inquiry_item') return 'Reference from inquiry';
+    if (reference_change.source === 'supplier') {
+      return `Changed by ${reference_change.supplier_name || 'unknown supplier'}`;
+    }
+    return 'Changed by user';
   };
 
   const resetDialogs = () => {
@@ -116,6 +136,7 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
     handleSaveItem,
     handleViewItemDetails,
     handleDeleteInquiry,
+    getChangeSource,
     resetDialogs,
     setError
   };

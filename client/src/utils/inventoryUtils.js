@@ -14,11 +14,11 @@ const inventoryUtils = {
 
         return {
             ...item,
-            importMarkup: parseFloat(item.importMarkup) || 1.30,
-            retailPrice: item.retailPrice !== null ? parseFloat(item.retailPrice) : null,
-            qtyInStock: parseInt(item.qtyInStock) || 0,
-            soldThisYear: parseInt(item.soldThisYear) || 0,
-            soldLastYear: parseInt(item.soldLastYear) || 0
+            import_markup: parseFloat(item.import_markup) || 1.30,
+            retail_price: item.retail_price !== null ? parseFloat(item.retail_price) : null,
+            qty_in_stock: parseInt(item.qty_in_stock) || 0,
+            sold_this_year: parseInt(item.sold_this_year) || 0,
+            sold_last_year: parseInt(item.sold_last_year) || 0
         };
     },
 
@@ -31,11 +31,11 @@ const inventoryUtils = {
         if (!item) return null;
 
         return {
-            itemID: item.itemID,
-            hebrewDescription: item.hebrewDescription || '',
-            englishDescription: item.englishDescription || '',
-            importMarkup: item.importMarkup?.toString() || '1.30',
-            hsCode: item.hsCode || '',
+            item_id: item.item_id,
+            hebrew_description: item.hebrew_description || '',
+            english_description: item.english_description || '',
+            import_markup: item.import_markup?.toString() || '1.30',
+            hs_code: item.hs_code || '',
             image: item.image || null,
         };
     },
@@ -49,7 +49,7 @@ const inventoryUtils = {
         if (!referenceChange) return '';
         
         if (referenceChange.source === 'supplier') {
-            return `Changed by supplier ${referenceChange.supplierName || ''}`;
+            return `Changed by supplier ${referenceChange.supplier_name || ''}`;
         } else if (referenceChange.source === 'user') {
             return 'Changed by user';
         }
@@ -67,7 +67,7 @@ const inventoryUtils = {
 
         // If no search term, return all items sorted by ID
         if (!searchTerm) {
-            return [...items].sort((a, b) => a.itemID.localeCompare(b.itemID));
+            return [...items].sort((a, b) => a.item_id.localeCompare(b.item_id));
         }
 
         // Apply search term filter
@@ -75,20 +75,20 @@ const inventoryUtils = {
         const filteredItems = items.filter(item => {
             // Search in all text fields
             return (
-                item.itemID?.toLowerCase().includes(term) ||
-                item.hebrewDescription?.toLowerCase().includes(term) ||
-                item.englishDescription?.toLowerCase().includes(term) ||
-                item.hsCode?.toLowerCase().includes(term) ||
+                item.item_id?.toLowerCase().includes(term) ||
+                item.hebrew_description?.toLowerCase().includes(term) ||
+                item.english_description?.toLowerCase().includes(term) ||
+                item.hs_code?.toLowerCase().includes(term) ||
                 // Also search in reference IDs
-                (item.referenceChange?.newReferenceID?.toLowerCase().includes(term)) ||
+                (item.reference_change?.new_reference_id?.toLowerCase().includes(term)) ||
                 // Convert numbers to string for searching
-                item.importMarkup?.toString().includes(term) ||
-                item.retailPrice?.toString().includes(term)
+                item.import_markup?.toString().includes(term) ||
+                item.retail_price?.toString().includes(term)
             );
         });
 
         // Sort filtered items by ID
-        return filteredItems.sort((a, b) => a.itemID.localeCompare(b.itemID));
+        return filteredItems.sort((a, b) => a.item_id.localeCompare(b.item_id));
     },
 
     /**
@@ -99,10 +99,10 @@ const inventoryUtils = {
     getBackgroundColor: (item) => {
         if (!item) return 'inherit';
 
-        if (item.hasReferenceChange) {
+        if (item.has_reference_change) {
             return 'rgba(255, 152, 0, 0.08)'; // Subtle orange for old/replaced items
         }
-        if (item.isReferencedBy) {
+        if (item.is_referenced_by) {
             return 'rgba(76, 175, 80, 0.08)'; // Subtle green for new/replacement items
         }
         return 'inherit';
@@ -116,10 +116,10 @@ const inventoryUtils = {
     getHoverColor: (item) => {
         if (!item) return 'rgba(0, 0, 0, 0.04)';
 
-        if (item.hasReferenceChange) {
+        if (item.has_reference_change) {
             return 'rgba(255, 152, 0, 0.15)'; // Slightly darker orange on hover
         }
-        if (item.isReferencedBy) {
+        if (item.is_referenced_by) {
             return 'rgba(76, 175, 80, 0.15)'; // Slightly darker green on hover
         }
         return 'rgba(0, 0, 0, 0.04)';
@@ -132,13 +132,13 @@ const inventoryUtils = {
      */
     logItemData: (label, data) => {
         dataDebug.logData(label, {
-            itemID: data?.itemID,
-            hebrewDescription: data?.hebrewDescription,
-            englishDescription: data?.englishDescription,
-            hasReferenceChange: data?.hasReferenceChange,
-            isReferencedBy: data?.isReferencedBy,
-            referenceChange: data?.referenceChange,
-            referencingItems: data?.referencingItems
+            item_id: data?.item_id,
+            hebrew_description: data?.hebrew_description,
+            english_description: data?.english_description,
+            has_reference_change: data?.has_reference_change,
+            is_referenced_by: data?.is_referenced_by,
+            reference_change: data?.reference_change,
+            referencing_items: data?.referencing_items
         });
     }
 };

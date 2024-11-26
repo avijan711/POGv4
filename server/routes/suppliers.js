@@ -15,7 +15,7 @@ function createRouter(db) {
     // Get all suppliers
     router.get('/', (req, res) => {
         console.log('Fetching suppliers');
-        db.all('SELECT SupplierID, Name, ContactPerson, Email, Phone FROM Supplier ORDER BY Name', [], (err, rows) => {
+        db.all('SELECT supplier_id, name, contact_person, email, phone FROM supplier ORDER BY name', [], (err, rows) => {
             if (err) {
                 console.error('Error fetching suppliers:', err);
                 res.status(500).json({ error: 'Failed to fetch suppliers' });
@@ -28,16 +28,15 @@ function createRouter(db) {
 
     // Create new supplier
     router.post('/', (req, res) => {
-        // Convert lowercase field names to uppercase for database
-        const { name: Name, contactPerson: ContactPerson, email: Email, phone: Phone } = req.body;
+        const { name, contactPerson, email, phone } = req.body;
         
-        if (!Name) {
+        if (!name) {
             return res.status(400).json({ error: 'Supplier name is required' });
         }
 
         db.run(
-            'INSERT INTO Supplier (Name, ContactPerson, Email, Phone) VALUES (?, ?, ?, ?)',
-            [Name, ContactPerson || null, Email || null, Phone || null],
+            'INSERT INTO supplier (name, contact_person, email, phone) VALUES (?, ?, ?, ?)',
+            [name, contactPerson || null, email || null, phone || null],
             function(err) {
                 if (err) {
                     console.error('Error creating supplier:', err);
@@ -47,7 +46,7 @@ function createRouter(db) {
                 
                 // Return the created supplier with its ID
                 db.get(
-                    'SELECT SupplierID, Name, ContactPerson, Email, Phone FROM Supplier WHERE SupplierID = ?',
+                    'SELECT supplier_id, name, contact_person, email, phone FROM supplier WHERE supplier_id = ?',
                     [this.lastID],
                     (err, row) => {
                         if (err) {
@@ -67,7 +66,7 @@ function createRouter(db) {
         const supplierId = req.params.id;
         
         db.get(
-            'SELECT SupplierID, Name, ContactPerson, Email, Phone FROM Supplier WHERE SupplierID = ?',
+            'SELECT supplier_id, name, contact_person, email, phone FROM supplier WHERE supplier_id = ?',
             [supplierId],
             (err, row) => {
                 if (err) {
@@ -87,16 +86,15 @@ function createRouter(db) {
     // Update supplier
     router.put('/:id', (req, res) => {
         const supplierId = req.params.id;
-        // Convert lowercase field names to uppercase for database
-        const { name: Name, contactPerson: ContactPerson, email: Email, phone: Phone } = req.body;
+        const { name, contactPerson, email, phone } = req.body;
         
-        if (!Name) {
+        if (!name) {
             return res.status(400).json({ error: 'Supplier name is required' });
         }
 
         db.run(
-            'UPDATE Supplier SET Name = ?, ContactPerson = ?, Email = ?, Phone = ? WHERE SupplierID = ?',
-            [Name, ContactPerson || null, Email || null, Phone || null, supplierId],
+            'UPDATE supplier SET name = ?, contact_person = ?, email = ?, phone = ? WHERE supplier_id = ?',
+            [name, contactPerson || null, email || null, phone || null, supplierId],
             function(err) {
                 if (err) {
                     console.error('Error updating supplier:', err);
@@ -110,7 +108,7 @@ function createRouter(db) {
                 
                 // Return the updated supplier
                 db.get(
-                    'SELECT SupplierID, Name, ContactPerson, Email, Phone FROM Supplier WHERE SupplierID = ?',
+                    'SELECT supplier_id, name, contact_person, email, phone FROM supplier WHERE supplier_id = ?',
                     [supplierId],
                     (err, row) => {
                         if (err) {
@@ -129,7 +127,7 @@ function createRouter(db) {
     router.delete('/:id', (req, res) => {
         const supplierId = req.params.id;
         
-        db.run('DELETE FROM Supplier WHERE SupplierID = ?', [supplierId], function(err) {
+        db.run('DELETE FROM supplier WHERE supplier_id = ?', [supplierId], function(err) {
             if (err) {
                 console.error('Error deleting supplier:', err);
                 res.status(500).json({ error: 'Failed to delete supplier' });

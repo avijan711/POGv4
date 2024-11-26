@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
 
-export const useInquiryFilters = (items) => {
+export const useInquiryFilters = (items = []) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [showReplacements, setShowReplacements] = useState(false);
-  const [sortConfig, setSortConfig] = useState({ field: 'itemID', direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState({ field: 'item_id', direction: 'asc' });
 
   const toggleDuplicates = () => {
     setShowDuplicates(!showDuplicates);
@@ -31,7 +31,7 @@ export const useInquiryFilters = (items) => {
     
     return Object.entries(obj).some(([key, value]) => {
       // Skip certain keys that shouldn't be searched
-      if (['excelRowIndex', 'originalRowIndex', 'isDuplicate'].includes(key)) {
+      if (['excel_row_index', 'original_row_index', 'is_duplicate'].includes(key)) {
         return false;
       }
 
@@ -67,9 +67,9 @@ export const useInquiryFilters = (items) => {
 
     // Create map of duplicate items
     const duplicateItems = filtered.reduce((acc, item) => {
-      if (!item || !item.itemID) return acc;
+      if (!item || !item.item_id) return acc;
       
-      const key = item.itemID;
+      const key = item.item_id;
       if (!acc[key]) {
         acc[key] = [];
       }
@@ -79,9 +79,9 @@ export const useInquiryFilters = (items) => {
 
     // Apply duplicate/replacement filters
     if (showDuplicates) {
-      filtered = filtered.filter(item => item && item.itemID && duplicateItems[item.itemID].length > 1);
+      filtered = filtered.filter(item => item && item.item_id && duplicateItems[item.item_id].length > 1);
     } else if (showReplacements) {
-      filtered = filtered.filter(item => item && (item.hasReferenceChange || item.isReferencedBy));
+      filtered = filtered.filter(item => item && (item.has_reference_change || item.is_referenced_by));
     }
 
     // Sort items with proper null checks
@@ -92,7 +92,7 @@ export const useInquiryFilters = (items) => {
       let bValue = b[sortConfig.field];
 
       // Handle numeric fields
-      if (['importMarkup', 'qtyInStock', 'requestedQty', 'retailPrice'].includes(sortConfig.field)) {
+      if (['import_markup', 'qty_in_stock', 'requested_qty', 'retail_price'].includes(sortConfig.field)) {
         aValue = parseFloat(aValue) || 0;
         bValue = parseFloat(bValue) || 0;
       } else {
@@ -103,7 +103,7 @@ export const useInquiryFilters = (items) => {
 
       if (aValue === bValue) {
         // If values are equal, sort by Excel row index as secondary sort
-        return (a.excelRowIndex || 0) - (b.excelRowIndex || 0);
+        return (a.excel_row_index || 0) - (b.excel_row_index || 0);
       }
       return sortConfig.direction === 'asc'
         ? aValue > bValue ? 1 : -1

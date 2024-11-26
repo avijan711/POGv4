@@ -1,109 +1,109 @@
 const getReplacementsQuery = `
-    WITH RECURSIVE InquiryItems AS (
+    WITH RECURSIVE inquiry_items AS (
         -- Get all items from the inquiry
         SELECT 
-            ii.ItemID,
-            COALESCE(ii.OriginalItemID, ii.ItemID) as OriginalItemID,
-            ii.InquiryItemID,
-            0 as Level,
-            ii.HebrewDescription as InquiryDescription,
-            i.HebrewDescription as ItemDescription,
-            i.EnglishDescription as ItemEnglishDescription
-        FROM InquiryItem ii
-        JOIN Item i ON ii.ItemID = i.ItemID
-        WHERE ii.InquiryID = ?
+            ii.item_id,
+            COALESCE(ii.original_item_id, ii.item_id) as original_item_id,
+            ii.inquiry_item_id,
+            0 as level,
+            ii.hebrew_description as inquiry_description,
+            i.hebrew_description as item_description,
+            i.english_description as item_english_description
+        FROM inquiry_item ii
+        JOIN item i ON ii.item_id = i.item_id
+        WHERE ii.inquiry_id = ?
     ),
-    ReferenceChanges AS (
+    reference_changes AS (
         -- Get all reference changes for inquiry items
         SELECT 
-            rc.OriginalItemID,
-            rc.NewReferenceID,
-            rc.ChangedByUser,
-            rc.ChangeDate,
-            rc.Notes,
-            rc.SupplierID,
-            s.Name as SupplierName,
-            i_orig.HebrewDescription as OriginalDescription,
-            i_orig.EnglishDescription as OriginalEnglishDescription,
-            i_new.HebrewDescription as NewDescription,
-            i_new.EnglishDescription as NewEnglishDescription,
+            rc.original_item_id,
+            rc.new_reference_id,
+            rc.changed_by_user,
+            rc.change_date,
+            rc.notes,
+            rc.supplier_id,
+            s.name as supplier_name,
+            i_orig.hebrew_description as original_description,
+            i_orig.english_description as original_english_description,
+            i_new.hebrew_description as new_description,
+            i_new.english_description as new_english_description,
             ROW_NUMBER() OVER (
-                PARTITION BY rc.OriginalItemID 
-                ORDER BY rc.ChangeDate DESC
+                PARTITION BY rc.original_item_id 
+                ORDER BY rc.change_date DESC
             ) as rn
-        FROM ItemReferenceChange rc
-        JOIN Item i_orig ON rc.OriginalItemID = i_orig.ItemID
-        JOIN Item i_new ON rc.NewReferenceID = i_new.ItemID
-        LEFT JOIN Supplier s ON rc.SupplierID = s.SupplierID
+        FROM item_reference_change rc
+        JOIN item i_orig ON rc.original_item_id = i_orig.item_id
+        JOIN item i_new ON rc.new_reference_id = i_new.item_id
+        LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
     )
     SELECT 
-        ii.ItemID as originalItemId,
-        rc.NewReferenceID as newItemId,
+        ii.item_id as original_item_id,
+        rc.new_reference_id as new_item_id,
         CASE 
-            WHEN rc.SupplierID IS NOT NULL THEN 'supplier'
-            WHEN rc.ChangedByUser = 1 THEN 'user'
+            WHEN rc.supplier_id IS NOT NULL THEN 'supplier'
+            WHEN rc.changed_by_user = 1 THEN 'user'
             ELSE NULL
         END as source,
-        rc.SupplierName as supplierName,
-        rc.Notes as description,
-        rc.ChangeDate as changeDate,
-        COALESCE(rc.OriginalDescription, ii.ItemDescription) as originalDescription,
-        COALESCE(rc.OriginalEnglishDescription, ii.ItemEnglishDescription) as originalEnglishDescription,
-        rc.NewDescription as newDescription,
-        rc.NewEnglishDescription as newEnglishDescription,
-        ii.InquiryDescription as inquiryDescription
-    FROM InquiryItems ii
-    JOIN ReferenceChanges rc ON (
-        ii.ItemID = rc.OriginalItemID 
-        OR ii.OriginalItemID = rc.OriginalItemID
+        rc.supplier_name,
+        rc.notes as description,
+        rc.change_date,
+        COALESCE(rc.original_description, ii.item_description) as original_description,
+        COALESCE(rc.original_english_description, ii.item_english_description) as original_english_description,
+        rc.new_description,
+        rc.new_english_description,
+        ii.inquiry_description
+    FROM inquiry_items ii
+    JOIN reference_changes rc ON (
+        ii.item_id = rc.original_item_id 
+        OR ii.original_item_id = rc.original_item_id
     )
     AND rc.rn = 1
-    ORDER BY rc.ChangeDate DESC;
+    ORDER BY rc.change_date DESC;
 `;
 
 // Debug query to check item references
 const debugItemReferencesQuery = `
     SELECT 
-        ii.ItemID,
-        ii.OriginalItemID,
-        ii.HebrewDescription,
-        rc.NewReferenceID,
-        rc.ChangedByUser,
-        rc.SupplierID,
-        rc.Notes,
-        i_new.HebrewDescription as NewDescription,
-        i_new.EnglishDescription as NewEnglishDescription,
-        i_orig.HebrewDescription as OriginalDescription,
-        i_orig.EnglishDescription as OriginalEnglishDescription
-    FROM InquiryItem ii
-    LEFT JOIN ItemReferenceChange rc ON (
-        ii.ItemID = rc.OriginalItemID 
-        OR ii.OriginalItemID = rc.OriginalItemID
+        ii.item_id,
+        ii.original_item_id,
+        ii.hebrew_description,
+        rc.new_reference_id,
+        rc.changed_by_user,
+        rc.supplier_id,
+        rc.notes,
+        i_new.hebrew_description as new_description,
+        i_new.english_description as new_english_description,
+        i_orig.hebrew_description as original_description,
+        i_orig.english_description as original_english_description
+    FROM inquiry_item ii
+    LEFT JOIN item_reference_change rc ON (
+        ii.item_id = rc.original_item_id 
+        OR ii.original_item_id = rc.original_item_id
     )
-    LEFT JOIN Item i_new ON rc.NewReferenceID = i_new.ItemID
-    LEFT JOIN Item i_orig ON rc.OriginalItemID = i_orig.ItemID
-    WHERE ii.InquiryID = ?;
+    LEFT JOIN item i_new ON rc.new_reference_id = i_new.item_id
+    LEFT JOIN item i_orig ON rc.original_item_id = i_orig.item_id
+    WHERE ii.inquiry_id = ?;
 `;
 
 // Add a query to check if an inquiry exists
 const checkInquiryExistsQuery = `
-    SELECT 1 FROM Inquiry WHERE InquiryID = ?;
+    SELECT 1 FROM inquiry WHERE inquiry_id = ?;
 `;
 
 // Add a query to check specific item references
 const checkItemReferencesQuery = `
     SELECT 
         rc.*,
-        i_orig.HebrewDescription as OriginalDescription,
-        i_orig.EnglishDescription as OriginalEnglishDescription,
-        i_new.HebrewDescription as NewDescription,
-        i_new.EnglishDescription as NewEnglishDescription,
-        s.Name as SupplierName
-    FROM ItemReferenceChange rc
-    JOIN Item i_orig ON rc.OriginalItemID = i_orig.ItemID
-    JOIN Item i_new ON rc.NewReferenceID = i_new.ItemID
-    LEFT JOIN Supplier s ON rc.SupplierID = s.SupplierID
-    WHERE rc.OriginalItemID = ? OR rc.NewReferenceID = ?;
+        i_orig.hebrew_description as original_description,
+        i_orig.english_description as original_english_description,
+        i_new.hebrew_description as new_description,
+        i_new.english_description as new_english_description,
+        s.name as supplier_name
+    FROM item_reference_change rc
+    JOIN item i_orig ON rc.original_item_id = i_orig.item_id
+    JOIN item i_new ON rc.new_reference_id = i_new.item_id
+    LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
+    WHERE rc.original_item_id = ? OR rc.new_reference_id = ?;
 `;
 
 module.exports = {

@@ -16,7 +16,7 @@ import { formatEurPrice, formatPercentage } from '../../utils/priceUtils';
 
 const EUR_TO_ILS = 3.95;
 
-function SupplierPricesPanel({ supplierPrices, itemDetails, promotions }) {
+function SupplierPricesPanel({ supplierPrices = [], itemDetails }) {
   const [historyAnchorEl, setHistoryAnchorEl] = useState(null);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
 
@@ -30,57 +30,36 @@ function SupplierPricesPanel({ supplierPrices, itemDetails, promotions }) {
     setSelectedSupplier(null);
   };
 
-  // Combine supplier prices with promotion prices
-  const combinedPrices = useMemo(() => {
-    const now = new Date();
-    const result = [];
-
-    // Add regular supplier prices
-    if (supplierPrices) {
-      result.push(...supplierPrices.map(price => ({
-        ...price,
-        isPromotion: false,
-        date: price.date || price.lastUpdated
-      })));
+  // Parse supplier prices if they're in string format
+  const parsedSupplierPrices = useMemo(() => {
+    if (typeof supplierPrices === 'string') {
+      try {
+        return JSON.parse(supplierPrices);
+      } catch (e) {
+        console.error('Error parsing supplier prices:', e);
+        return [];
+      }
     }
-
-    // Add active promotion prices
-    if (promotions) {
-      promotions.forEach(promo => {
-        const startDate = new Date(promo.startDate);
-        const endDate = promo.endDate ? new Date(promo.endDate) : null;
-        const isActive = now >= startDate && (!endDate || now <= endDate);
-
-        if (isActive) {
-          result.push({
-            supplierName: promo.supplierName,
-            price: promo.price,
-            date: promo.createdAt,
-            isPromotion: true,
-            promotionName: promo.name,
-            promotionId: promo.id,
-            startDate: promo.startDate,
-            endDate: promo.endDate
-          });
-        }
-      });
-    }
-
-    // Sort by date, with newest first
-    return result.sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [supplierPrices, promotions]);
+    return supplierPrices.map(price => ({
+      supplier_name: price.supplier_name || price.supplierName,
+      date: price.date || price.lastUpdated,
+      price: price.price || price.priceQuoted,
+      is_promotion: price.is_promotion || price.isPromotion || false,
+      promotion_name: price.promotion_name || price.promotionName
+    }));
+  }, [supplierPrices]);
 
   // Get the most recent price for each supplier
   const latestPrices = useMemo(() => {
     const priceMap = new Map();
-    combinedPrices.forEach(price => {
-      if (!priceMap.has(price.supplierName) || 
-          new Date(price.date) > new Date(priceMap.get(price.supplierName).date)) {
-        priceMap.set(price.supplierName, price);
+    parsedSupplierPrices.forEach(price => {
+      if (!priceMap.has(price.supplier_name) || 
+          new Date(price.date) > new Date(priceMap.get(price.supplier_name).date)) {
+        priceMap.set(price.supplier_name, price);
       }
     });
     return Array.from(priceMap.values());
-  }, [combinedPrices]);
+  }, [parsedSupplierPrices]);
 
   // Calculate supplier discounts and find the best supplier
   const getSupplierDiscounts = () => {
@@ -88,11 +67,11 @@ function SupplierPricesPanel({ supplierPrices, itemDetails, promotions }) {
     latestPrices.forEach(price => {
       const discount = calculateDiscount(
         price.price,
-        parseFloat(itemDetails?.importMarkup),
-        parseFloat(itemDetails?.retailPrice)
+        parseFloat(itemDetails?.import_markup),
+        parseFloat(itemDetails?.retail_price)
       );
-      if (discount !== null && (!discounts[price.supplierName] || discount > discounts[price.supplierName])) {
-        discounts[price.supplierName] = discount;
+      if (discount !== null && (!discounts[price.supplier_name] || discount > discounts[price.supplier_name])) {
+        discounts[price.supplier_name] = discount;
       }
     });
     return discounts;
@@ -107,8 +86,8 @@ function SupplierPricesPanel({ supplierPrices, itemDetails, promotions }) {
 
   // Get price history for a supplier
   const getSupplierPriceHistory = (supplierName) => {
-    return combinedPrices
-      .filter(price => price.supplierName === supplierName)
+    return parsedSupplierPrices
+      .filter(price => price.supplier_name === supplierName)
       .map((price, index, array) => {
         if (index === array.length - 1) {
           return { ...price, change: null }; // No change for the oldest price
@@ -155,21 +134,21 @@ function SupplierPricesPanel({ supplierPrices, itemDetails, promotions }) {
           {latestPrices.map((price, index) => {
             const discount = calculateDiscount(
               price.price,
-              parseFloat(itemDetails?.importMarkup),
-              parseFloat(itemDetails?.retailPrice)
+              parseFloat(itemDetails?.import_markup),
+              parseFloat(itemDetails?.retail_price)
             );
-            const isBestSupplier = price.supplierName === bestSupplier;
+            const isBestSupplier = price.supplier_name === bestSupplier;
             
             return (
               <TableRow 
                 key={index}
-                sx={price.isPromotion ? { 
+                sx={price.is_promotion ? { 
                   backgroundColor: 'rgba(156, 39, 176, 0.08)'
                 } : isBestSupplier ? { 
                   backgroundColor: 'rgba(76, 175, 80, 0.08)' 
                 } : undefined}
               >
-                <TableCell>{price.supplierName}</TableCell>
+                <TableCell>{price.supplier_name}</TableCell>
                 <TableCell>{new Date(price.date).toLocaleDateString()}</TableCell>
                 <TableCell align="right">
                   {formatEurPrice(price.price) || (
@@ -179,10 +158,10 @@ function SupplierPricesPanel({ supplierPrices, itemDetails, promotions }) {
                   )}
                 </TableCell>
                 <TableCell>
-                  {price.isPromotion ? (
+                  {price.is_promotion ? (
                     <Chip
                       icon={<PromotionIcon />}
-                      label={price.promotionName}
+                      label={price.promotion_name || 'Promotion'}
                       size="small"
                       color="secondary"
                       variant="outlined"
@@ -206,16 +185,18 @@ function SupplierPricesPanel({ supplierPrices, itemDetails, promotions }) {
                   {price.change !== null ? formatPercentage(price.change) : '-'}
                 </TableCell>
                 <TableCell align="right">
-                  {discount !== null ? `${discount.toFixed(1)}%` : '-'}
+                  {discount !== null ? formatPercentage(discount) : '-'}
                 </TableCell>
-                <TableCell align="right">
-                  {isBestSupplier && delta ? `${delta}%` : '-'}
+                <TableCell 
+                  align="right"
+                  sx={{ color: isBestSupplier ? 'success.main' : 'text.primary' }}
+                >
+                  {isBestSupplier && delta ? `+${delta}%` : '-'}
                 </TableCell>
                 <TableCell align="center">
-                  <IconButton
+                  <IconButton 
                     size="small"
-                    onClick={(e) => handleHistoryClick(e, price.supplierName)}
-                    title="View price history"
+                    onClick={(e) => handleHistoryClick(e, price.supplier_name)}
                   >
                     <HistoryIcon fontSize="small" />
                   </IconButton>
@@ -225,7 +206,7 @@ function SupplierPricesPanel({ supplierPrices, itemDetails, promotions }) {
           })}
         </TableBody>
       </Table>
-      
+
       <Popover
         open={Boolean(historyAnchorEl)}
         anchorEl={historyAnchorEl}
@@ -240,52 +221,22 @@ function SupplierPricesPanel({ supplierPrices, itemDetails, promotions }) {
         }}
       >
         <Box sx={{ p: 2, maxWidth: 400 }}>
-          <Typography variant="h6" gutterBottom>
-            Price History - {selectedSupplier}
+          <Typography variant="subtitle1" gutterBottom>
+            Price History for {selectedSupplier}
           </Typography>
           <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Date</TableCell>
                 <TableCell align="right">Price (EUR)</TableCell>
-                <TableCell>Source</TableCell>
                 <TableCell align="right">Change</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {getSupplierPriceHistory(selectedSupplier)?.map((price, index) => (
-                <TableRow 
-                  key={index}
-                  sx={price.isPromotion ? { 
-                    backgroundColor: 'rgba(156, 39, 176, 0.08)'
-                  } : undefined}
-                >
+              {selectedSupplier && getSupplierPriceHistory(selectedSupplier).map((price, index) => (
+                <TableRow key={index}>
                   <TableCell>{new Date(price.date).toLocaleDateString()}</TableCell>
-                  <TableCell align="right">
-                    {formatEurPrice(price.price) || (
-                      <Typography variant="body2" color="error">
-                        No Price
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {price.isPromotion ? (
-                      <Chip
-                        icon={<PromotionIcon />}
-                        label={price.promotionName}
-                        size="small"
-                        color="secondary"
-                        variant="outlined"
-                        sx={{ 
-                          height: 24,
-                          '& .MuiChip-label': { px: 1 },
-                          '& .MuiChip-icon': { fontSize: 16 }
-                        }}
-                      />
-                    ) : (
-                      'Regular Price'
-                    )}
-                  </TableCell>
+                  <TableCell align="right">{formatEurPrice(price.price)}</TableCell>
                   <TableCell 
                     align="right"
                     sx={{ 

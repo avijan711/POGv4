@@ -65,12 +65,19 @@ function validateColumnMapping(columnMapping, requiredFields = []) {
     }
 
     try {
+        // Convert required fields to snake_case if they aren't already
+        const snakeCaseRequiredFields = requiredFields.map(field => 
+            field.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`).replace(/^_/, '')
+        );
+
         // Create a case-insensitive map of column mappings
         const mappingLookup = {};
         Object.entries(columnMapping).forEach(([field, value]) => {
-            // Store both the original field name and its lowercase version
-            mappingLookup[field.toLowerCase()] = {
-                originalField: field,
+            // Convert field to snake_case
+            const snakeField = field.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`).replace(/^_/, '');
+            // Store both the snake_case field name and its value
+            mappingLookup[snakeField] = {
+                field: snakeField,
                 value: value
             };
         });
@@ -78,16 +85,16 @@ function validateColumnMapping(columnMapping, requiredFields = []) {
         debug.log('Column mapping lookup:', mappingLookup);
 
         // Ensure all values in columnMapping are strings
-        Object.values(mappingLookup).forEach(({ originalField, value }) => {
+        Object.values(mappingLookup).forEach(({ field, value }) => {
             if (value && typeof value !== 'string') {
-                debug.error('Invalid column mapping value:', { field: originalField, value });
-                throw new Error(`Invalid column mapping value for field: ${originalField}`);
+                debug.error('Invalid column mapping value:', { field, value });
+                throw new Error(`Invalid column mapping value for field: ${field}`);
             }
         });
 
-        // Check for required fields using case-insensitive comparison
-        const missingFields = requiredFields.filter(field => {
-            const lookup = mappingLookup[field.toLowerCase()];
+        // Check for required fields using snake_case comparison
+        const missingFields = snakeCaseRequiredFields.filter(field => {
+            const lookup = mappingLookup[field];
             return !lookup || !lookup.value;
         });
 
@@ -97,9 +104,8 @@ function validateColumnMapping(columnMapping, requiredFields = []) {
         }
 
         debug.log('Column mapping validation passed:', {
-            mapping: columnMapping,
-            requiredFields,
-            lookup: mappingLookup
+            mapping: mappingLookup,
+            requiredFields: snakeCaseRequiredFields
         });
 
         return true;
@@ -188,75 +194,83 @@ function validateDataTypes(data, typeValidations) {
 
 const typeValidations = {
     // General validations
-    ItemID: {  // Match database field name
+    item_id: {  // Match database field name
         type: 'string',
         validator: value => value && value.trim().length > 0
     },
-    HebrewDescription: {  // Match database field name
+    hebrew_description: {  // Match database field name
         type: 'string',
         validator: value => value && value.trim().length > 0
     },
-    EnglishDescription: {  // Match database field name
+    english_description: {  // Match database field name
         type: 'string',
         validator: value => true // Optional field
     },
-    RequestedQty: {  // Match database field name
+    requested_qty: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = Number(value);
             return Number.isInteger(num) && num >= 0;
         }
     },
-    ImportMarkup: {  // Match database field name
+    import_markup: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = parseFloat(String(value).replace(/,/g, '.'));
             return !isNaN(num) && num >= 1.0 && num <= 2.0;
         }
     },
-    HSCode: {  // Match database field name
+    hs_code: {  // Match database field name
         type: 'string',
         validator: value => true // Optional field
     },
-    QtyInStock: {  // Match database field name
+    qty_in_stock: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = Number(value);
             return Number.isInteger(num) && num >= 0;
         }
     },
-    QtySoldThisYear: {  // Match database field name
+    qty_sold_this_year: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = Number(value);
             return Number.isInteger(num) && num >= 0;
         }
     },
-    QtySoldLastYear: {  // Match database field name
+    qty_sold_last_year: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = Number(value);
             return Number.isInteger(num) && num >= 0;
         }
     },
-    RetailPrice: {  // Match database field name
+    retail_price: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = parseFloat(String(value).replace(/,/g, '.'));
             return !isNaN(num) && num >= 0;
         }
     },
-    NewReferenceID: {  // Match database field name
+    new_reference_id: {  // Match database field name
         type: 'string',
         validator: value => true // Optional field
     },
-    ReferenceNotes: {  // Match database field name
+    reference_notes: {  // Match database field name
+        type: 'string',
+        validator: value => true // Optional field
+    },
+    notes: {  // New field
+        type: 'string',
+        validator: value => true // Optional field
+    },
+    origin: {  // New field
         type: 'string',
         validator: value => true // Optional field
     },
 
     // Promotion-specific validations
-    PromotionPrice: {  // Match database field name
+    promotion_price: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = parseFloat(String(value).replace(/,/g, '.'));
@@ -268,25 +282,27 @@ const typeValidations = {
 // Specific validation sets for different types of data
 const validationSets = {
     promotion: {
-        required: ['ItemID', 'PromotionPrice'],  // Match database field names
+        required: ['item_id', 'promotion_price'],  // Match database field names
         types: {
-            ItemID: typeValidations.ItemID,
-            PromotionPrice: typeValidations.PromotionPrice
+            item_id: typeValidations.item_id,
+            promotion_price: typeValidations.promotion_price
         }
     },
     inquiry: {
-        required: ['ItemID', 'HebrewDescription', 'RequestedQty'],  // Match database field names
+        required: ['item_id', 'hebrew_description', 'requested_qty'],  // Match database field names
         types: {
-            ItemID: typeValidations.ItemID,
-            HebrewDescription: typeValidations.HebrewDescription,
-            EnglishDescription: typeValidations.EnglishDescription,
-            RequestedQty: typeValidations.RequestedQty,
-            ImportMarkup: typeValidations.ImportMarkup,
-            HSCode: typeValidations.HSCode,
-            QtyInStock: typeValidations.QtyInStock,
-            RetailPrice: typeValidations.RetailPrice,
-            QtySoldThisYear: typeValidations.QtySoldThisYear,
-            QtySoldLastYear: typeValidations.QtySoldLastYear
+            item_id: typeValidations.item_id,
+            hebrew_description: typeValidations.hebrew_description,
+            english_description: typeValidations.english_description,
+            requested_qty: typeValidations.requested_qty,
+            import_markup: typeValidations.import_markup,
+            hs_code: typeValidations.hs_code,
+            qty_in_stock: typeValidations.qty_in_stock,
+            retail_price: typeValidations.retail_price,
+            qty_sold_this_year: typeValidations.qty_sold_this_year,
+            qty_sold_last_year: typeValidations.qty_sold_last_year,
+            notes: typeValidations.notes,  // Add new field
+            origin: typeValidations.origin  // Add new field
         }
     }
 };

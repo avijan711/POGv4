@@ -20,6 +20,31 @@ function createRouter(db) {
     const supplierResponseService = new SupplierResponseService(db);
     const upload = multer(uploadConfig);
 
+    // Convert request body keys to snake_case
+    const convertToSnakeCase = (req, res, next) => {
+        if (req.body.columnMapping) {
+            try {
+                const mapping = typeof req.body.columnMapping === 'string' 
+                    ? JSON.parse(req.body.columnMapping) 
+                    : req.body.columnMapping;
+
+                // Convert any camelCase or PascalCase keys to snake_case
+                const convertedMapping = {};
+                Object.entries(mapping).forEach(([key, value]) => {
+                    const snakeKey = key
+                        .replace(/([A-Z])/g, '_$1')
+                        .toLowerCase()
+                        .replace(/^_/, '');
+                    convertedMapping[snakeKey] = value;
+                });
+                req.body.column_mapping = JSON.stringify(convertedMapping);
+            } catch (error) {
+                debug.error('Error converting column mapping:', error);
+            }
+        }
+        next();
+    };
+
     // Get columns from Excel file
     router.post('/columns', upload.single('file'), async (req, res) => {
         try {
@@ -74,20 +99,20 @@ function createRouter(db) {
     });
 
     // Get supplier responses for an inquiry with pagination
-    router.get('/inquiry/:inquiryId', validateInquiryId, async (req, res, next) => {
+    router.get('/inquiry/:inquiry_id', validateInquiryId, async (req, res, next) => {
         try {
             // Validate and sanitize pagination parameters
             const page = Math.max(1, parseInt(req.query.page) || 1);
             const pageSize = Math.min(100, Math.max(10, parseInt(req.query.pageSize) || 50));
             
             debug.log('Fetching supplier responses:', {
-                inquiryId: req.params.inquiryId,
+                inquiry_id: req.params.inquiry_id,
                 page,
                 pageSize
             });
 
             const responses = await supplierResponseService.getSupplierResponses(
-                req.params.inquiryId,
+                req.params.inquiry_id,
                 page,
                 pageSize
             );
@@ -107,9 +132,9 @@ function createRouter(db) {
     });
 
     // Delete a specific supplier response
-    router.delete('/:responseId', validateResponseId, async (req, res, next) => {
+    router.delete('/:response_id', validateResponseId, async (req, res, next) => {
         try {
-            const result = await supplierResponseService.deleteResponse(req.params.responseId);
+            const result = await supplierResponseService.deleteResponse(req.params.response_id);
             res.json(result);
         } catch (err) {
             next(err);
@@ -117,9 +142,9 @@ function createRouter(db) {
     });
 
     // Delete a reference change
-    router.delete('/reference-change/:changeId', validateChangeId, async (req, res, next) => {
+    router.delete('/reference-change/:change_id', validateChangeId, async (req, res, next) => {
         try {
-            const result = await supplierResponseService.deleteReferenceChange(req.params.changeId);
+            const result = await supplierResponseService.deleteReferenceChange(req.params.change_id);
             res.json(result);
         } catch (err) {
             next(err);
@@ -127,11 +152,11 @@ function createRouter(db) {
     });
 
     // Delete all responses for a supplier on a specific date
-    router.delete('/bulk/:date/:supplierId', validateBulkDelete, async (req, res, next) => {
+    router.delete('/bulk/:date/:supplier_id', validateBulkDelete, async (req, res, next) => {
         try {
             const result = await supplierResponseService.deleteBulkResponses(
                 req.params.date,
-                req.params.supplierId
+                req.params.supplier_id
             );
             res.json(result);
         } catch (err) {
@@ -140,48 +165,53 @@ function createRouter(db) {
     });
 
     // Handle supplier response upload
-    router.post('/upload', upload.single('file'), validateUpload, async (req, res, next) => {
-        try {
-            if (!req.file) {
-                throw new Error('No file uploaded');
-            }
-
-            // Use the full path from req.file
-            const filePath = req.file.fullPath || path.join(__dirname, '..', 'uploads', req.file.filename);
-
-            // Verify file exists
-            if (!fs.existsSync(filePath)) {
-                throw new Error('File not found after upload');
-            }
-
-            // Update req.file with the correct path
-            req.file.path = filePath;
-
-            // Parse the column mapping if it's a string
-            let columnMapping;
+    router.post('/upload', 
+        upload.single('file'),
+        convertToSnakeCase,
+        validateUpload,
+        async (req, res, next) => {
             try {
-                columnMapping = typeof req.body.columnMapping === 'string' 
-                    ? JSON.parse(req.body.columnMapping) 
-                    : req.body.columnMapping;
-            } catch (error) {
-                throw new Error('Invalid column mapping format');
-            }
+                if (!req.file) {
+                    throw new Error('No file uploaded');
+                }
 
-            const result = await supplierResponseService.processUpload(
-                req.file,
-                columnMapping,
-                req.body.supplierId,
-                req.body.inquiryId
-            );
-            res.json(result);
-        } catch (error) {
-            debug.error('Upload processing error:', error);
-            if (req.file?.fullPath) {
-                cleanupFile(req.file.fullPath);
+                // Use the full path from req.file
+                const filePath = req.file.fullPath || path.join(__dirname, '..', 'uploads', req.file.filename);
+
+                // Verify file exists
+                if (!fs.existsSync(filePath)) {
+                    throw new Error('File not found after upload');
+                }
+
+                // Update req.file with the correct path
+                req.file.path = filePath;
+
+                // Parse the column mapping
+                let columnMapping;
+                try {
+                    columnMapping = typeof req.body.column_mapping === 'string' 
+                        ? JSON.parse(req.body.column_mapping) 
+                        : req.body.column_mapping;
+                } catch (error) {
+                    throw new Error('Invalid column mapping format');
+                }
+
+                const result = await supplierResponseService.processUpload(
+                    req.file,
+                    columnMapping,
+                    req.body.supplier_id,
+                    req.body.inquiry_id
+                );
+                res.json(result);
+            } catch (error) {
+                debug.error('Upload processing error:', error);
+                if (req.file?.fullPath) {
+                    cleanupFile(req.file.fullPath);
+                }
+                next(error);
             }
-            next(error);
         }
-    });
+    );
 
     // Error handling middleware
     router.use(handleErrors);

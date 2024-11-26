@@ -13,33 +13,34 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   SwapHoriz as SwapHorizIcon,
+  Public as PublicIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../../config';
 
 function ItemReference({ item, isNewReference, referencingItems, getChangeSource, onReferenceClick }) {
   // Filter out self-references
-  const filteredReferencingItems = referencingItems.filter(ref => ref.itemID !== item.itemID);
+  const filteredReferencingItems = referencingItems.filter(ref => ref.item_id !== item.item_id);
   
   // Check if this item has a self-reference
-  const isSelfReferenced = item.hasReferenceChange && 
-    item.referenceChange.newReferenceID === item.itemID;
+  const isSelfReferenced = item.has_reference_change && 
+    item.reference_change.new_reference_id === item.item_id;
 
   return (
     <TableCell>
       <Stack spacing={0.5}>
-        {item.hasReferenceChange && !isSelfReferenced && (
+        {item.has_reference_change && !isSelfReferenced && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Chip
               icon={<SwapHorizIcon fontSize="small" />}
-              label={`Replaced by ${item.referenceChange.newReferenceID}`}
+              label={`Replaced by ${item.reference_change.new_reference_id}`}
               color="warning"
               variant="outlined"
               size="small"
-              onClick={(e) => onReferenceClick(e, item.referenceChange.newReferenceID)}
+              onClick={(e) => onReferenceClick(e, item.reference_change.new_reference_id)}
               sx={{ cursor: 'pointer' }}
             />
             <Typography variant="caption" color="text.secondary">
-              {getChangeSource(item.referenceChange)}
+              {getChangeSource(item.reference_change)}
             </Typography>
           </Box>
         )}
@@ -47,13 +48,13 @@ function ItemReference({ item, isNewReference, referencingItems, getChangeSource
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Chip
               icon={<SwapHorizIcon fontSize="small" />}
-              label={`Replaces ${filteredReferencingItems.map(i => i.itemID).join(', ')}`}
+              label={`Replaces ${filteredReferencingItems.map(i => i.item_id).join(', ')}`}
               color="success"
               variant="outlined"
               size="small"
               onClick={(e) => {
                 if (filteredReferencingItems.length === 1) {
-                  onReferenceClick(e, filteredReferencingItems[0].itemID);
+                  onReferenceClick(e, filteredReferencingItems[0].item_id);
                 }
               }}
               sx={{ cursor: 'pointer' }}
@@ -116,14 +117,14 @@ function ItemTableRow({
   onReferenceClick
 }) {
   const generateUniqueKey = (item, index) => {
-    return `${item.itemID}-${item.qtyInStock}-${item.soldThisYear}-${item.soldLastYear}-${index}`;
+    return `${item.item_id}-${item.qty_in_stock}-${item.sold_this_year}-${item.sold_last_year}-${index}`;
   };
 
   const getBackgroundColor = () => {
     if (isNewReference) {
       return '#e8f5e9'; // Light green background for new/replacement items
     }
-    if (item.hasReferenceChange && item.referenceChange.newReferenceID !== item.itemID) {
+    if (item.has_reference_change && item.reference_change.new_reference_id !== item.item_id) {
       return 'rgba(255, 152, 0, 0.08)'; // Subtle orange for old/replaced items
     }
     return 'inherit';
@@ -133,7 +134,7 @@ function ItemTableRow({
     if (isNewReference) {
       return '#c8e6c9'; // Slightly darker green on hover
     }
-    if (item.hasReferenceChange && item.referenceChange.newReferenceID !== item.itemID) {
+    if (item.has_reference_change && item.reference_change.new_reference_id !== item.item_id) {
       return 'rgba(255, 152, 0, 0.15)'; // Slightly darker orange on hover
     }
     return 'rgba(0, 0, 0, 0.04)';
@@ -160,7 +161,7 @@ function ItemTableRow({
     >
       <TableCell>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {item.itemID}
+          {item.item_id}
           {isNewReference && (
             <Chip
               size="small"
@@ -182,7 +183,7 @@ function ItemTableRow({
         direction: 'rtl', // Right-to-left for Hebrew text
         textAlign: 'right'
       }}>
-        {item.hebrewDescription}
+        {item.hebrew_description}
       </TableCell>
       <TableCell sx={{ 
         whiteSpace: 'pre-wrap', 
@@ -190,24 +191,30 @@ function ItemTableRow({
         minWidth: '180px',
         maxWidth: '300px'
       }}>
-        {item.englishDescription}
+        {item.english_description}
       </TableCell>
-      <TableCell align="right">{Number(item.importMarkup).toFixed(2)}</TableCell>
-      <TableCell>{item.hsCode}</TableCell>
+      <TableCell align="right">{Number(item.import_markup).toFixed(2)}</TableCell>
+      <TableCell>{item.hs_code}</TableCell>
+      <TableCell>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <PublicIcon fontSize="small" color="action" />
+          <Typography>{item.origin || 'N/A'}</Typography>
+        </Box>
+      </TableCell>
       <TableCell>
         {item.image && (
           <img 
             src={`${API_BASE_URL}/uploads/${item.image}`} 
-            alt={item.englishDescription || item.hebrewDescription}
+            alt={item.english_description || item.hebrew_description}
             style={{ maxWidth: '50px', maxHeight: '50px', objectFit: 'contain' }}
           />
         )}
       </TableCell>
-      <TableCell align="right">{item.qtyInStock || 0}</TableCell>
-      <TableCell align="right">{item.soldThisYear || 0}</TableCell>
-      <TableCell align="right">{item.soldLastYear || 0}</TableCell>
+      <TableCell align="right">{item.qty_in_stock || 0}</TableCell>
+      <TableCell align="right">{item.qty_sold_this_year || 0}</TableCell>
+      <TableCell align="right">{item.qty_sold_last_year || 0}</TableCell>
       <TableCell align="right">
-        {formatPrice(item.retailPrice) || (
+        {formatPrice(item.retail_price) || (
           <Typography variant="body2" color="error">
             No Price
           </Typography>
@@ -222,7 +229,7 @@ function ItemTableRow({
       />
       <ItemActions 
         onEdit={(e) => onEdit(e, item)}
-        onDelete={(e) => onDelete(e, item.itemID)}
+        onDelete={(e) => onDelete(e, item.item_id)}
       />
     </TableRow>
   );

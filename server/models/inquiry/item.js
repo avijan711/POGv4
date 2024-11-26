@@ -6,25 +6,30 @@ class InquiryItemModel extends BaseModel {
         super(db);
     }
 
-    async createUnknownItem(itemId, description = 'Unknown New Item') {
+    async createUnknownItem(item_id, description = 'Unknown New Item', notes = '', origin = '') {
         const query = `
-            INSERT INTO Item (
-                ItemID,
-                HebrewDescription,
-                EnglishDescription,
-                ImportMarkup,
-                HSCode,
-                Image
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(ItemID) DO NOTHING
+            INSERT INTO item (
+                item_id,
+                hebrew_description,
+                english_description,
+                import_markup,
+                hs_code,
+                image,
+                notes,
+                origin,
+                last_updated
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(item_id) DO NOTHING
         `;
         const params = [
-            itemId,
+            item_id,
             description,
             description,
             1.30,
             '',
-            ''
+            '',
+            notes,
+            origin
         ];
 
         try {
@@ -32,93 +37,115 @@ class InquiryItemModel extends BaseModel {
 
             // Insert initial history record
             const historyQuery = `
-                INSERT INTO ItemHistory (
-                    ItemID,
-                    ILSRetailPrice,
-                    QtyInStock,
-                    QtySoldThisYear,
-                    QtySoldLastYear,
-                    Date
+                INSERT INTO price_history (
+                    item_id,
+                    ils_retail_price,
+                    qty_in_stock,
+                    qty_sold_this_year,
+                    qty_sold_last_year,
+                    date
                 ) VALUES (?, NULL, 0, 0, 0, datetime('now'))
             `;
-            await this.executeRun(historyQuery, [itemId]);
+            await this.executeRun(historyQuery, [item_id]);
 
-            debug.log('Created unknown item:', itemId);
+            debug.log('Created unknown item:', item_id);
         } catch (error) {
             debug.error('Error creating unknown item:', error);
             throw error;
         }
     }
 
-    async createInquiryItem(inquiryId, itemData) {
+    async createInquiryItem(inquiry_id, itemData) {
         try {
             debug.log('Creating inquiry item with data:', itemData);
 
             // Check if main item exists, create if not
             const itemExists = await this.executeQuerySingle(
-                'SELECT 1 FROM Item WHERE ItemID = ?',
-                [itemData.itemId]
+                'SELECT 1 FROM item WHERE item_id = ?',
+                [itemData.item_id]
             );
             
             if (!itemExists) {
                 await this.createUnknownItem(
-                    itemData.itemId,
-                    itemData.hebrewDescription || `Unknown Item ${itemData.itemId}`
+                    itemData.item_id,
+                    itemData.hebrew_description || `Unknown Item ${itemData.item_id}`,
+                    itemData.notes || '',
+                    itemData.origin || ''
                 );
+            } else {
+                // Update existing item with new notes and origin if provided
+                if (itemData.notes || itemData.origin) {
+                    const updateQuery = `
+                        UPDATE item 
+                        SET notes = COALESCE(?, notes),
+                            origin = COALESCE(?, origin),
+                            last_updated = datetime('now')
+                        WHERE item_id = ?
+                    `;
+                    await this.executeRun(updateQuery, [
+                        itemData.notes,
+                        itemData.origin,
+                        itemData.item_id
+                    ]);
+                }
             }
 
-            // Only proceed with reference handling if newReferenceId is different from itemId
-            if (itemData.newReferenceId && itemData.newReferenceId !== itemData.itemId) {
+            // Only proceed with reference handling if new_reference_id is different from item_id
+            if (itemData.new_reference_id && itemData.new_reference_id !== itemData.item_id) {
                 const exists = await this.executeQuerySingle(
-                    'SELECT 1 FROM Item WHERE ItemID = ?',
-                    [itemData.newReferenceId]
+                    'SELECT 1 FROM item WHERE item_id = ?',
+                    [itemData.new_reference_id]
                 );
                 
                 if (!exists) {
                     await this.createUnknownItem(
-                        itemData.newReferenceId,
-                        `Unknown Replacement for ${itemData.itemId}`
+                        itemData.new_reference_id,
+                        `Unknown Replacement for ${itemData.item_id}`,
+                        itemData.notes || '',
+                        itemData.origin || ''
                     );
                 }
             } else {
-                // Clear newReferenceId if it's the same as itemId
-                itemData.newReferenceId = null;
+                // Clear new_reference_id if it's the same as item_id
+                itemData.new_reference_id = null;
             }
 
             const query = `
-                INSERT INTO InquiryItem (
-                    InquiryID,
-                    ItemID,
-                    OriginalItemID,
-                    HebrewDescription,
-                    EnglishDescription,
-                    ImportMarkup,
-                    HSCode,
-                    QtyInStock,
-                    RetailPrice,
-                    SoldThisYear,
-                    SoldLastYear,
-                    RequestedQty,
-                    NewReferenceID,
-                    ReferenceNotes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO inquiry_item (
+                    inquiry_id,
+                    item_id,
+                    original_item_id,
+                    hebrew_description,
+                    english_description,
+                    import_markup,
+                    hs_code,
+                    qty_in_stock,
+                    retail_price,
+                    sold_this_year,
+                    sold_last_year,
+                    requested_qty,
+                    new_reference_id,
+                    reference_notes,
+                    origin
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `;
 
             const params = [
-                inquiryId,
-                itemData.itemId,
-                itemData.itemId,
-                itemData.hebrewDescription,
-                itemData.englishDescription || '',
-                itemData.importMarkup || 1.3,
-                itemData.hsCode || '',
-                itemData.qtyInStock || 0,
-                itemData.retailPrice,
-                itemData.soldThisYear || 0,
-                itemData.soldLastYear || 0,
-                itemData.requestedQuantity || 0,
-                itemData.newReferenceId || null,
-                itemData.referenceNotes || null
+                inquiry_id,
+                itemData.item_id,
+                itemData.item_id,
+                itemData.hebrew_description,
+                itemData.english_description || '',
+                itemData.import_markup || 1.3,
+                itemData.hs_code || '',
+                itemData.qty_in_stock || 0,
+                itemData.retail_price,
+                itemData.sold_this_year || 0,
+                itemData.sold_last_year || 0,
+                itemData.requested_qty || 0,
+                itemData.new_reference_id || null,
+                itemData.reference_notes || null,
+                itemData.origin || ''
             ];
 
             debug.log('Executing inquiry item insert:', {
@@ -128,22 +155,22 @@ class InquiryItemModel extends BaseModel {
 
             await this.executeRun(query, params);
 
-            // Only create reference change if newReferenceId is different from itemId
-            if (itemData.newReferenceId && itemData.newReferenceId !== itemData.itemId) {
+            // Only create reference change if new_reference_id is different from item_id
+            if (itemData.new_reference_id && itemData.new_reference_id !== itemData.item_id) {
                 const referenceQuery = `
-                    INSERT INTO ItemReferenceChange (
-                        OriginalItemID,
-                        NewReferenceID,
-                        ChangedByUser,
-                        Notes,
-                        ChangeDate
+                    INSERT INTO item_reference_change (
+                        original_item_id,
+                        new_reference_id,
+                        changed_by_user,
+                        notes,
+                        change_date
                     ) VALUES (?, ?, 1, ?, datetime('now'))
                 `;
 
                 const referenceParams = [
-                    itemData.itemId,
-                    itemData.newReferenceId,
-                    itemData.referenceNotes || 'Reference from inquiry upload'
+                    itemData.item_id,
+                    itemData.new_reference_id,
+                    itemData.reference_notes || 'Reference from inquiry upload'
                 ];
 
                 debug.log('Executing reference change insert:', {
@@ -155,9 +182,9 @@ class InquiryItemModel extends BaseModel {
             }
 
             debug.log('Created inquiry item:', {
-                inquiryId,
-                itemId: itemData.itemId,
-                referenceId: itemData.newReferenceId
+                inquiry_id,
+                item_id: itemData.item_id,
+                reference_id: itemData.new_reference_id
             });
         } catch (error) {
             debug.error('Error creating inquiry item:', error);
@@ -165,31 +192,33 @@ class InquiryItemModel extends BaseModel {
         }
     }
 
-    async updateInquiryItem(inquiryItemId, updateData) {
+    async updateInquiryItem(inquiry_item_id, updateData) {
         try {
             debug.log('Updating inquiry item:', {
-                inquiryItemId,
+                inquiry_item_id,
                 updateData
             });
 
-            // Only proceed with reference update if newReferenceId is different from itemId
-            if (updateData.newReferenceId && updateData.newReferenceId === updateData.itemId) {
-                updateData.newReferenceId = null;
+            // Only proceed with reference update if new_reference_id is different from item_id
+            if (updateData.new_reference_id && updateData.new_reference_id === updateData.item_id) {
+                updateData.new_reference_id = null;
             }
 
             const query = `
-                UPDATE InquiryItem SET
-                    RequestedQty = COALESCE(?, RequestedQty),
-                    NewReferenceID = COALESCE(?, NewReferenceID),
-                    ReferenceNotes = COALESCE(?, ReferenceNotes)
-                WHERE InquiryItemID = ?
+                UPDATE inquiry_item SET
+                    requested_qty = COALESCE(?, requested_qty),
+                    new_reference_id = COALESCE(?, new_reference_id),
+                    reference_notes = COALESCE(?, reference_notes),
+                    origin = COALESCE(?, origin)
+                WHERE inquiry_item_id = ?
             `;
 
             const params = [
-                updateData.requestedQty,
-                updateData.newReferenceId,
-                updateData.referenceNotes,
-                inquiryItemId
+                updateData.requested_qty,
+                updateData.new_reference_id,
+                updateData.reference_notes,
+                updateData.origin,
+                inquiry_item_id
             ];
 
             debug.log('Executing inquiry item update:', {
@@ -203,39 +232,57 @@ class InquiryItemModel extends BaseModel {
                 throw new Error('Inquiry item not found');
             }
 
-            // Only create reference change if newReferenceId is different from itemId
-            if (updateData.newReferenceId && updateData.newReferenceId !== updateData.itemId) {
+            // Update item notes and origin if provided
+            if (updateData.notes || updateData.origin) {
+                const itemUpdateQuery = `
+                    UPDATE item 
+                    SET notes = COALESCE(?, notes),
+                        origin = COALESCE(?, origin),
+                        last_updated = datetime('now')
+                    WHERE item_id = ?
+                `;
+                await this.executeRun(itemUpdateQuery, [
+                    updateData.notes,
+                    updateData.origin,
+                    updateData.item_id
+                ]);
+            }
+
+            // Only create reference change if new_reference_id is different from item_id
+            if (updateData.new_reference_id && updateData.new_reference_id !== updateData.item_id) {
                 const exists = await this.executeQuerySingle(
-                    'SELECT 1 FROM Item WHERE ItemID = ?',
-                    [updateData.newReferenceId]
+                    'SELECT 1 FROM item WHERE item_id = ?',
+                    [updateData.new_reference_id]
                 );
 
                 if (!exists) {
                     await this.createUnknownItem(
-                        updateData.newReferenceId,
-                        `Unknown Replacement for ${updateData.itemId}`
+                        updateData.new_reference_id,
+                        `Unknown Replacement for ${updateData.item_id}`,
+                        updateData.notes || '',
+                        updateData.origin || ''
                     );
                 }
 
                 const referenceQuery = `
-                    INSERT INTO ItemReferenceChange (
-                        OriginalItemID,
-                        NewReferenceID,
-                        ChangedByUser,
-                        Notes,
-                        ChangeDate
+                    INSERT INTO item_reference_change (
+                        original_item_id,
+                        new_reference_id,
+                        changed_by_user,
+                        notes,
+                        change_date
                     ) VALUES (?, ?, 1, ?, datetime('now'))
                 `;
 
                 await this.executeRun(referenceQuery, [
-                    updateData.itemId,
-                    updateData.newReferenceID,
-                    updateData.referenceNotes || 'Reference from inquiry update'
+                    updateData.item_id,
+                    updateData.new_reference_id,
+                    updateData.reference_notes || 'Reference from inquiry update'
                 ]);
             }
 
             debug.log('Updated inquiry item:', {
-                inquiryItemId,
+                inquiry_item_id,
                 changes: result.changes
             });
         } catch (error) {
@@ -244,32 +291,32 @@ class InquiryItemModel extends BaseModel {
         }
     }
 
-    async deleteByInquiryId(inquiryId) {
+    async deleteByInquiryId(inquiry_id) {
         return this.executeTransaction(async () => {
             try {
                 // First delete supplier response items
                 await this.executeRun(`
-                    DELETE FROM SupplierResponseItem 
-                    WHERE SupplierResponseID IN (
-                        SELECT SupplierResponseID 
-                        FROM SupplierResponse 
-                        WHERE InquiryID = ?
-                    )`, [inquiryId]
+                    DELETE FROM supplier_response_item 
+                    WHERE supplier_response_id IN (
+                        SELECT supplier_response_id 
+                        FROM supplier_response 
+                        WHERE inquiry_id = ?
+                    )`, [inquiry_id]
                 );
 
                 // Then delete supplier responses
                 await this.executeRun(
-                    'DELETE FROM SupplierResponse WHERE InquiryID = ?',
-                    [inquiryId]
+                    'DELETE FROM supplier_response WHERE inquiry_id = ?',
+                    [inquiry_id]
                 );
 
                 const result = await this.executeRun(
-                    'DELETE FROM InquiryItem WHERE InquiryID = ?',
-                    [inquiryId]
+                    'DELETE FROM inquiry_item WHERE inquiry_id = ?',
+                    [inquiry_id]
                 );
 
                 debug.log('Deleted inquiry items:', {
-                    inquiryId,
+                    inquiry_id,
                     deletedCount: result.changes
                 });
 
@@ -281,35 +328,35 @@ class InquiryItemModel extends BaseModel {
         });
     }
 
-    async updateQuantity(inquiryItemId, requestedQty) {
+    async updateQuantity(inquiry_item_id, requested_qty) {
         try {
             // First check if the inquiry item exists
             const item = await this.executeQuerySingle(
-                'SELECT InquiryItemID FROM InquiryItem WHERE InquiryItemID = ?',
-                [inquiryItemId]
+                'SELECT inquiry_item_id FROM inquiry_item WHERE inquiry_item_id = ?',
+                [inquiry_item_id]
             );
 
             if (!item) {
-                debug.error('Inquiry item not found:', inquiryItemId);
-                throw new Error(`Inquiry item with ID ${inquiryItemId} not found`);
+                debug.error('Inquiry item not found:', inquiry_item_id);
+                throw new Error(`Inquiry item with ID ${inquiry_item_id} not found`);
             }
 
             const query = `
-                UPDATE InquiryItem 
-                SET RequestedQty = ? 
-                WHERE InquiryItemID = ?
+                UPDATE inquiry_item 
+                SET requested_qty = ? 
+                WHERE inquiry_item_id = ?
             `;
 
-            const result = await this.executeRun(query, [requestedQty, inquiryItemId]);
+            const result = await this.executeRun(query, [requested_qty, inquiry_item_id]);
 
             if (result.changes === 0) {
-                debug.error('No rows updated for inquiry item:', inquiryItemId);
-                throw new Error(`Failed to update quantity for inquiry item ${inquiryItemId}`);
+                debug.error('No rows updated for inquiry item:', inquiry_item_id);
+                throw new Error(`Failed to update quantity for inquiry item ${inquiry_item_id}`);
             }
 
             debug.log('Updated item quantity:', {
-                inquiryItemId,
-                requestedQty,
+                inquiry_item_id,
+                requested_qty,
                 changes: result.changes
             });
 
@@ -320,49 +367,49 @@ class InquiryItemModel extends BaseModel {
         }
     }
 
-    async deleteItem(inquiryItemId) {
+    async deleteItem(inquiry_item_id) {
         return this.executeTransaction(async () => {
             try {
                 // First check if the inquiry item exists
                 const item = await this.executeQuerySingle(
-                    'SELECT InquiryItemID, InquiryID, ItemID FROM InquiryItem WHERE InquiryItemID = ?',
-                    [inquiryItemId]
+                    'SELECT inquiry_item_id, inquiry_id, item_id FROM inquiry_item WHERE inquiry_item_id = ?',
+                    [inquiry_item_id]
                 );
 
                 if (!item) {
-                    debug.error('Inquiry item not found:', inquiryItemId);
-                    throw new Error(`Inquiry item with ID ${inquiryItemId} not found`);
+                    debug.error('Inquiry item not found:', inquiry_item_id);
+                    throw new Error(`Inquiry item with ID ${inquiry_item_id} not found`);
                 }
 
                 // Delete supplier response items first
                 await this.executeRun(`
-                    DELETE FROM SupplierResponseItem 
-                    WHERE SupplierResponseID IN (
-                        SELECT SupplierResponseID 
-                        FROM SupplierResponse 
-                        WHERE InquiryID = ? AND ItemID = ?
-                    )`, [item.InquiryID, item.ItemID]
+                    DELETE FROM supplier_response_item 
+                    WHERE supplier_response_id IN (
+                        SELECT supplier_response_id 
+                        FROM supplier_response 
+                        WHERE inquiry_id = ? AND item_id = ?
+                    )`, [item.inquiry_id, item.item_id]
                 );
 
                 // Then delete supplier responses
                 await this.executeRun(
-                    'DELETE FROM SupplierResponse WHERE InquiryID = ? AND ItemID = ?',
-                    [item.InquiryID, item.ItemID]
+                    'DELETE FROM supplier_response WHERE inquiry_id = ? AND item_id = ?',
+                    [item.inquiry_id, item.item_id]
                 );
 
                 // Finally delete the inquiry item
                 const result = await this.executeRun(
-                    'DELETE FROM InquiryItem WHERE InquiryItemID = ?',
-                    [inquiryItemId]
+                    'DELETE FROM inquiry_item WHERE inquiry_item_id = ?',
+                    [inquiry_item_id]
                 );
 
                 if (result.changes === 0) {
-                    debug.error('No rows deleted for inquiry item:', inquiryItemId);
-                    throw new Error(`Failed to delete inquiry item ${inquiryItemId}`);
+                    debug.error('No rows deleted for inquiry item:', inquiry_item_id);
+                    throw new Error(`Failed to delete inquiry item ${inquiry_item_id}`);
                 }
 
                 debug.log('Deleted inquiry item:', {
-                    inquiryItemId,
+                    inquiry_item_id,
                     changes: result.changes
                 });
 

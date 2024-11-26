@@ -2,83 +2,83 @@ const getBestSupplierPricesQuery = `
     WITH check_tables AS (
         SELECT EXISTS (
             SELECT 1 FROM sqlite_master 
-            WHERE type = 'table' AND name = 'SupplierPrice'
+            WHERE type = 'table' AND name = 'supplier_price'
         ) as has_supplier_price
     ),
-    InquiryItems AS (
+    inquiry_items AS (
         -- Get all items from the inquiry
         SELECT 
-            ii.ItemID,
-            COALESCE(ii.OriginalItemID, ii.ItemID) as OriginalItemID,
-            ii.InquiryItemID,
-            ii.RequestedQty,
-            ii.HebrewDescription as InquiryDescription,
-            i.HebrewDescription as ItemDescription,
-            i.EnglishDescription as ItemEnglishDescription
-        FROM InquiryItem ii
-        JOIN Item i ON ii.ItemID = i.ItemID
-        WHERE ii.InquiryID = ?
+            ii.item_id,
+            COALESCE(ii.original_item_id, ii.item_id) as original_item_id,
+            ii.inquiry_item_id,
+            ii.requested_qty,
+            ii.hebrew_description as inquiry_description,
+            i.hebrew_description as item_description,
+            i.english_description as item_english_description
+        FROM inquiry_item ii
+        JOIN item i ON ii.item_id = i.item_id
+        WHERE ii.inquiry_id = ?
     ),
-    SupplierPrices AS (
+    supplier_prices AS (
         -- Get all supplier prices for inquiry items
         SELECT 
-            sp.ItemID,
-            sp.SupplierID,
-            sp.PriceQuoted,
-            sp.ImportMarkup,
-            sp.RetailPrice,
-            sp.HebrewDescription,
-            sp.EnglishDescription,
-            s.Name as SupplierName,
+            sp.item_id,
+            sp.supplier_id,
+            sp.price_quoted,
+            sp.import_markup,
+            sp.retail_price,
+            sp.hebrew_description,
+            sp.english_description,
+            s.name as supplier_name,
             ROW_NUMBER() OVER (
-                PARTITION BY sp.ItemID, sp.SupplierID 
-                ORDER BY sp.LastUpdated DESC
+                PARTITION BY sp.item_id, sp.supplier_id 
+                ORDER BY sp.last_updated DESC
             ) as rn
         FROM check_tables ct
         CROSS JOIN (SELECT 1) params
-        LEFT JOIN SupplierPrice sp ON ct.has_supplier_price = 1
-        LEFT JOIN Supplier s ON sp.SupplierID = s.SupplierID
+        LEFT JOIN supplier_price sp ON ct.has_supplier_price = 1
+        LEFT JOIN supplier s ON sp.supplier_id = s.supplier_id
         WHERE ct.has_supplier_price = 0 OR EXISTS (
             SELECT 1 
-            FROM InquiryItems ii 
-            WHERE sp.ItemID = ii.ItemID
-            OR sp.ItemID = ii.OriginalItemID
+            FROM inquiry_items ii 
+            WHERE sp.item_id = ii.item_id
+            OR sp.item_id = ii.original_item_id
         )
     )
     SELECT 
-        ii.ItemID,
-        ii.InquiryItemID,
-        ii.RequestedQty,
-        sp.SupplierID,
-        sp.PriceQuoted,
-        sp.ImportMarkup,
-        sp.RetailPrice,
-        COALESCE(sp.HebrewDescription, ii.ItemDescription) as HebrewDescription,
-        COALESCE(sp.EnglishDescription, ii.ItemEnglishDescription) as EnglishDescription,
-        sp.SupplierName,
-        0 as IsPromotion
-    FROM InquiryItems ii
-    LEFT JOIN SupplierPrices sp ON (
-        ii.ItemID = sp.ItemID 
-        OR ii.OriginalItemID = sp.ItemID
+        ii.item_id,
+        ii.inquiry_item_id,
+        ii.requested_qty,
+        sp.supplier_id,
+        sp.price_quoted,
+        sp.import_markup,
+        sp.retail_price,
+        COALESCE(sp.hebrew_description, ii.item_description) as hebrew_description,
+        COALESCE(sp.english_description, ii.item_english_description) as english_description,
+        sp.supplier_name,
+        0 as is_promotion
+    FROM inquiry_items ii
+    LEFT JOIN supplier_prices sp ON (
+        ii.item_id = sp.item_id 
+        OR ii.original_item_id = sp.item_id
     )
     AND sp.rn = 1
-    WHERE sp.ItemID IS NOT NULL
-    ORDER BY ii.ItemID, sp.PriceQuoted ASC;
+    WHERE sp.item_id IS NOT NULL
+    ORDER BY ii.item_id, sp.price_quoted ASC;
 `;
 
 // Debug query to check inquiry items
 const debugInquiryItemsQuery = `
     SELECT 
-        ii.ItemID,
-        ii.OriginalItemID,
-        ii.InquiryItemID,
-        ii.RequestedQty,
-        ii.HebrewDescription as InquiryDescription,
-        i.HebrewDescription as ItemDescription
-    FROM InquiryItem ii
-    JOIN Item i ON ii.ItemID = i.ItemID
-    WHERE ii.InquiryID = ?;
+        ii.item_id,
+        ii.original_item_id,
+        ii.inquiry_item_id,
+        ii.requested_qty,
+        ii.hebrew_description as inquiry_description,
+        i.hebrew_description as item_description
+    FROM inquiry_item ii
+    JOIN item i ON ii.item_id = i.item_id
+    WHERE ii.inquiry_id = ?;
 `;
 
 // Debug query to check supplier prices
@@ -86,21 +86,21 @@ const debugSupplierPricesQuery = `
     WITH check_tables AS (
         SELECT EXISTS (
             SELECT 1 FROM sqlite_master 
-            WHERE type = 'table' AND name = 'SupplierPrice'
+            WHERE type = 'table' AND name = 'supplier_price'
         ) as has_supplier_price
     )
     SELECT 
         sp.*,
-        s.Name as SupplierName,
-        i.HebrewDescription as ItemDescription,
-        i.EnglishDescription as ItemEnglishDescription
+        s.name as supplier_name,
+        i.hebrew_description as item_description,
+        i.english_description as item_english_description
     FROM check_tables ct
     CROSS JOIN (SELECT ? as item_id) params
-    LEFT JOIN SupplierPrice sp ON ct.has_supplier_price = 1
-    LEFT JOIN Supplier s ON sp.SupplierID = s.SupplierID
-    LEFT JOIN Item i ON sp.ItemID = i.ItemID
-    WHERE ct.has_supplier_price = 0 OR sp.ItemID = params.item_id
-    ORDER BY sp.LastUpdated DESC;
+    LEFT JOIN supplier_price sp ON ct.has_supplier_price = 1
+    LEFT JOIN supplier s ON sp.supplier_id = s.supplier_id
+    LEFT JOIN item i ON sp.item_id = i.item_id
+    WHERE ct.has_supplier_price = 0 OR sp.item_id = params.item_id
+    ORDER BY sp.last_updated DESC;
 `;
 
 // Debug query to check item references
@@ -108,22 +108,22 @@ const debugItemReferencesQuery = `
     WITH check_tables AS (
         SELECT EXISTS (
             SELECT 1 FROM sqlite_master 
-            WHERE type = 'table' AND name = 'SupplierPrice'
+            WHERE type = 'table' AND name = 'supplier_price'
         ) as has_supplier_price
     )
     SELECT 
-        ii.ItemID,
-        ii.OriginalItemID,
-        sp.ItemID as SupplierPriceItemID,
-        sp.PriceQuoted,
-        sp.LastUpdated
-    FROM InquiryItem ii
+        ii.item_id,
+        ii.original_item_id,
+        sp.item_id as supplier_price_item_id,
+        sp.price_quoted,
+        sp.last_updated
+    FROM inquiry_item ii
     CROSS JOIN check_tables ct
-    LEFT JOIN SupplierPrice sp ON ct.has_supplier_price = 1 AND (
-        sp.ItemID = ii.ItemID 
-        OR sp.ItemID = ii.OriginalItemID
+    LEFT JOIN supplier_price sp ON ct.has_supplier_price = 1 AND (
+        sp.item_id = ii.item_id 
+        OR sp.item_id = ii.original_item_id
     )
-    WHERE ii.InquiryID = ?;
+    WHERE ii.inquiry_id = ?;
 `;
 
 module.exports = {

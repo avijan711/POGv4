@@ -9,6 +9,27 @@ const {
 const XLSX = require('xlsx');
 const debug = require('../debug');
 
+// Common field mapping for converting client-side field names to database field names
+const fieldMap = {
+    'itemID': 'item_id',
+    'newReferenceID': 'new_reference_id',
+    'hsCode': 'hs_code',
+    'englishDescription': 'english_description',
+    'hebrewDescription': 'hebrew_description',
+    'importMarkup': 'import_markup',
+    'requestedQty': 'requested_qty',
+    'qtyInStock': 'qty_in_stock',
+    'retailPrice': 'retail_price',
+    'qtySoldThisYear': 'qty_sold_this_year',
+    'qtySoldLastYear': 'qty_sold_last_year',
+    'referenceNotes': 'reference_notes'
+};
+
+// Helper function to convert field names to snake_case
+function convertToSnakeCase(field) {
+    return fieldMap[field] || field.toLowerCase().replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+}
+
 class ExcelProcessor {
     static readExcelFile(filePath) {
         debug.log('Reading Excel file:', filePath);
@@ -113,12 +134,20 @@ class ExcelProcessor {
 
         // Validate file and mapping
         validateFileType(filePath);
+
+        // Convert column mapping keys to database field names
+        const convertedMapping = {};
+        Object.entries(columnMapping).forEach(([field, value]) => {
+            const dbField = convertToSnakeCase(field);
+            convertedMapping[dbField] = value;
+        });
+
         // Pass the field names directly to validateColumnMapping
-        validateColumnMapping(columnMapping, ['itemID', 'HebrewDescription', 'RequestedQty']);
+        validateColumnMapping(convertedMapping, ['item_id', 'hebrew_description', 'requested_qty']);
 
         try {
             // Process the data using the new processInquiryData function
-            const data = await processInquiryData(filePath, columnMapping, db);
+            const data = await processInquiryData(filePath, convertedMapping, db);
 
             // Validate data types
             validateDataTypes(data, typeValidations);
@@ -146,48 +175,12 @@ class ExcelProcessor {
         validateFileType(filePath);
 
         // Convert client-side field names to database field names
-        const requiredFields = (options.requiredFields || ['itemID']).map(field => {
-            // Map of client-side field names to database field names
-            const fieldMap = {
-                'itemID': 'ItemID',
-                'newReferenceID': 'NewReferenceID',
-                'hsCode': 'HSCode',
-                'englishDescription': 'EnglishDescription',
-                'hebrewDescription': 'HebrewDescription',
-                'importMarkup': 'ImportMarkup',
-                'requestedQty': 'RequestedQty',
-                'qtyInStock': 'QtyInStock',
-                'retailPrice': 'RetailPrice',
-                'qtySoldThisYear': 'QtySoldThisYear',
-                'qtySoldLastYear': 'QtySoldLastYear',
-                'referenceNotes': 'ReferenceNotes'
-            };
-
-            // If field exists in map, use mapped value, otherwise convert to PascalCase
-            return fieldMap[field.toLowerCase()] || 
-                   field.charAt(0).toUpperCase() + field.slice(1);
-        });
+        const requiredFields = (options.requiredFields || ['item_id']).map(field => convertToSnakeCase(field));
         
         // Convert column mapping keys to database field names
         const convertedMapping = {};
         Object.entries(columnMapping).forEach(([field, value]) => {
-            const fieldMap = {
-                'itemID': 'ItemID',
-                'newReferenceID': 'NewReferenceID',
-                'hsCode': 'HSCode',
-                'englishDescription': 'EnglishDescription',
-                'hebrewDescription': 'HebrewDescription',
-                'importMarkup': 'ImportMarkup',
-                'requestedQty': 'RequestedQty',
-                'qtyInStock': 'QtyInStock',
-                'retailPrice': 'RetailPrice',
-                'qtySoldThisYear': 'QtySoldThisYear',
-                'qtySoldLastYear': 'QtySoldLastYear',
-                'referenceNotes': 'ReferenceNotes'
-            };
-
-            const dbField = fieldMap[field.toLowerCase()] || 
-                          field.charAt(0).toUpperCase() + field.slice(1);
+            const dbField = convertToSnakeCase(field);
             convertedMapping[dbField] = value;
         });
         
@@ -218,9 +211,19 @@ class ExcelProcessor {
             mapping: columnMapping,
             requiredFields
         });
+
+        // Convert required fields to snake_case
+        const snakeCaseRequiredFields = requiredFields.map(field => convertToSnakeCase(field));
         
-        // Pass the fields directly to validateColumnMapping without conversion
-        return validateColumnMapping(columnMapping, requiredFields);
+        // Convert column mapping keys to snake_case
+        const convertedMapping = {};
+        Object.entries(columnMapping).forEach(([field, value]) => {
+            const dbField = convertToSnakeCase(field);
+            convertedMapping[dbField] = value;
+        });
+        
+        // Pass the converted fields to validateColumnMapping
+        return validateColumnMapping(convertedMapping, snakeCaseRequiredFields);
     }
 
     static validateFile(filename) {

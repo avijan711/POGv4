@@ -2,7 +2,7 @@ const debug = require('../utils/debug');
 const { validateFileType } = require('../utils/excelProcessor/validator');
 
 function validateInquiryId(req, res, next) {
-    const inquiryId = req.params.inquiryId;
+    const inquiryId = req.params.inquiry_id;
     if (!inquiryId) {
         return res.status(400).json({ error: 'Inquiry ID is required' });
     }
@@ -10,7 +10,7 @@ function validateInquiryId(req, res, next) {
 }
 
 function validateResponseId(req, res, next) {
-    const responseId = req.params.responseId;
+    const responseId = req.params.response_id;
     if (!responseId) {
         return res.status(400).json({ error: 'Response ID is required' });
     }
@@ -18,7 +18,7 @@ function validateResponseId(req, res, next) {
 }
 
 function validateChangeId(req, res, next) {
-    const changeId = req.params.changeId;
+    const changeId = req.params.change_id;
     if (!changeId) {
         return res.status(400).json({ error: 'Change ID is required' });
     }
@@ -26,8 +26,8 @@ function validateChangeId(req, res, next) {
 }
 
 function validateBulkDelete(req, res, next) {
-    const { date, supplierId } = req.params;
-    if (!date || !supplierId) {
+    const { date, supplier_id } = req.params;
+    if (!date || !supplier_id) {
         return res.status(400).json({ error: 'Date and supplier ID are required' });
     }
     next();
@@ -46,7 +46,7 @@ function validateUpload(req, res, next) {
         validateFileType(req.file.path);
 
         // Check column mapping
-        if (!req.body.columnMapping) {
+        if (!req.body.column_mapping) {
             const error = new Error('Column mapping is required');
             error.name = 'ValidationError';
             throw error;
@@ -54,7 +54,7 @@ function validateUpload(req, res, next) {
 
         let columnMapping;
         try {
-            columnMapping = JSON.parse(req.body.columnMapping);
+            columnMapping = JSON.parse(req.body.column_mapping);
         } catch (error) {
             const parseError = new Error('Invalid column mapping format');
             parseError.name = 'ValidationError';
@@ -72,21 +72,21 @@ function validateUpload(req, res, next) {
         });
 
         // Check required fields using database field names
-        if (!columnMapping.ItemID) {
+        if (!columnMapping.item_id) {
             const error = new Error('Item ID column mapping is required');
             error.name = 'ValidationError';
             throw error;
         }
 
         // Check supplier ID
-        if (!req.body.supplierId) {
+        if (!req.body.supplier_id) {
             const error = new Error('Supplier ID is required');
             error.name = 'ValidationError';
             throw error;
         }
 
         // Check inquiry ID
-        if (!req.body.inquiryId) {
+        if (!req.body.inquiry_id) {
             const error = new Error('Inquiry ID is required');
             error.name = 'ValidationError';
             throw error;

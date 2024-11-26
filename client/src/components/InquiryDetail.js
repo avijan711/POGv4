@@ -21,7 +21,7 @@ function InquiryDetail() {
   const { id: inquiryId } = useParams();
   const navigate = useNavigate();
 
-  // Custom hooks
+  // Custom hooks - must be called at the top level
   const {
     items,
     loading,
@@ -32,7 +32,7 @@ function InquiryDetail() {
     handleUpdateQuantity,
     handleDeleteItem,
     setError
-  } = useInquiryItems(inquiryId);
+  } = useInquiryItems(inquiryId || '');
 
   // Ensure items is always an array before passing to useInquiryFilters
   const safeItems = Array.isArray(items) ? items : [];
@@ -49,15 +49,15 @@ function InquiryDetail() {
     filteredAndSortedItems
   } = useInquiryFilters(safeItems);
 
-  const dialogStates = useInquiryDialogs(inquiryId, fetchItems);
+  const dialogStates = useInquiryDialogs(inquiryId || '', fetchItems);
 
   // Statistics calculation
   const statistics = React.useMemo(() => {
     if (!safeItems.length) return {};
 
-    const uniqueItems = new Set(safeItems.map(item => item.itemID)).size;
+    const uniqueItems = new Set(safeItems.map(item => item.item_id)).size;
     const uniqueSuppliers = new Set(safeItems.flatMap(item => 
-      item.supplierResponses?.map(resp => resp.supplierName) || []
+      item.supplier_responses?.map(resp => resp.supplier_name) || []
     )).size;
 
     const startDate = new Date(inquiryDate);
@@ -68,23 +68,13 @@ function InquiryDetail() {
     const responseRate = Math.round((uniqueSuppliers / totalSuppliers) * 100);
 
     return {
-      uniqueItems,
-      suppliersResponded: uniqueSuppliers,
-      totalSuppliers,
-      daysActive,
-      responseRate
+      unique_items: uniqueItems,
+      suppliers_responded: uniqueSuppliers,
+      total_suppliers: totalSuppliers,
+      days_active: daysActive,
+      response_rate: responseRate
     };
   }, [safeItems, inquiryDate]);
-
-  // Helper function to get change source text
-  const getChangeSource = (referenceChange) => {
-    if (!referenceChange) return '';
-    if (referenceChange.source === 'inquiry_item') return 'Reference from inquiry';
-    if (referenceChange.source === 'supplier') {
-      return `Changed by ${referenceChange.supplierName || 'unknown supplier'}`;
-    }
-    return 'Changed by user';
-  };
 
   // Handle quantity updates
   const handleQtyUpdate = async (itemId, newQty) => {
@@ -128,18 +118,22 @@ function InquiryDetail() {
     }
   };
 
+  // Effects must be at the top level
+  useEffect(() => {
+    if (!inquiryId) {
+      navigate('/inquiries');
+    }
+  }, [inquiryId, navigate]);
+
   useEffect(() => {
     if (inquiryId) {
       fetchItems();
     }
   }, [inquiryId, fetchItems]);
 
+  // Early return if no ID
   if (!inquiryId) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Typography>No inquiry selected</Typography>
-      </Box>
-    );
+    return null;
   }
 
   if (loading) {
@@ -177,7 +171,7 @@ function InquiryDetail() {
 
         <Box sx={{ mb: 3 }}>
           <SupplierResponseList 
-            responses={safeItems.filter(item => item?.supplierResponses?.length > 0)}
+            responses={safeItems.filter(item => item?.supplier_responses?.length > 0)}
             onRefresh={fetchItems}
           />
         </Box>
@@ -198,7 +192,7 @@ function InquiryDetail() {
           sortConfig={sortConfig}
           onSort={handleSort}
           onRefresh={fetchItems}
-          getChangeSource={getChangeSource}
+          getChangeSource={dialogStates.getChangeSource}
         />
 
         <InquiryDialogs

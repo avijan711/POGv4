@@ -140,8 +140,8 @@ function InquiryHeader({
   );
 
   // Calculate progress for suppliers responded
-  const suppliersProgress = statistics.totalSuppliers 
-    ? (statistics.suppliersResponded / statistics.totalSuppliers) * 100 
+  const suppliersProgress = statistics.total_suppliers 
+    ? (statistics.suppliers_responded / statistics.total_suppliers) * 100 
     : 0;
 
   return (
@@ -223,14 +223,14 @@ function InquiryHeader({
           <StatBox
             icon={InventoryIcon}
             label="Unique Items"
-            value={statistics.uniqueItems || 0}
+            value={statistics.unique_items || 0}
           />
         </Grid>
         <Grid item xs={3}>
           <StatBox
             icon={BusinessIcon}
             label="Suppliers Responded"
-            value={`${statistics.suppliersResponded || 0} / ${statistics.totalSuppliers || 0}`}
+            value={`${statistics.suppliers_responded || 0} / ${statistics.total_suppliers || 0}`}
             color="success"
             showProgress={true}
             progress={suppliersProgress}
@@ -240,7 +240,7 @@ function InquiryHeader({
           <StatBox
             icon={ScheduleIcon}
             label="Days Active"
-            value={statistics.daysActive || 0}
+            value={statistics.days_active || 0}
             color="info"
           />
         </Grid>
@@ -248,7 +248,7 @@ function InquiryHeader({
           <StatBox
             icon={TrendingUpIcon}
             label="Response Rate"
-            value={`${statistics.responseRate || 0}%`}
+            value={`${statistics.response_rate || 0}%`}
             color="warning"
           />
         </Grid>

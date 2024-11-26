@@ -11,7 +11,13 @@ export const useInquiryItems = (inquiryId) => {
   const [inquiryDate, setInquiryDate] = useState('');
 
   const fetchItems = useCallback(async () => {
-    if (!inquiryId) return;
+    // Don't fetch if no ID is provided
+    if (!inquiryId) {
+      setLoading(false);
+      setItems([]);
+      setError('');
+      return;
+    }
     
     const timerId = `fetchInquiries_${inquiryId}`;
     try {
@@ -19,9 +25,9 @@ export const useInquiryItems = (inquiryId) => {
       setError('');
       perfDebug.time(timerId);
       
-      console.log('Fetching inquiry items for ID:', inquiryId);
+      dataDebug.log('Fetching inquiry items for ID:', inquiryId);
       const response = await axios.get(`${API_BASE_URL}/api/inquiries/${inquiryId}`);
-      console.log('Fetch response:', response.data);
+      dataDebug.log('Fetch response:', response.data);
       
       let inquiryData = response.data.inquiry;
       let itemsData = response.data.items || [];
@@ -59,7 +65,7 @@ export const useInquiryItems = (inquiryId) => {
       const itemIdFirstIndex = {};
       itemsData.forEach((item, index) => {
         if (!item) return;
-        const itemId = item.itemID;
+        const itemId = item.item_id;
         if (itemId) {
           itemIdCounts[itemId] = (itemIdCounts[itemId] || 0) + 1;
           if (itemIdCounts[itemId] === 1) {
@@ -71,50 +77,50 @@ export const useInquiryItems = (inquiryId) => {
       const itemsWithDetails = itemsData.map((item, index) => {
         if (!item) return null;
 
-        // Handle referenceChange
-        let referenceChange = null;
-        if (item.referenceChange && item.referenceChange !== 'null') {
-          if (typeof item.referenceChange === 'string') {
+        // Handle reference_change
+        let reference_change = null;
+        if (item.reference_change && item.reference_change !== 'null') {
+          if (typeof item.reference_change === 'string') {
             try {
-              referenceChange = JSON.parse(item.referenceChange);
+              reference_change = JSON.parse(item.reference_change);
             } catch (e) {
-              console.error('Error parsing referenceChange:', e);
+              console.error('Error parsing reference_change:', e);
             }
-          } else if (typeof item.referenceChange === 'object') {
-            referenceChange = item.referenceChange;
+          } else if (typeof item.reference_change === 'object') {
+            reference_change = item.reference_change;
           }
         }
 
-        // Handle referencingItems
-        let referencingItems = [];
-        if (item.referencingItems && item.referencingItems !== '[]') {
-          if (typeof item.referencingItems === 'string') {
+        // Handle referencing_items
+        let referencing_items = [];
+        if (item.referencing_items && item.referencing_items !== '[]') {
+          if (typeof item.referencing_items === 'string') {
             try {
-              referencingItems = JSON.parse(item.referencingItems);
+              referencing_items = JSON.parse(item.referencing_items);
             } catch (e) {
-              console.error('Error parsing referencingItems:', e);
+              console.error('Error parsing referencing_items:', e);
             }
-          } else if (Array.isArray(item.referencingItems)) {
-            referencingItems = item.referencingItems;
+          } else if (Array.isArray(item.referencing_items)) {
+            referencing_items = item.referencing_items;
           }
         }
 
         // Determine if item has reference changes
-        const hasReferenceChange = Boolean(
-          item.newReferenceID || 
-          (referenceChange && referenceChange.newReferenceID) ||
-          (item.hasReferenceChange && item.hasReferenceChange !== '0')
+        const has_reference_change = Boolean(
+          item.new_reference_id || 
+          (reference_change && reference_change.new_reference_id) ||
+          (item.has_reference_change && item.has_reference_change !== '0')
         );
 
         // Determine if item is referenced by others
-        const isReferencedBy = Boolean(
-          referencingItems.length > 0 ||
-          (item.isReferencedBy && item.isReferencedBy !== '0')
+        const is_referenced_by = Boolean(
+          referencing_items.length > 0 ||
+          (item.is_referenced_by && item.is_referenced_by !== '0')
         );
 
         // Determine if item is a duplicate
-        const isDuplicate = item.itemID && itemIdCounts[item.itemID] > 1 && index !== itemIdFirstIndex[item.itemID];
-        const originalRowIndex = isDuplicate ? itemIdFirstIndex[item.itemID] : null;
+        const is_duplicate = item.item_id && itemIdCounts[item.item_id] > 1 && index !== itemIdFirstIndex[item.item_id];
+        const original_row_index = is_duplicate ? itemIdFirstIndex[item.item_id] : null;
 
         // Handle promotion data
         const promotion_id = item.promotion_id || null;
@@ -125,28 +131,28 @@ export const useInquiryItems = (inquiryId) => {
         
         return {
           ...item,
-          itemID: item.itemID || '',
-          originalItemID: item.originalItemID || item.itemID || '',
-          hebrewDescription: item.hebrewDescription || '',
-          englishDescription: item.englishDescription || '',
-          importMarkup: item.importMarkup || 0,
-          hsCode: item.hsCode || '',
-          retailPrice: item.retailPrice || 0,
-          qtyInStock: item.qtyInStock || 0,
-          requestedQty: item.requestedQty || 0,
-          referenceChange: referenceChange ? {
-            ...referenceChange,
-            source: referenceChange.source || (referenceChange.changedByUser ? 'user' : 'supplier')
+          item_id: item.item_id || '',
+          original_item_id: item.original_item_id || item.item_id || '',
+          hebrew_description: item.hebrew_description || '',
+          english_description: item.english_description || '',
+          import_markup: item.import_markup || 0,
+          hs_code: item.hs_code || '',
+          retail_price: item.retail_price || 0,
+          qty_in_stock: item.qty_in_stock || 0,
+          requested_qty: item.requested_qty || 0,
+          reference_change: reference_change ? {
+            ...reference_change,
+            source: reference_change.source || (reference_change.changed_by_user ? 'user' : 'supplier')
           } : null,
-          hasReferenceChange,
-          isReferencedBy,
-          referencingItems,
+          has_reference_change,
+          is_referenced_by,
+          referencing_items,
           status: inquiryData.status || 'New',
           date: inquiryData.date || new Date().toISOString(),
           // Add Excel order and duplicate tracking
-          excelRowIndex: item.excelRowIndex || index,
-          isDuplicate,
-          originalRowIndex,
+          excel_row_index: item.excel_row_index || index,
+          is_duplicate,
+          original_row_index,
           // Add promotion data
           promotion_id,
           promotion_name,
@@ -158,16 +164,16 @@ export const useInquiryItems = (inquiryId) => {
 
       // Sort by Excel row index by default
       const sortedItems = [...itemsWithDetails].sort((a, b) => 
-        (a.excelRowIndex || 0) - (b.excelRowIndex || 0)
+        (a.excel_row_index || 0) - (b.excel_row_index || 0)
       );
 
       if (sortedItems && sortedItems.length > 0) {
-        console.log('Setting items:', sortedItems.length);
+        dataDebug.log('Setting items:', sortedItems.length);
         setItems(sortedItems);
         setInquiryStatus(inquiryData.status || 'New');
         setInquiryDate(new Date(inquiryData.date || new Date()).toLocaleDateString());
       } else {
-        console.log('No items found');
+        dataDebug.log('No items found');
         setItems([]);
         setInquiryStatus('New');
         setInquiryDate(new Date().toLocaleDateString());
@@ -191,11 +197,11 @@ export const useInquiryItems = (inquiryId) => {
 
   const handleUpdateQuantity = async (inquiryItemId, newQty) => {
     try {
-      console.log('Updating quantity:', { inquiryItemId, newQty });
+      dataDebug.log('Updating quantity:', { inquiryItemId, newQty });
       await axios.put(`${API_BASE_URL}/api/inquiries/inquiry-items/${inquiryItemId}/quantity`, {
-        requestedQty: newQty
+        requested_qty: newQty
       });
-      console.log('Quantity update successful');
+      dataDebug.log('Quantity update successful');
       await fetchItems();
       setError('');
       return true;
@@ -210,8 +216,8 @@ export const useInquiryItems = (inquiryId) => {
     if (!itemToDelete) return false;
 
     try {
-      console.log('Deleting item:', itemToDelete.inquiryItemID);
-      await axios.delete(`${API_BASE_URL}/api/inquiries/inquiry-items/${itemToDelete.inquiryItemID}`);
+      dataDebug.log('Deleting item:', itemToDelete.inquiry_item_id);
+      await axios.delete(`${API_BASE_URL}/api/inquiries/inquiry-items/${itemToDelete.inquiry_item_id}`);
       await fetchItems();
       setError('');
       return true;

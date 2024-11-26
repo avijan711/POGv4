@@ -2,6 +2,41 @@ const XLSX = require('xlsx');
 const debug = require('../debug');
 const BaseModel = require('../../models/BaseModel');
 
+// Common field mapping for converting client-side field names to database field names
+const fieldMap = {
+    'itemID': 'item_id',
+    'newReferenceID': 'new_reference_id',
+    'hsCode': 'hs_code',
+    'HSCode': 'hs_code',
+    'englishDescription': 'english_description',
+    'EnglishDescription': 'english_description',
+    'hebrewDescription': 'hebrew_description',
+    'HebrewDescription': 'hebrew_description',
+    'importMarkup': 'import_markup',
+    'ImportMarkup': 'import_markup',
+    'requestedQty': 'requested_qty',
+    'RequestedQty': 'requested_qty',
+    'qtyInStock': 'qty_in_stock',
+    'QtyInStock': 'qty_in_stock',
+    'retailPrice': 'retail_price',
+    'RetailPrice': 'retail_price',
+    'qtySoldThisYear': 'qty_sold_this_year',
+    'QtySoldThisYear': 'qty_sold_this_year',
+    'qtySoldLastYear': 'qty_sold_last_year',
+    'QtySoldLastYear': 'qty_sold_last_year',
+    'referenceNotes': 'reference_notes',
+    'ReferenceNotes': 'reference_notes',
+    'notes': 'notes',
+    'Notes': 'notes',
+    'origin': 'origin',
+    'Origin': 'origin'
+};
+
+// Helper function to convert field names to snake_case
+function convertToSnakeCase(field) {
+    return fieldMap[field] || field.toLowerCase().replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+}
+
 async function processInquiryData(filePath, columnMapping, db) {
     try {
         const workbook = XLSX.readFile(filePath);
@@ -25,7 +60,7 @@ async function processInquiryData(filePath, columnMapping, db) {
 
         const processedData = await Promise.all(data.map(async (row, index) => {
             const processedRow = {
-                excelRowIndex: index // Preserve original Excel order
+                excel_row_index: index // Preserve original Excel order
             };
             
             for (const [field, excelCol] of Object.entries(columnMapping)) {
@@ -34,108 +69,111 @@ async function processInquiryData(filePath, columnMapping, db) {
                 let value = row[excelCol];
                 value = value != null ? String(value).trim() : null;
                 
-                switch (field) {
-                    case 'itemID':  // Match client field name
+                // Convert field to snake_case
+                const dbField = convertToSnakeCase(field);
+                
+                switch (dbField) {
+                    case 'item_id':
                         if (!value) {
                             throw new Error(`Missing required Item ID in row ${index + 2}`);
                         }
-                        processedRow.ItemID = value;  // Use database field name
-                        processedRow.originalItemID = value; // Always store original ID
+                        processedRow.item_id = value;
+                        processedRow.original_item_id = value;
                         
                         // Track duplicates
                         itemIdCounts[value] = (itemIdCounts[value] || 0) + 1;
                         if (itemIdCounts[value] === 1) {
                             itemIdFirstIndex[value] = index;
                         }
-                        processedRow.isDuplicate = itemIdCounts[value] > 1;
-                        if (processedRow.isDuplicate) {
-                            processedRow.originalRowIndex = itemIdFirstIndex[value];
+                        processedRow.is_duplicate = itemIdCounts[value] > 1;
+                        if (processedRow.is_duplicate) {
+                            processedRow.original_row_index = itemIdFirstIndex[value];
                         }
 
                         // Check for existing references in the database
                         const referenceQuery = `
                             SELECT 
                                 rc.*,
-                                s.Name as SupplierName
-                            FROM ItemReferenceChange rc
-                            LEFT JOIN Supplier s ON rc.SupplierID = s.SupplierID
-                            WHERE rc.OriginalItemID = ? OR rc.NewReferenceID = ?
-                            ORDER BY rc.ChangeDate DESC
+                                s.name as supplier_name
+                            FROM item_reference_change rc
+                            LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
+                            WHERE rc.original_item_id = ? OR rc.new_reference_id = ?
+                            ORDER BY rc.change_date DESC
                             LIMIT 1
                         `;
                         const reference = await model.executeQuerySingle(referenceQuery, [value, value]);
                         
                         if (reference) {
-                            if (reference.OriginalItemID === value) {
-                                processedRow.hasReferenceChange = true;
-                                processedRow.referenceChange = {
-                                    changeId: reference.ChangeID,
-                                    newReferenceID: reference.NewReferenceID,
-                                    source: reference.SupplierID ? 'supplier' : 'user',
-                                    supplierName: reference.SupplierName || '',
-                                    notes: reference.Notes || ''
+                            if (reference.original_item_id === value) {
+                                processedRow.has_reference_change = true;
+                                processedRow.reference_change = {
+                                    change_id: reference.change_id,
+                                    new_reference_id: reference.new_reference_id,
+                                    source: reference.supplier_id ? 'supplier' : 'user',
+                                    supplier_name: reference.supplier_name || '',
+                                    notes: reference.notes || ''
                                 };
                             } else {
-                                processedRow.isReferencedBy = true;
-                                processedRow.referencingItems = [{
-                                    itemId: reference.OriginalItemID,
-                                    referenceChange: {
-                                        changeId: reference.ChangeID,
-                                        source: reference.SupplierID ? 'supplier' : 'user',
-                                        supplierName: reference.SupplierName || '',
-                                        notes: reference.Notes || ''
+                                processedRow.is_referenced_by = true;
+                                processedRow.referencing_items = [{
+                                    item_id: reference.original_item_id,
+                                    reference_change: {
+                                        change_id: reference.change_id,
+                                        source: reference.supplier_id ? 'supplier' : 'user',
+                                        supplier_name: reference.supplier_name || '',
+                                        notes: reference.notes || ''
                                     }
                                 }];
                             }
                         }
                         break;
 
-                    case 'HebrewDescription':  // Match client field name
+                    case 'hebrew_description':
                         if (!value) {
                             throw new Error(`Missing required Hebrew description in row ${index + 2}`);
                         }
-                        processedRow.HebrewDescription = value;  // Use database field name
+                        processedRow.hebrew_description = value;
                         break;
 
-                    case 'RequestedQty':  // Match client field name
+                    case 'requested_qty':
                         // Default to 0 if value is empty or not provided
                         if (!value) {
-                            processedRow.RequestedQty = 0;  // Use database field name
+                            processedRow.requested_qty = 0;
                             break;
                         }
                         const qty = parseInt(value.replace(/,/g, ''), 10);
                         if (isNaN(qty) || qty < 0) {
                             throw new Error(`Invalid requested quantity in row ${index + 2}: ${value}`);
                         }
-                        processedRow.RequestedQty = qty;  // Use database field name
+                        processedRow.requested_qty = qty;
                         break;
 
-                    case 'ImportMarkup':  // Match client field name
+                    case 'import_markup':
                         if (value) {
                             const markup = parseFloat(value.replace(/,/g, '.'));
                             if (!isNaN(markup) && markup >= 1.0 && markup <= 2.0) {
-                                processedRow.ImportMarkup = markup;  // Use database field name
+                                processedRow.import_markup = markup;
                             }
                         }
                         break;
 
-                    case 'newReferenceID':  // Match client field name
+                    case 'new_reference_id':
                         if (value) {
                             const refId = value.trim();
-                            // Only set reference if it's different from the itemId
-                            if (refId !== processedRow.ItemID) {
-                                processedRow.NewReferenceID = refId;  // Use database field name
+                            // Only set reference if it's different from the item_id
+                            if (refId !== processedRow.item_id) {
+                                processedRow.new_reference_id = refId;
                                 // If there's a notes column mapped, get the notes
-                                const notesCol = columnMapping['ReferenceNotes'];
+                                const notesCol = columnMapping['reference_notes'];
                                 if (notesCol && row[notesCol]) {
-                                    processedRow.ReferenceNotes = row[notesCol].trim();
+                                    processedRow.reference_notes = row[notesCol].trim();
                                 }
                                 // Create reference change information
-                                processedRow.hasReferenceChange = true;
-                                processedRow.referenceChange = {
+                                processedRow.has_reference_change = true;
+                                processedRow.reference_change = {
                                     source: 'inquiry_item',
-                                    newReferenceID: refId,
-                                    notes: processedRow.ReferenceNotes || 'Replacement from Excel upload'
+                                    new_reference_id: refId,
+                                    notes: processedRow.reference_notes || 'Replacement from Excel upload'
                                 };
                             } else {
                                 debug.log(`Skipping self-reference for item ${refId} in row ${index + 2}`);
@@ -143,28 +181,30 @@ async function processInquiryData(filePath, columnMapping, db) {
                         }
                         break;
 
-                    case 'RetailPrice':
-                    case 'QtyInStock':
-                    case 'QtySoldThisYear':
-                    case 'QtySoldLastYear':
+                    case 'retail_price':
+                    case 'qty_in_stock':
+                    case 'qty_sold_this_year':
+                    case 'qty_sold_last_year':
                         if (value) {
                             const num = parseFloat(value.replace(/,/g, '.'));
                             if (!isNaN(num) && num >= 0) {
-                                processedRow[field] = num;  // Use database field name
+                                processedRow[dbField] = num;
                             }
                         }
                         break;
 
-                    case 'EnglishDescription':
-                    case 'HSCode':
+                    case 'english_description':
+                    case 'hs_code':
+                    case 'notes':
+                    case 'origin':
                         if (value) {
-                            processedRow[field] = value;  // Use database field name
+                            processedRow[dbField] = value;
                         }
                         break;
 
                     default:
                         if (value) {
-                            processedRow[field] = value;
+                            processedRow[dbField] = value;
                         }
                 }
             }
@@ -174,19 +214,19 @@ async function processInquiryData(filePath, columnMapping, db) {
 
         // Process referencing items
         processedData.forEach(item => {
-            if (item.hasReferenceChange) {
+            if (item.has_reference_change) {
                 const referencedItems = processedData.filter(otherItem => 
-                    otherItem.ItemID === item.NewReferenceID
+                    otherItem.item_id === item.new_reference_id
                 );
                 if (referencedItems.length > 0) {
                     referencedItems.forEach(refItem => {
-                        refItem.isReferencedBy = true;
-                        if (!refItem.referencingItems) {
-                            refItem.referencingItems = [];
+                        refItem.is_referenced_by = true;
+                        if (!refItem.referencing_items) {
+                            refItem.referencing_items = [];
                         }
-                        refItem.referencingItems.push({
-                            itemId: item.ItemID,
-                            referenceChange: item.referenceChange
+                        refItem.referencing_items.push({
+                            item_id: item.item_id,
+                            reference_change: item.reference_change
                         });
                     });
                 }
@@ -194,7 +234,7 @@ async function processInquiryData(filePath, columnMapping, db) {
         });
 
         // Sort by original Excel order
-        processedData.sort((a, b) => a.excelRowIndex - b.excelRowIndex);
+        processedData.sort((a, b) => a.excel_row_index - b.excel_row_index);
 
         debug.log('Processed inquiry data:', {
             totalRows: processedData.length,
@@ -229,7 +269,7 @@ function processSupplierResponse(filePath, columnMapping) {
 
         const processedData = data.map((row, index) => {
             const processedRow = {
-                excelRowIndex: index // Preserve original Excel order
+                excel_row_index: index // Preserve original Excel order
             };
             
             Object.entries(columnMapping).forEach(([field, excelCol]) => {
@@ -238,43 +278,31 @@ function processSupplierResponse(filePath, columnMapping) {
                 let value = row[excelCol];
                 value = value != null ? String(value).trim() : null;
                 
-                // Map of client-side field names to database field names
-                const fieldMap = {
-                    'itemID': 'ItemID',
-                    'newReferenceID': 'NewReferenceID',
-                    'hsCode': 'HSCode',
-                    'HSCode': 'HSCode',
-                    'englishDescription': 'EnglishDescription',
-                    'EnglishDescription': 'EnglishDescription',
-                    'price': 'Price',
-                    'notes': 'Notes'
-                };
-
-                // Get the database field name, defaulting to PascalCase if not in map
-                const dbField = fieldMap[field] || field.charAt(0).toUpperCase() + field.slice(1);
+                // Convert field to snake_case
+                const dbField = convertToSnakeCase(field);
                 
-                switch (field.toLowerCase()) {
-                    case 'itemid':
+                switch (dbField) {
+                    case 'item_id':
                         if (!value) {
-                            throw new Error(`Missing required itemID in row ${index + 2}`);
+                            throw new Error(`Missing required Item ID in row ${index + 2}`);
                         }
-                        processedRow.ItemID = value;
-                        processedRow.originalItemID = value;
+                        processedRow.item_id = value;
+                        processedRow.original_item_id = value;
                         
                         // Track duplicates
                         itemIdCounts[value] = (itemIdCounts[value] || 0) + 1;
                         if (itemIdCounts[value] === 1) {
                             itemIdFirstIndex[value] = index;
                         }
-                        processedRow.isDuplicate = itemIdCounts[value] > 1;
-                        if (processedRow.isDuplicate) {
-                            processedRow.originalRowIndex = itemIdFirstIndex[value];
+                        processedRow.is_duplicate = itemIdCounts[value] > 1;
+                        if (processedRow.is_duplicate) {
+                            processedRow.original_row_index = itemIdFirstIndex[value];
                         }
                         break;
                         
                     case 'price':
-                        // Initialize Price as null
-                        processedRow.Price = null;
+                        // Initialize price as null
+                        processedRow.price = null;
                         
                         if (value) {
                             // Remove any spaces and handle both comma and period as decimal separators
@@ -299,25 +327,25 @@ function processSupplierResponse(filePath, columnMapping) {
                             }
                             
                             if (!isNaN(numericValue) && numericValue >= 0) {
-                                processedRow.Price = numericValue;
-                                debug.log(`Processed price for item ${processedRow.ItemID}: ${value} -> ${numericValue}`);
+                                processedRow.price = numericValue;
+                                debug.log(`Processed price for item ${processedRow.item_id}: ${value} -> ${numericValue}`);
                             } else {
-                                debug.error(`Invalid price format for item ${processedRow.ItemID}: ${value}`);
+                                debug.error(`Invalid price format for item ${processedRow.item_id}: ${value}`);
                             }
                         }
                         break;
                         
-                    case 'newreferenceid':
+                    case 'new_reference_id':
                         if (value) {
                             const refId = value.trim();
-                            // Only set reference if it's different from the itemID
-                            if (refId !== processedRow.ItemID) {
-                                processedRow.NewReferenceID = refId;
-                                processedRow.hasReferenceChange = true;
-                                processedRow.referenceChange = {
+                            // Only set reference if it's different from the item_id
+                            if (refId !== processedRow.item_id) {
+                                processedRow.new_reference_id = refId;
+                                processedRow.has_reference_change = true;
+                                processedRow.reference_change = {
                                     source: 'supplier',
-                                    NewReferenceID: refId,
-                                    Notes: processedRow.Notes || 'Replacement from supplier response'
+                                    new_reference_id: refId,
+                                    notes: processedRow.notes || 'Replacement from supplier response'
                                 };
                             } else {
                                 debug.log(`Skipping self-reference for item ${refId} in row ${index + 2}`);
@@ -326,20 +354,11 @@ function processSupplierResponse(filePath, columnMapping) {
                         break;
                         
                     case 'notes':
+                    case 'origin':
+                    case 'hs_code':
+                    case 'english_description':
                         if (value) {
-                            processedRow.Notes = value;
-                        }
-                        break;
-
-                    case 'hscode':
-                        if (value) {
-                            processedRow.HSCode = value;
-                        }
-                        break;
-
-                    case 'englishdescription':
-                        if (value) {
-                            processedRow.EnglishDescription = value;
+                            processedRow[dbField] = value;
                         }
                         break;
 
@@ -350,18 +369,11 @@ function processSupplierResponse(filePath, columnMapping) {
                 }
             });
 
-            // Keep metadata fields in camelCase
-            processedRow.excelRowIndex = processedRow.excelRowIndex;
-            processedRow.isDuplicate = processedRow.isDuplicate;
-            processedRow.originalRowIndex = processedRow.originalRowIndex;
-            processedRow.hasReferenceChange = processedRow.hasReferenceChange;
-            processedRow.referenceChange = processedRow.referenceChange;
-
             return processedRow;
         });
 
         // Sort by original Excel order
-        processedData.sort((a, b) => a.excelRowIndex - b.excelRowIndex);
+        processedData.sort((a, b) => a.excel_row_index - b.excel_row_index);
 
         debug.log('Processed supplier response:', {
             totalRows: processedData.length,
@@ -380,18 +392,8 @@ function validateData(data, requiredFields) {
     const errors = [];
     data.forEach((row, index) => {
         requiredFields.forEach(field => {
-            // Map of client-side field names to database field names
-            const fieldMap = {
-                'itemID': 'ItemID',
-                'newReferenceID': 'NewReferenceID',
-                'hsCode': 'HSCode',
-                'HSCode': 'HSCode',
-                'englishDescription': 'EnglishDescription',
-                'EnglishDescription': 'EnglishDescription'
-            };
-            
-            // Get the database field name, defaulting to PascalCase if not in map
-            const dbField = fieldMap[field] || field.charAt(0).toUpperCase() + field.slice(1);
+            // Convert field to snake_case
+            const dbField = convertToSnakeCase(field);
             
             const value = row[dbField];
             if (value == null || (typeof value === 'string' && !value.trim())) {

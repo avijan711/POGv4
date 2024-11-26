@@ -12,23 +12,23 @@ const itemUtils = {
     validateItemData: (data) => {
         const errors = [];
         
-        if (!data.itemID) {
+        if (!data.item_id) {
             errors.push('Item ID is required');
         }
         
-        if (!data.hebrewDescription && !data.englishDescription) {
+        if (!data.hebrew_description && !data.english_description) {
             errors.push('At least one description (Hebrew or English) is required');
         }
 
-        if (data.retailPrice !== undefined && data.retailPrice !== null) {
-            const price = parseFloat(data.retailPrice);
+        if (data.retail_price !== undefined && data.retail_price !== null) {
+            const price = parseFloat(data.retail_price);
             if (isNaN(price) || price < 0) {
                 errors.push('Retail price must be a positive number');
             }
         }
 
-        if (data.importMarkup) {
-            const markup = parseFloat(data.importMarkup);
+        if (data.import_markup) {
+            const markup = parseFloat(data.import_markup);
             if (isNaN(markup) || markup <= 0) {
                 errors.push('Import markup must be a positive number');
             }
@@ -47,17 +47,18 @@ const itemUtils = {
      */
     formatItemData: (data) => {
         return {
-            itemID: data.itemID?.toString().trim().replace(/\./g, ''),
-            hebrewDescription: data.hebrewDescription,
-            englishDescription: data.englishDescription || '',
-            importMarkup: parseFloat(data.importMarkup) || 1.30,
-            hsCode: data.hsCode || '',
+            item_id: data.item_id?.toString().trim().replace(/\./g, ''),
+            hebrew_description: data.hebrew_description,
+            english_description: data.english_description || '',
+            import_markup: parseFloat(data.import_markup) || 1.30,
+            hs_code: data.hs_code || '',
+            origin: data.origin || '',
             image: data.image || '',
-            qtyInStock: parseInt(data.qtyInStock) || 0,
-            soldThisYear: parseInt(data.soldThisYear) || 0,
-            soldLastYear: parseInt(data.soldLastYear) || 0,
-            retailPrice: data.retailPrice !== undefined && data.retailPrice !== '' ? 
-                parseFloat(data.retailPrice) : null
+            qty_in_stock: parseInt(data.qty_in_stock) || 0,
+            sold_this_year: parseInt(data.sold_this_year) || 0,
+            sold_last_year: parseInt(data.sold_last_year) || 0,
+            retail_price: data.retail_price !== undefined && data.retail_price !== '' ? 
+                parseFloat(data.retail_price) : null
         };
     },
 
@@ -93,18 +94,19 @@ const itemUtils = {
      */
     generateQueryParams: (data, includeImage = false) => {
         const params = [
-            data.hebrewDescription,
-            data.englishDescription || '',
-            data.importMarkup || 1.30,
-            data.hsCode || '',
-            data.qtyInStock || 0,
-            data.retailPrice,
-            data.soldThisYear || 0,
-            data.soldLastYear || 0
+            data.hebrew_description,
+            data.english_description || '',
+            data.import_markup || 1.30,
+            data.hs_code || '',
+            data.origin || '',
+            data.qty_in_stock || 0,
+            data.retail_price,
+            data.sold_this_year || 0,
+            data.sold_last_year || 0
         ];
 
         if (includeImage && data.image) {
-            params.splice(4, 0, data.image);
+            params.splice(5, 0, data.image);
         }
 
         return params;
@@ -116,9 +118,9 @@ const itemUtils = {
      * @returns {boolean} - Whether item has retail price
      */
     hasRetailPrice: (data) => {
-        return data.retailPrice !== undefined && 
-               data.retailPrice !== null && 
-               data.retailPrice !== '';
+        return data.retail_price !== undefined && 
+               data.retail_price !== null && 
+               data.retail_price !== '';
     },
 
     /**
@@ -128,10 +130,10 @@ const itemUtils = {
      */
     formatReferenceChange: (data) => {
         return {
-            newReferenceId: data.newReferenceId?.toString().trim().replace(/\./g, ''),
-            supplierId: data.supplierId,
+            new_reference_id: data.new_reference_id?.toString().trim().replace(/\./g, ''),
+            supplier_id: data.supplier_id,
             notes: data.notes || '',
-            changedByUser: !data.supplierId
+            changed_by_user: !data.supplier_id
         };
     }
 };

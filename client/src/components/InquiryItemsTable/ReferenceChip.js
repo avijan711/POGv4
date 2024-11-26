@@ -5,15 +5,15 @@ import {
   Close as CloseIcon,
 } from '@mui/icons-material';
 
-function ReferenceChip({ referenceChange, onDelete }) {
-  if (!referenceChange) return null;
+function ReferenceChip({ reference_change, onDelete }) {
+  if (!reference_change) return null;
 
   const getTooltipText = () => {
-    const source = referenceChange.source === 'supplier' 
-      ? `Changed by ${referenceChange.supplierName}`
+    const source = reference_change.source === 'supplier' 
+      ? `Changed by ${reference_change.supplier_name}`
       : 'Changed by user';
-    const date = new Date(referenceChange.changeDate).toLocaleDateString();
-    const notes = referenceChange.notes ? `\nNotes: ${referenceChange.notes}` : '';
+    const date = new Date(reference_change.change_date).toLocaleDateString();
+    const notes = reference_change.notes ? `\nNotes: ${reference_change.notes}` : '';
     return `${source}\nDate: ${date}${notes}`;
   };
 
@@ -22,8 +22,8 @@ function ReferenceChip({ referenceChange, onDelete }) {
       <Tooltip title={getTooltipText()}>
         <Chip
           icon={<SwapHorizIcon />}
-          label={referenceChange.newReferenceID}
-          color={referenceChange.source === 'supplier' ? 'primary' : 'secondary'}
+          label={reference_change.new_reference_id}
+          color={reference_change.source === 'supplier' ? 'primary' : 'secondary'}
           size="small"
           variant="outlined"
           onDelete={onDelete}

@@ -3,202 +3,277 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  IconButton,
-  Box,
-  Tab,
-  Tabs,
-  CircularProgress,
-  Alert,
+  DialogActions,
+  Button,
   Typography,
-  Paper
+  Box,
+  Grid,
+  Chip,
+  Divider,
+  Paper,
+  Stack,
 } from '@mui/material';
-import { Close as CloseIcon } from '@mui/icons-material';
-import { useItemDetails } from '../hooks/useItemDetails';
-import { dataDebug } from '../utils/debug';
+import {
+  SwapHoriz as SwapHorizIcon,
+  LocalOffer as LocalOfferIcon,
+  Business as BusinessIcon,
+  AttachMoney as AttachMoneyIcon,
+  Info as InfoIcon,
+  Notes as NotesIcon,
+  Inventory as InventoryIcon,
+  Public as PublicIcon,
+} from '@mui/icons-material';
 
-import TabPanel from './ItemDetailsDialog/TabPanel';
-import GeneralInfoPanel from './ItemDetailsDialog/GeneralInfoPanel';
-import PriceHistoryPanel from './ItemDetailsDialog/PriceHistoryPanel';
-import SupplierPricesPanel from './ItemDetailsDialog/SupplierPricesPanel';
-import PromotionsPanel from './ItemDetailsDialog/PromotionsPanel';
+function ItemDetailsDialog({ open, onClose, item }) {
+  if (!item) return null;
 
-function ItemDetailsDialog({ open, onClose, item, onItemClick }) {
-  dataDebug.logData('ItemDetailsDialog received item', item);
-  
-  const { itemData, isLoading, hasError } = useItemDetails(item, open);
-  const [value, setValue] = React.useState(0);
-
-  React.useEffect(() => {
-    if (itemData) {
-      dataDebug.logData('ItemDetailsDialog processed data', itemData);
-    }
-  }, [itemData]);
-
-  const handleChange = (event, newValue) => {
-    setValue(newValue);
+  const formatPrice = (price) => {
+    if (!price) return '₪0.00';
+    return `₪${Number(price).toFixed(2)}`;
   };
 
-  const handleItemClick = async (itemId) => {
-    onClose();
-    if (onItemClick) {
-      onItemClick({ itemID: itemId });
-    }
+  const formatDate = (date) => {
+    if (!date) return '';
+    return new Date(date).toLocaleDateString();
   };
 
-  const getBackgroundColor = () => {
-    if (!itemData?.item) return '#ffffff';
-    
-    if (itemData.hasReferenceChange) {
-      return '#fff3e0'; // Lighter orange background for old/replaced items
-    }
-    if (itemData.isReferencedBy) {
-      return '#e8f5e9'; // Lighter green background for new/replacement items
-    }
-    return '#ffffff';
-  };
-
-  const getDialogTitle = () => {
-    if (!itemData?.item) return 'Item Details';
-    
-    const { itemID, hebrewDescription, englishDescription } = itemData.item;
-    return `${itemID} - ${hebrewDescription || ''} - ${englishDescription || ''}`;
-  };
+  const SectionTitle = ({ icon: Icon, title }) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+      <Icon color="primary" />
+      <Typography variant="subtitle1" fontWeight="bold">
+        {title}
+      </Typography>
+    </Box>
+  );
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={onClose}
-      maxWidth="lg"
-      fullWidth
-      PaperProps={{
-        elevation: 24,
-        style: {
-          backgroundColor: getBackgroundColor()
-        }
-      }}
-    >
-      <Paper 
-        elevation={0} 
-        sx={{ 
-          backgroundColor: 'inherit',
-          '& .MuiDialogTitle-root': {
-            backgroundColor: 'inherit'
-          },
-          '& .MuiDialogContent-root': {
-            backgroundColor: 'inherit'
-          }
-        }}
-      >
-        <DialogTitle sx={{ 
-          m: 0, 
-          p: 2, 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center'
-        }}>
-          <Typography 
-            variant="h6" 
-            component="div" 
-            sx={{ 
-              flexGrow: 1,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {getDialogTitle()}
-          </Typography>
-          <IconButton
-            aria-label="close"
-            onClick={onClose}
-            sx={{
-              position: 'absolute',
-              right: 8,
-              top: 8,
-              color: (theme) => theme.palette.grey[500],
-            }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent>
-          {isLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-              <CircularProgress />
-            </Box>
-          ) : hasError ? (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              No item data available. Please try again.
-            </Alert>
-          ) : itemData && itemData.item ? (
-            <Box sx={{ width: '100%' }}>
-              {itemData.hasReferenceChange && (
-                <Alert severity="warning" sx={{ mb: 2 }}>
-                  {itemData.referenceChange ? (
-                    <Typography variant="subtitle2">
-                      This item has been replaced by: {itemData.referenceChange.newReferenceID}
-                    </Typography>
-                  ) : (
-                    <Typography variant="subtitle2">
-                      This is a replacement item
-                    </Typography>
-                  )}
-                </Alert>
-              )}
-              {itemData.isReferencedBy && itemData.referencingItems?.length > 0 && (
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">
-                    This item replaces: {itemData.referencingItems.map(i => i.itemID).join(', ')}
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Stack spacing={1}>
+            <Typography variant="h6">Item Details</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {item.hebrew_description}
+            </Typography>
+          </Stack>
+          <Chip label={item.item_id} color="primary" />
+        </Box>
+      </DialogTitle>
+      <DialogContent>
+        <Grid container spacing={3}>
+          {/* Pricing Section */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2, height: '100%' }}>
+              <SectionTitle icon={AttachMoneyIcon} title="Pricing" />
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="text.secondary">Current Retail Price</Typography>
+                  <Typography variant="h6" color="primary.main">
+                    {formatPrice(item.retail_price)}
                   </Typography>
-                </Alert>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">Import Markup</Typography>
+                  <Typography>{item.import_markup?.toFixed(2) || 'N/A'}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">Last Updated</Typography>
+                  <Typography>{formatDate(item.last_price_update)}</Typography>
+                </Grid>
+                {item.supplier_responses?.length > 0 && (
+                  <Grid item xs={12}>
+                    <Divider sx={{ my: 1 }} />
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Supplier Pricing History
+                    </Typography>
+                    <Stack spacing={1}>
+                      {item.supplier_responses.map((response, index) => (
+                        <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Chip
+                            icon={<BusinessIcon />}
+                            label={response.supplier_name}
+                            size="small"
+                            variant="outlined"
+                          />
+                          <Typography>
+                            {formatPrice(response.price_quoted)}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {formatDate(response.response_date)}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Grid>
+                )}
+              </Grid>
+            </Paper>
+          </Grid>
+
+          {/* Info Section */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2, height: '100%' }}>
+              <SectionTitle icon={InfoIcon} title="Information" />
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="text.secondary">English Description</Typography>
+                  <Typography>{item.english_description}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">HS Code</Typography>
+                  <Typography>{item.hs_code || 'N/A'}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">Origin</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <PublicIcon fontSize="small" color="action" />
+                    <Typography>{item.origin || 'N/A'}</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12}>
+                  <Divider sx={{ my: 1 }} />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">In Stock</Typography>
+                      <Typography>{item.qty_in_stock || 0}</Typography>
+                    </Box>
+                    <Divider orientation="vertical" flexItem />
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">Sold This Year</Typography>
+                      <Typography>{item.qty_sold_this_year || 0}</Typography>
+                    </Box>
+                    <Divider orientation="vertical" flexItem />
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">Sold Last Year</Typography>
+                      <Typography>{item.qty_sold_last_year || 0}</Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+              </Grid>
+            </Paper>
+          </Grid>
+
+          {/* Notes Section */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2, height: '100%' }}>
+              <SectionTitle icon={NotesIcon} title="Notes" />
+              {item.notes ? (
+                <Typography>{item.notes}</Typography>
+              ) : (
+                <Typography color="text.secondary" variant="body2">No notes available</Typography>
               )}
-              <Paper elevation={0} sx={{ backgroundColor: '#ffffff', mb: 2 }}>
-                <Tabs value={value} onChange={handleChange} aria-label="item details tabs">
-                  <Tab label="General Info" />
-                  <Tab label="Price History" />
-                  <Tab label="Supplier Prices" />
-                  <Tab label="Promotions" />
-                </Tabs>
+              {item.reference_change && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="body2" color="text.secondary" gutterBottom>Reference Change</Typography>
+                  <Stack spacing={1}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <SwapHorizIcon color="warning" fontSize="small" />
+                      <Typography>Replaced by {item.reference_change.new_reference_id}</Typography>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary">
+                      {item.reference_change.source === 'supplier'
+                        ? `Changed by ${item.reference_change.supplier_name}`
+                        : 'Changed by user'} on {formatDate(item.reference_change.change_date)}
+                    </Typography>
+                    {item.reference_change.notes && (
+                      <Typography variant="body2">
+                        Note: {item.reference_change.notes}
+                      </Typography>
+                    )}
+                  </Stack>
+                </>
+              )}
+            </Paper>
+          </Grid>
+
+          {/* Promotions Section */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2, height: '100%' }}>
+              <SectionTitle icon={LocalOfferIcon} title="Promotions" />
+              {item.promotions?.length > 0 ? (
+                <Stack spacing={2}>
+                  {item.promotions.map((promo, index) => (
+                    <Box key={index}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <Chip
+                          icon={<LocalOfferIcon />}
+                          label={formatPrice(promo.price)}
+                          color="secondary"
+                          variant="outlined"
+                        />
+                        <Typography variant="body2" color="text.secondary">
+                          {formatDate(promo.start_date)} - {formatDate(promo.end_date)}
+                        </Typography>
+                      </Box>
+                      {promo.supplier_name && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <BusinessIcon fontSize="small" color="action" />
+                          <Typography variant="body2">{promo.supplier_name}</Typography>
+                        </Box>
+                      )}
+                      {index < item.promotions.length - 1 && <Divider sx={{ my: 1 }} />}
+                    </Box>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography color="text.secondary" variant="body2">No active promotions</Typography>
+              )}
+            </Paper>
+          </Grid>
+
+          {/* Supplier Responses */}
+          {item.supplier_responses?.length > 0 && (
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2 }}>
+                <SectionTitle icon={BusinessIcon} title="Supplier Responses" />
+                <Grid container spacing={2}>
+                  {item.supplier_responses.map((response, index) => (
+                    <Grid item xs={12} key={index}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Chip
+                          icon={<BusinessIcon />}
+                          label={response.supplier_name}
+                          color="primary"
+                          variant="outlined"
+                        />
+                        <Chip
+                          icon={<AttachMoneyIcon />}
+                          label={formatPrice(response.price_quoted)}
+                          color={response.is_promotion ? "secondary" : "default"}
+                          variant="outlined"
+                        />
+                        {response.is_promotion && (
+                          <Chip
+                            icon={<LocalOfferIcon />}
+                            label="Promotion"
+                            color="secondary"
+                            size="small"
+                          />
+                        )}
+                        <Typography variant="body2" color="text.secondary">
+                          {formatDate(response.response_date)}
+                        </Typography>
+                      </Box>
+                      {response.notes && (
+                        <Typography variant="body2" sx={{ mt: 1, ml: 1 }}>
+                          Notes: {response.notes}
+                        </Typography>
+                      )}
+                      {index < item.supplier_responses.length - 1 && (
+                        <Divider sx={{ my: 1 }} />
+                      )}
+                    </Grid>
+                  ))}
+                </Grid>
               </Paper>
-              <Paper elevation={0} sx={{ backgroundColor: '#ffffff', p: 2, borderRadius: 1 }}>
-                <TabPanel value={value} index={0}>
-                  <GeneralInfoPanel 
-                    itemDetails={itemData.item}
-                    hasReferenceChange={itemData.hasReferenceChange}
-                    isReferencedBy={itemData.isReferencedBy}
-                    referenceChange={itemData.referenceChange}
-                    referencingItems={itemData.referencingItems}
-                    onItemClick={handleItemClick}
-                  />
-                </TabPanel>
-                <TabPanel value={value} index={1}>
-                  <PriceHistoryPanel 
-                    priceHistory={itemData.priceHistory}
-                    itemDetails={itemData.item}
-                  />
-                </TabPanel>
-                <TabPanel value={value} index={2}>
-                  <SupplierPricesPanel 
-                    supplierPrices={itemData.supplierPrices}
-                    itemDetails={itemData.item}
-                    promotions={itemData.promotions}
-                  />
-                </TabPanel>
-                <TabPanel value={value} index={3}>
-                  <PromotionsPanel 
-                    promotions={itemData.promotions}
-                    itemDetails={itemData.item}
-                  />
-                </TabPanel>
-              </Paper>
-            </Box>
-          ) : (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              No item data structure available
-            </Alert>
+            </Grid>
           )}
-        </DialogContent>
-      </Paper>
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
     </Dialog>
   );
 }

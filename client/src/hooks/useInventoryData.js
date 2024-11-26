@@ -21,32 +21,32 @@ export const useInventoryData = () => {
     const processItems = (rawItems) => {
         return rawItems.map(item => {
             // Parse referenceChange if it's a string
-            const referenceChange = item.referenceChange ? 
-                (typeof item.referenceChange === 'string' ? 
-                    JSON.parse(item.referenceChange) : 
-                    item.referenceChange) : null;
+            const referenceChange = item.reference_change ? 
+                (typeof item.reference_change === 'string' ? 
+                    JSON.parse(item.reference_change) : 
+                    item.reference_change) : null;
 
             // Check for self-references
             const isSelfReferenced = referenceChange && 
-                referenceChange.newReferenceID === item.itemID;
+                referenceChange.new_reference_id === item.item_id;
 
             // Find items that reference this item (excluding self-references)
             const referencingItems = rawItems.filter(otherItem => {
-                const otherRef = otherItem.referenceChange ? 
-                    (typeof otherItem.referenceChange === 'string' ? 
-                        JSON.parse(otherItem.referenceChange) : 
-                        otherItem.referenceChange) : null;
+                const otherRef = otherItem.reference_change ? 
+                    (typeof otherItem.reference_change === 'string' ? 
+                        JSON.parse(otherItem.reference_change) : 
+                        otherItem.reference_change) : null;
                 return otherRef && 
-                       otherRef.newReferenceID === item.itemID && 
-                       otherItem.itemID !== item.itemID;
+                       otherRef.new_reference_id === item.item_id && 
+                       otherItem.item_id !== item.item_id;
             });
 
             return {
                 ...item,
-                referenceChange: isSelfReferenced ? null : referenceChange,
-                hasReferenceChange: !isSelfReferenced && referenceChange !== null,
-                isReferencedBy: referencingItems.length > 0,
-                referencingItems
+                reference_change: isSelfReferenced ? null : referenceChange,
+                has_reference_change: !isSelfReferenced && referenceChange !== null,
+                is_referenced_by: referencingItems.length > 0,
+                referencing_items: referencingItems
             };
         });
     };
@@ -76,13 +76,13 @@ export const useInventoryData = () => {
      */
     const saveItem = async (itemData, mode) => {
         try {
-            dataDebug.log('Saving item:', itemData.get('itemID'));
+            dataDebug.log('Saving item:', itemData.get('item_id'));
             if (mode === 'add') {
                 await axios.post(`${API_BASE_URL}/api/items`, itemData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
             } else {
-                await axios.put(`${API_BASE_URL}/api/items/${itemData.get('itemID')}`, itemData, {
+                await axios.put(`${API_BASE_URL}/api/items/${itemData.get('item_id')}`, itemData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
             }
@@ -124,35 +124,35 @@ export const useInventoryData = () => {
      */
     const loadItemDetails = async (item) => {
         try {
-            dataDebug.log('Loading item details for:', item.itemID);
+            dataDebug.log('Loading item details for:', item.item_id);
             setLoadingDetails(true);
             
-            const response = await axios.get(`${API_BASE_URL}/api/items/${item.itemID}`);
+            const response = await axios.get(`${API_BASE_URL}/api/items/${item.item_id}`);
             const rawData = response.data;
             
             // Process the item details to ensure references are parsed and filtered
             const processedData = {
                 ...rawData,
-                referenceChange: rawData.referenceChange ? 
-                    (typeof rawData.referenceChange === 'string' ? 
-                        JSON.parse(rawData.referenceChange) : 
-                        rawData.referenceChange) : null,
-                referencingItems: items.filter(otherItem => {
-                    const otherRef = otherItem.referenceChange ? 
-                        (typeof otherItem.referenceChange === 'string' ? 
-                            JSON.parse(otherItem.referenceChange) : 
-                            otherItem.referenceChange) : null;
+                reference_change: rawData.reference_change ? 
+                    (typeof rawData.reference_change === 'string' ? 
+                        JSON.parse(rawData.reference_change) : 
+                        rawData.reference_change) : null,
+                referencing_items: items.filter(otherItem => {
+                    const otherRef = otherItem.reference_change ? 
+                        (typeof otherItem.reference_change === 'string' ? 
+                            JSON.parse(otherItem.reference_change) : 
+                            otherItem.reference_change) : null;
                     return otherRef && 
-                           otherRef.newReferenceID === item.itemID && 
-                           otherItem.itemID !== item.itemID;
+                           otherRef.new_reference_id === item.item_id && 
+                           otherItem.item_id !== item.item_id;
                 })
             };
 
             // Check for self-references
-            if (processedData.referenceChange && 
-                processedData.referenceChange.newReferenceID === item.itemID) {
-                processedData.referenceChange = null;
-                processedData.hasReferenceChange = false;
+            if (processedData.reference_change && 
+                processedData.reference_change.new_reference_id === item.item_id) {
+                processedData.reference_change = null;
+                processedData.has_reference_change = false;
             }
             
             dataDebug.logData('Processed item details', processedData);
@@ -162,7 +162,7 @@ export const useInventoryData = () => {
         } catch (error) {
             dataDebug.error('Error loading item details:', error);
             if (error.response?.status === 404) {
-                setError(`Item ${item.itemID} not found. It may have been deleted.`);
+                setError(`Item ${item.item_id} not found. It may have been deleted.`);
             } else {
                 setError('Failed to load item details. Please try again.');
             }

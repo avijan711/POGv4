@@ -74,11 +74,11 @@ function SortableTableCell({ field, children, align = 'left', currentSort, onSor
 
 function SupplierPriceChip({ supplierPrice }) {
   return (
-    <Tooltip title={`${supplierPrice.supplierName} - ${new Date(supplierPrice.responseDate).toLocaleDateString()}`}>
+    <Tooltip title={`${supplierPrice.supplier_name} - ${new Date(supplierPrice.response_date).toLocaleDateString()}`}>
       <Chip
         icon={<AttachMoneyIcon />}
-        label={`₪${supplierPrice.priceQuoted}`}
-        color={supplierPrice.isPromotion ? "secondary" : "primary"}
+        label={`₪${supplierPrice.price_quoted}`}
+        color={supplierPrice.is_promotion ? "secondary" : "primary"}
         size="small"
         variant="outlined"
         sx={{ margin: '2px' }}
@@ -107,16 +107,16 @@ function InquiryItemsTable({
 
   const handleQtyChange = (item, value) => {
     const newQty = parseInt(value) || 0;
-    onEditQty(item.inquiryItemID, newQty);
+    onEditQty(item.inquiry_item_id, newQty);
   };
 
   const handleQtyBlur = (item) => {
-    onUpdateQty(item.inquiryItemID, item.requestedQty);
+    onUpdateQty(item.inquiry_item_id, item.requested_qty);
   };
 
   const handleQtyKeyPress = (e, item) => {
     if (e.key === 'Enter') {
-      onUpdateQty(item.inquiryItemID, item.requestedQty);
+      onUpdateQty(item.inquiry_item_id, item.requested_qty);
     }
   };
 
@@ -129,16 +129,16 @@ function InquiryItemsTable({
   const handleDeleteConfirm = async () => {
     try {
       if (deleteType === 'reference') {
-        if (itemToDelete.referenceChange?.source === 'inquiry_item') {
-          await axios.put(`${API_BASE_URL}/api/inquiries/inquiry-items/${itemToDelete.inquiryItemID}/reference`, {
-            newReferenceId: null,
-            referenceNotes: null
+        if (itemToDelete.reference_change?.source === 'inquiry_item') {
+          await axios.put(`${API_BASE_URL}/api/inquiries/inquiry-items/${itemToDelete.inquiry_item_id}/reference`, {
+            new_reference_id: null,
+            reference_notes: null
           });
-        } else if (itemToDelete.referenceChange?.changeId) {
-          await axios.delete(`${API_BASE_URL}/api/supplier-responses/reference/${itemToDelete.referenceChange.changeId}`);
+        } else if (itemToDelete.reference_change?.change_id) {
+          await axios.delete(`${API_BASE_URL}/api/supplier-responses/reference/${itemToDelete.reference_change.change_id}`);
         }
       } else if (deleteType === 'supplier-response') {
-        await axios.delete(`${API_BASE_URL}/api/supplier-responses/${itemToDelete.supplierResponseId}`);
+        await axios.delete(`${API_BASE_URL}/api/supplier-responses/${itemToDelete.supplier_response_id}`);
       }
       setDeleteDialogOpen(false);
       setItemToDelete(null);
@@ -154,8 +154,8 @@ function InquiryItemsTable({
 
   // Sort items by Excel row index if no other sort is applied
   const sortedItems = [...items].sort((a, b) => {
-    if (!sortConfig.field || sortConfig.field === 'excelRowIndex') {
-      return (a.excelRowIndex || 0) - (b.excelRowIndex || 0);
+    if (!sortConfig.field || sortConfig.field === 'excel_row_index') {
+      return (a.excel_row_index || 0) - (b.excel_row_index || 0);
     }
     return 0;
   });
@@ -168,28 +168,28 @@ function InquiryItemsTable({
             <TableRow>
               <TableCell sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>#</TableCell>
               <SortableTableCell
-                field="itemID"
+                field="item_id"
                 currentSort={sortConfig}
                 onSort={onSort}
               >
                 Item ID
               </SortableTableCell>
               <SortableTableCell
-                field="hebrewDescription"
+                field="hebrew_description"
                 currentSort={sortConfig}
                 onSort={onSort}
               >
                 Hebrew Description
               </SortableTableCell>
               <SortableTableCell
-                field="englishDescription"
+                field="english_description"
                 currentSort={sortConfig}
                 onSort={onSort}
               >
                 English Description
               </SortableTableCell>
               <SortableTableCell
-                field="requestedQty"
+                field="requested_qty"
                 align="right"
                 currentSort={sortConfig}
                 onSort={onSort}
@@ -197,7 +197,7 @@ function InquiryItemsTable({
                 Requested Qty
               </SortableTableCell>
               <SortableTableCell
-                field="qtyInStock"
+                field="qty_in_stock"
                 align="right"
                 currentSort={sortConfig}
                 onSort={onSort}
@@ -205,7 +205,7 @@ function InquiryItemsTable({
                 Stock
               </SortableTableCell>
               <SortableTableCell
-                field="retailPrice"
+                field="retail_price"
                 align="right"
                 currentSort={sortConfig}
                 onSort={onSort}
@@ -219,7 +219,7 @@ function InquiryItemsTable({
                 Promotion Price
               </TableCell>
               <SortableTableCell
-                field="importMarkup"
+                field="import_markup"
                 align="right"
                 currentSort={sortConfig}
                 onSort={onSort}
@@ -227,7 +227,7 @@ function InquiryItemsTable({
                 Import Markup
               </SortableTableCell>
               <SortableTableCell
-                field="hsCode"
+                field="hs_code"
                 currentSort={sortConfig}
                 onSort={onSort}
               >
@@ -256,58 +256,58 @@ function InquiryItemsTable({
                 
                 return (
                   <TableRow 
-                    key={item.inquiryItemID}
+                    key={item.inquiry_item_id}
                     onClick={() => {
-                      if (editingQty !== item.inquiryItemID) {
+                      if (editingQty !== item.inquiry_item_id) {
                         onViewDetails(item);
                       }
                     }}
                     sx={{ 
-                      backgroundColor: item.isDuplicate 
+                      backgroundColor: item.is_duplicate 
                         ? 'rgba(255, 152, 0, 0.1)'
-                        : item.hasReferenceChange && item.referenceChange
+                        : item.has_reference_change && item.reference_change
                           ? 'rgba(255, 243, 224, 0.9)'
-                          : item.isReferencedBy
+                          : item.is_referenced_by
                             ? '#e8f5e9'
                             : item.promotion_id
                               ? 'rgba(156, 39, 176, 0.1)'
                               : 'inherit',
                       '&:hover': { 
-                        backgroundColor: item.isDuplicate
+                        backgroundColor: item.is_duplicate
                           ? 'rgba(255, 152, 0, 0.2)'
-                          : item.hasReferenceChange && item.referenceChange
+                          : item.has_reference_change && item.reference_change
                             ? 'rgba(255, 243, 224, 1)' 
-                            : item.isReferencedBy
+                            : item.is_referenced_by
                               ? '#c8e6c9'
                               : item.promotion_id
                                 ? 'rgba(156, 39, 176, 0.2)'
                                 : 'rgba(0, 0, 0, 0.04)' 
                       },
-                      cursor: editingQty === item.inquiryItemID ? 'default' : 'pointer',
+                      cursor: editingQty === item.inquiry_item_id ? 'default' : 'pointer',
                     }}
                   >
-                    <TableCell>{(item.excelRowIndex || index) + 1}</TableCell>
+                    <TableCell>{(item.excel_row_index || index) + 1}</TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {item.itemID}
-                        {item.isDuplicate && (
-                          <Tooltip title={`Duplicate of row ${(item.originalRowIndex || 0) + 1}`}>
+                        {item.item_id}
+                        {item.is_duplicate && (
+                          <Tooltip title={`Duplicate of row ${(item.original_row_index || 0) + 1}`}>
                             <ContentCopyIcon color="warning" fontSize="small" />
                           </Tooltip>
                         )}
                       </Box>
                     </TableCell>
-                    <TableCell>{item.hebrewDescription}</TableCell>
-                    <TableCell>{item.englishDescription}</TableCell>
+                    <TableCell>{item.hebrew_description}</TableCell>
+                    <TableCell>{item.english_description}</TableCell>
                     <TableCell 
                       align="right" 
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {editingQty === item.inquiryItemID ? (
+                      {editingQty === item.inquiry_item_id ? (
                         <TextField
                           type="number"
                           size="small"
-                          value={item.requestedQty || 0}
+                          value={item.requested_qty || 0}
                           onChange={(e) => handleQtyChange(item, e.target.value)}
                           onBlur={() => handleQtyBlur(item)}
                           onKeyPress={(e) => handleQtyKeyPress(e, item)}
@@ -316,15 +316,15 @@ function InquiryItemsTable({
                         />
                       ) : (
                         <Box 
-                          onClick={() => onEditQty(item.inquiryItemID)}
+                          onClick={() => onEditQty(item.inquiry_item_id)}
                           sx={{ cursor: 'text' }}
                         >
-                          {item.requestedQty || 0}
+                          {item.requested_qty || 0}
                         </Box>
                       )}
                     </TableCell>
-                    <TableCell align="right">{item.qtyInStock || 0}</TableCell>
-                    <TableCell align="right">₪{Number(item.retailPrice).toFixed(2)}</TableCell>
+                    <TableCell align="right">{item.qty_in_stock || 0}</TableCell>
+                    <TableCell align="right">₪{Number(item.retail_price).toFixed(2)}</TableCell>
                     <TableCell align="right">
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 0.5 }}>
                         {supplierPrices.map((price, idx) => (
@@ -345,11 +345,11 @@ function InquiryItemsTable({
                         </Tooltip>
                       )}
                     </TableCell>
-                    <TableCell align="right">{Number(item.importMarkup).toFixed(2)}</TableCell>
-                    <TableCell>{item.hsCode}</TableCell>
+                    <TableCell align="right">{Number(item.import_markup).toFixed(2)}</TableCell>
+                    <TableCell>{item.hs_code}</TableCell>
                     <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                       <ReferenceChip
-                        referenceChange={item.referenceChange}
+                        reference_change={item.reference_change}
                         onDelete={() => handleDeleteClick(item, 'reference')}
                       />
                     </TableCell>

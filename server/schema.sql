@@ -1,284 +1,338 @@
--- Enable foreign key support
-PRAGMA foreign_keys = ON;
+-- Drop existing objects
+DROP TABLE IF EXISTS promotion_item;
+DROP TABLE IF EXISTS promotion;
+DROP TABLE IF EXISTS order_item;
+DROP TABLE IF EXISTS "order";
+DROP TABLE IF EXISTS supplier_response_item;
+DROP TABLE IF EXISTS supplier_response;
+DROP TABLE IF EXISTS price_history;
+DROP TABLE IF EXISTS inquiry_item;
+DROP TABLE IF EXISTS inquiry;
+DROP TABLE IF EXISTS item_files;
+DROP TABLE IF EXISTS item_reference_change;
+DROP TABLE IF EXISTS supplier;
+DROP TABLE IF EXISTS item;
 
--- Create base tables first (no foreign key dependencies)
-CREATE TABLE IF NOT EXISTS Item (
-    ItemID TEXT PRIMARY KEY,
-    HebrewDescription TEXT,
-    EnglishDescription TEXT,
-    ImportMarkup DECIMAL(10,2) DEFAULT 1.3,
-    HSCode TEXT,
-    Image TEXT
+DROP VIEW IF EXISTS item_details;
+DROP TRIGGER IF EXISTS update_item_timestamp;
+DROP TRIGGER IF EXISTS update_price_history_on_inquiry;
+DROP TRIGGER IF EXISTS prevent_self_reference;
+DROP TRIGGER IF EXISTS prevent_self_reference_change;
+
+-- Create tables in order of dependencies
+
+-- 1. Base tables (no foreign keys)
+CREATE TABLE item (
+    item_id TEXT PRIMARY KEY,
+    hebrew_description TEXT,
+    english_description TEXT,
+    import_markup REAL DEFAULT 1.30,
+    hs_code TEXT,
+    image TEXT,
+    notes TEXT,
+    origin TEXT,
+    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CHECK (import_markup > 0)
 );
 
-CREATE TABLE IF NOT EXISTS Supplier (
-    SupplierID INTEGER PRIMARY KEY AUTOINCREMENT,
-    Name TEXT NOT NULL,
-    ContactPerson TEXT,
-    Email TEXT,
-    Phone TEXT
-);
-
--- Create tables with foreign key dependencies
-CREATE TABLE IF NOT EXISTS ItemHistory (
-    HistoryID INTEGER PRIMARY KEY AUTOINCREMENT,
-    ItemID TEXT NOT NULL,
-    ILSRetailPrice DECIMAL(10,2),
-    QtyInStock INTEGER DEFAULT 0,
-    QtySoldThisYear INTEGER DEFAULT 0,
-    QtySoldLastYear INTEGER DEFAULT 0,
-    Date DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (ItemID) REFERENCES Item(ItemID)
-);
-
-CREATE TABLE IF NOT EXISTS Inquiry (
-    InquiryID INTEGER PRIMARY KEY AUTOINCREMENT,
-    InquiryNumber TEXT UNIQUE,
-    Status TEXT NOT NULL,
-    CreatedDate DATETIME DEFAULT CURRENT_TIMESTAMP,
-    Date DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS promotions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE supplier (
+    supplier_id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    supplier_id INTEGER REFERENCES Supplier(SupplierID),
+    contact_person TEXT,
+    email TEXT,
+    phone TEXT
+);
+
+CREATE TABLE inquiry (
+    inquiry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    inquiry_number TEXT UNIQUE,
+    status TEXT NOT NULL DEFAULT 'new',
+    date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CHECK (status IN ('new', 'pending', 'completed', 'cancelled'))
+);
+
+-- 2. Tables with single foreign key
+CREATE TABLE item_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    file_type TEXT,
+    upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    description TEXT,
+    FOREIGN KEY (item_id) REFERENCES item(item_id) ON DELETE CASCADE
+);
+
+CREATE TABLE price_history (
+    history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL,
+    ils_retail_price REAL,
+    qty_in_stock INTEGER DEFAULT 0,
+    qty_sold_this_year INTEGER DEFAULT 0,
+    qty_sold_last_year INTEGER DEFAULT 0,
+    date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (item_id) REFERENCES item(item_id),
+    CHECK (ils_retail_price IS NULL OR ils_retail_price >= 0),
+    CHECK (qty_in_stock >= 0),
+    CHECK (qty_sold_this_year >= 0),
+    CHECK (qty_sold_last_year >= 0)
+);
+
+CREATE TABLE item_reference_change (
+    change_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_item_id VARCHAR NOT NULL,
+    new_reference_id VARCHAR NOT NULL,
+    supplier_id INTEGER NULL,
+    changed_by_user BOOLEAN DEFAULT 0,
+    change_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT,
+    FOREIGN KEY (original_item_id) REFERENCES item(item_id),
+    FOREIGN KEY (new_reference_id) REFERENCES item(item_id),
+    FOREIGN KEY (supplier_id) REFERENCES supplier(supplier_id),
+    CHECK (original_item_id != new_reference_id)
+);
+
+-- 3. Tables with multiple foreign keys
+CREATE TABLE inquiry_item (
+    inquiry_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    inquiry_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    original_item_id TEXT,
+    requested_qty INTEGER NOT NULL DEFAULT 0,
+    hebrew_description TEXT,
+    english_description TEXT,
+    hs_code TEXT,
+    import_markup REAL,
+    qty_in_stock INTEGER DEFAULT 0,
+    retail_price REAL,
+    sold_this_year INTEGER DEFAULT 0,
+    sold_last_year INTEGER DEFAULT 0,
+    new_reference_id TEXT,
+    reference_notes TEXT,
+    origin TEXT DEFAULT '',
+    FOREIGN KEY (inquiry_id) REFERENCES inquiry(inquiry_id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES item(item_id),
+    FOREIGN KEY (original_item_id) REFERENCES item(item_id),
+    FOREIGN KEY (new_reference_id) REFERENCES item(item_id),
+    CHECK (item_id != new_reference_id),
+    CHECK (requested_qty >= 0),
+    CHECK (qty_in_stock >= 0),
+    CHECK (sold_this_year >= 0),
+    CHECK (sold_last_year >= 0),
+    CHECK (retail_price IS NULL OR retail_price >= 0),
+    CHECK (import_markup IS NULL OR import_markup > 0)
+);
+
+CREATE TABLE supplier_response (
+    supplier_response_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    inquiry_id INTEGER NOT NULL,
+    supplier_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    price_quoted REAL,
+    status TEXT DEFAULT 'pending',
+    is_promotion BOOLEAN DEFAULT 0,
+    promotion_name TEXT,
+    response_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (inquiry_id) REFERENCES inquiry(inquiry_id),
+    FOREIGN KEY (supplier_id) REFERENCES supplier(supplier_id),
+    FOREIGN KEY (item_id) REFERENCES item(item_id),
+    CHECK (price_quoted IS NULL OR price_quoted >= 0),
+    CHECK (status IN ('pending', 'active', 'rejected'))
+);
+
+CREATE TABLE supplier_response_item (
+    response_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_response_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    price REAL,
+    notes TEXT,
+    hs_code TEXT,
+    english_description TEXT,
+    new_reference_id TEXT,
+    origin TEXT DEFAULT '',
+    FOREIGN KEY (supplier_response_id) REFERENCES supplier_response(supplier_response_id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES item(item_id),
+    FOREIGN KEY (new_reference_id) REFERENCES item(item_id),
+    CHECK (price IS NULL OR price >= 0)
+);
+
+CREATE TABLE "order" (
+    order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    inquiry_id INTEGER,
+    supplier_id INTEGER NOT NULL,
+    order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status TEXT DEFAULT 'pending',
+    notes TEXT,
+    FOREIGN KEY (inquiry_id) REFERENCES inquiry(inquiry_id),
+    FOREIGN KEY (supplier_id) REFERENCES supplier(supplier_id),
+    CHECK (status IN ('pending', 'confirmed', 'shipped', 'completed', 'cancelled'))
+);
+
+CREATE TABLE promotion (
+    promotion_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    supplier_id INTEGER REFERENCES supplier(supplier_id),
     start_date DATETIME,
     end_date DATETIME,
     is_active BOOLEAN DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS promotion_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    item_id TEXT NOT NULL,
-    promotion_id INTEGER NOT NULL,
-    promotion_price DECIMAL(10,2) NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE CASCADE
+    CHECK (end_date > start_date)
 );
 
-CREATE TABLE IF NOT EXISTS "Order" (
-    OrderID INTEGER PRIMARY KEY AUTOINCREMENT,
-    InquiryID INTEGER,
-    SupplierID INTEGER NOT NULL,
-    OrderDate DATETIME DEFAULT CURRENT_TIMESTAMP,
-    Status TEXT DEFAULT 'Pending',
-    Notes TEXT,
-    FOREIGN KEY (InquiryID) REFERENCES Inquiry(InquiryID),
-    FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID)
+-- 4. Tables with complex foreign keys
+CREATE TABLE order_item (
+    order_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    inquiry_item_id INTEGER,
+    quantity INTEGER NOT NULL,
+    price_quoted REAL NOT NULL,
+    is_promotion BOOLEAN DEFAULT 0,
+    promotion_id INTEGER,
+    supplier_response_id INTEGER,
+    FOREIGN KEY (order_id) REFERENCES "order"(order_id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES item(item_id),
+    FOREIGN KEY (inquiry_item_id) REFERENCES inquiry_item(inquiry_item_id),
+    FOREIGN KEY (promotion_id) REFERENCES promotion(promotion_id),
+    FOREIGN KEY (supplier_response_id) REFERENCES supplier_response(supplier_response_id),
+    CHECK (quantity > 0),
+    CHECK (price_quoted > 0)
 );
 
-CREATE TABLE IF NOT EXISTS OrderItem (
-    OrderItemID INTEGER PRIMARY KEY AUTOINCREMENT,
-    OrderID INTEGER NOT NULL,
-    ItemID TEXT NOT NULL,
-    InquiryItemID INTEGER,
-    Quantity INTEGER NOT NULL,
-    PriceQuoted DECIMAL(10,2) NOT NULL,
-    IsPromotion BOOLEAN DEFAULT 0,
-    PromotionGroupID INTEGER,
-    SupplierResponseID INTEGER,
-    FOREIGN KEY (OrderID) REFERENCES "Order"(OrderID) ON DELETE CASCADE,
-    FOREIGN KEY (ItemID) REFERENCES Item(ItemID),
-    FOREIGN KEY (InquiryItemID) REFERENCES InquiryItem(InquiryItemID),
-    FOREIGN KEY (PromotionGroupID) REFERENCES promotions(id),
-    FOREIGN KEY (SupplierResponseID) REFERENCES SupplierResponse(SupplierResponseID)
+CREATE TABLE promotion_item (
+    promotion_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    promotion_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    promotion_price REAL NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (promotion_id) REFERENCES promotion(promotion_id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES item(item_id),
+    CHECK (promotion_price > 0)
 );
 
-CREATE TABLE IF NOT EXISTS ItemReferenceChange (
-    ChangeID INTEGER PRIMARY KEY AUTOINCREMENT,
-    OriginalItemID TEXT NOT NULL,
-    NewReferenceID TEXT NOT NULL,
-    ChangeDate DATETIME DEFAULT CURRENT_TIMESTAMP,
-    ChangedByUser BOOLEAN DEFAULT 0,
-    SupplierID INTEGER,
-    Notes TEXT,
-    FOREIGN KEY (OriginalItemID) REFERENCES Item(ItemID),
-    FOREIGN KEY (NewReferenceID) REFERENCES Item(ItemID),
-    FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID),
-    CHECK (OriginalItemID != NewReferenceID),
-    UNIQUE(OriginalItemID, NewReferenceID, SupplierID, ChangedByUser)
-);
+-- Create indexes
+CREATE INDEX idx_item_files_item ON item_files(item_id);
+CREATE INDEX idx_item_files_type ON item_files(file_type);
 
-CREATE TABLE IF NOT EXISTS InquiryItem (
-    InquiryItemID INTEGER PRIMARY KEY AUTOINCREMENT,
-    InquiryID INTEGER NOT NULL,
-    ItemID TEXT NOT NULL,
-    OriginalItemID TEXT REFERENCES Item(ItemID),
-    RequestedQty INTEGER NOT NULL DEFAULT 0,
-    HebrewDescription TEXT,
-    EnglishDescription TEXT,
-    HSCode TEXT,
-    ImportMarkup DECIMAL(10,2),
-    QtyInStock INTEGER,
-    RetailPrice DECIMAL(10,2),
-    SoldThisYear INTEGER,
-    SoldLastYear INTEGER,
-    NewReferenceID TEXT,
-    ReferenceNotes TEXT,
-    FOREIGN KEY (InquiryID) REFERENCES Inquiry(InquiryID),
-    FOREIGN KEY (ItemID) REFERENCES Item(ItemID)
-);
+CREATE INDEX idx_inquiry_item_inquiry ON inquiry_item(inquiry_id);
+CREATE INDEX idx_inquiry_item_item ON inquiry_item(item_id);
+CREATE INDEX idx_inquiry_item_original ON inquiry_item(original_item_id);
+CREATE INDEX idx_inquiry_item_reference ON inquiry_item(new_reference_id);
 
-CREATE TABLE IF NOT EXISTS SupplierPrice (
-    PriceID INTEGER PRIMARY KEY AUTOINCREMENT,
-    ItemID TEXT NOT NULL,
-    SupplierID INTEGER NOT NULL,
-    PriceQuoted DECIMAL(10,2) NOT NULL,
-    ImportMarkup DECIMAL(10,2) DEFAULT 1.3,
-    RetailPrice DECIMAL(10,2),
-    HebrewDescription TEXT,
-    EnglishDescription TEXT,
-    LastUpdated DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (ItemID) REFERENCES Item(ItemID),
-    FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID)
-);
+CREATE INDEX idx_price_history_item ON price_history(item_id);
+CREATE INDEX idx_price_history_date ON price_history(date);
 
--- New SupplierResponse tables
-CREATE TABLE IF NOT EXISTS SupplierResponse (
-    SupplierResponseID INTEGER PRIMARY KEY AUTOINCREMENT,
-    InquiryID INTEGER NOT NULL,
-    SupplierID INTEGER NOT NULL,
-    ItemID TEXT NOT NULL,
-    PriceQuoted DECIMAL(10,2),
-    Status TEXT DEFAULT 'pending',
-    IsPromotion BOOLEAN DEFAULT 0,
-    PromotionName TEXT,
-    ResponseDate DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (InquiryID) REFERENCES Inquiry(InquiryID),
-    FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID),
-    FOREIGN KEY (ItemID) REFERENCES Item(ItemID)
-);
+CREATE INDEX idx_reference_changes_original ON item_reference_change(original_item_id);
+CREATE INDEX idx_reference_changes_new ON item_reference_change(new_reference_id);
+CREATE INDEX idx_reference_changes_supplier ON item_reference_change(supplier_id);
+CREATE INDEX idx_reference_changes_date ON item_reference_change(change_date);
 
-CREATE TABLE IF NOT EXISTS SupplierResponseItem (
-    ResponseItemID INTEGER PRIMARY KEY AUTOINCREMENT,
-    SupplierResponseID INTEGER NOT NULL,
-    ItemID TEXT NOT NULL,
-    Price DECIMAL(10,2),
-    Notes TEXT,
-    HSCode TEXT,
-    EnglishDescription TEXT,
-    NewReferenceID TEXT,
-    FOREIGN KEY (SupplierResponseID) REFERENCES SupplierResponse(SupplierResponseID),
-    FOREIGN KEY (ItemID) REFERENCES Item(ItemID)
-);
+CREATE INDEX idx_supplier_response_inquiry ON supplier_response(inquiry_id);
+CREATE INDEX idx_supplier_response_supplier ON supplier_response(supplier_id);
+CREATE INDEX idx_supplier_response_item ON supplier_response(item_id);
+CREATE INDEX idx_supplier_response_date ON supplier_response(response_date);
 
--- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_reference_changes_original ON ItemReferenceChange(OriginalItemID);
-CREATE INDEX IF NOT EXISTS idx_reference_changes_new ON ItemReferenceChange(NewReferenceID);
-CREATE INDEX IF NOT EXISTS idx_reference_changes_supplier ON ItemReferenceChange(SupplierID);
-CREATE INDEX IF NOT EXISTS idx_reference_changes_date ON ItemReferenceChange(ChangeDate);
-CREATE INDEX IF NOT EXISTS idx_inquiry_items_original ON InquiryItem(OriginalItemID);
-CREATE INDEX IF NOT EXISTS idx_inquiry_items_both_ids ON InquiryItem(ItemID, OriginalItemID);
-CREATE INDEX IF NOT EXISTS idx_supplier_prices_item ON SupplierPrice(ItemID);
-CREATE INDEX IF NOT EXISTS idx_supplier_prices_supplier ON SupplierPrice(SupplierID);
-CREATE INDEX IF NOT EXISTS idx_item_history_item ON ItemHistory(ItemID);
-CREATE INDEX IF NOT EXISTS idx_item_history_date ON ItemHistory(Date);
-CREATE INDEX IF NOT EXISTS idx_promotion_dates ON promotions(start_date, end_date);
-CREATE INDEX IF NOT EXISTS idx_promotion_supplier ON promotions(supplier_id);
-CREATE INDEX IF NOT EXISTS idx_promotion_active ON promotions(is_active);
-CREATE INDEX IF NOT EXISTS idx_promotion_items_item ON promotion_items(item_id);
-CREATE INDEX IF NOT EXISTS idx_promotion_items_promotion ON promotion_items(promotion_id);
-CREATE INDEX IF NOT EXISTS idx_supplier_response_inquiry ON SupplierResponse(InquiryID);
-CREATE INDEX IF NOT EXISTS idx_supplier_response_supplier ON SupplierResponse(SupplierID);
-CREATE INDEX IF NOT EXISTS idx_supplier_response_item ON SupplierResponse(ItemID);
-CREATE INDEX IF NOT EXISTS idx_supplier_response_date ON SupplierResponse(ResponseDate);
-CREATE INDEX IF NOT EXISTS idx_supplier_response_item_response ON SupplierResponseItem(SupplierResponseID);
-CREATE INDEX IF NOT EXISTS idx_supplier_response_item_item ON SupplierResponseItem(ItemID);
-CREATE INDEX IF NOT EXISTS idx_inquiry_item_retail ON InquiryItem(ItemID, RetailPrice);
-CREATE INDEX IF NOT EXISTS idx_item_history_retail ON ItemHistory(ItemID, ILSRetailPrice);
-CREATE INDEX IF NOT EXISTS idx_order_inquiry ON "Order"(InquiryID);
-CREATE INDEX IF NOT EXISTS idx_order_supplier ON "Order"(SupplierID);
-CREATE INDEX IF NOT EXISTS idx_order_date ON "Order"(OrderDate);
-CREATE INDEX IF NOT EXISTS idx_order_status ON "Order"(Status);
-CREATE INDEX IF NOT EXISTS idx_order_item_order ON OrderItem(OrderID);
-CREATE INDEX IF NOT EXISTS idx_order_item_item ON OrderItem(ItemID);
-CREATE INDEX IF NOT EXISTS idx_order_item_inquiry ON OrderItem(InquiryItemID);
+CREATE INDEX idx_supplier_response_item_response ON supplier_response_item(supplier_response_id);
+CREATE INDEX idx_supplier_response_item_item ON supplier_response_item(item_id);
+CREATE INDEX idx_supplier_response_item_reference ON supplier_response_item(new_reference_id);
+
+CREATE INDEX idx_order_inquiry ON "order"(inquiry_id);
+CREATE INDEX idx_order_supplier ON "order"(supplier_id);
+CREATE INDEX idx_order_date ON "order"(order_date);
+CREATE INDEX idx_order_status ON "order"(status);
+
+CREATE INDEX idx_order_item_order ON order_item(order_id);
+CREATE INDEX idx_order_item_item ON order_item(item_id);
+CREATE INDEX idx_order_item_inquiry ON order_item(inquiry_item_id);
+
+CREATE INDEX idx_promotion_supplier ON promotion(supplier_id);
+CREATE INDEX idx_promotion_dates ON promotion(start_date, end_date);
+CREATE INDEX idx_promotion_active ON promotion(is_active);
+
+CREATE INDEX idx_promotion_item_promotion ON promotion_item(promotion_id);
+CREATE INDEX idx_promotion_item_item ON promotion_item(item_id);
+
+-- Create view
+CREATE VIEW item_details AS
+WITH latest_price AS (
+    SELECT 
+        item_id,
+        ils_retail_price,
+        qty_in_stock,
+        qty_sold_this_year,
+        qty_sold_last_year,
+        date
+    FROM price_history
+    WHERE (item_id, date) IN (
+        SELECT item_id, MAX(date)
+        FROM price_history
+        GROUP BY item_id
+    )
+)
+SELECT
+    i.item_id,
+    i.hebrew_description,
+    i.english_description,
+    i.import_markup,
+    i.hs_code,
+    i.image,
+    i.notes,
+    i.origin,
+    i.last_updated,
+    p.ils_retail_price as retail_price,
+    p.qty_in_stock as current_stock,
+    p.qty_sold_this_year as current_year_sales,
+    p.qty_sold_last_year as last_year_sales,
+    p.date as last_price_update
+FROM item i
+LEFT JOIN latest_price p ON i.item_id = p.item_id;
 
 -- Create triggers
-DROP TRIGGER IF EXISTS set_original_item_id;
-CREATE TRIGGER set_original_item_id
-AFTER INSERT ON InquiryItem
-WHEN NEW.OriginalItemID IS NULL
+CREATE TRIGGER update_item_timestamp
+AFTER UPDATE ON item
 BEGIN
-    UPDATE InquiryItem 
-    SET OriginalItemID = NEW.ItemID 
-    WHERE InquiryItemID = NEW.InquiryItemID;
+    UPDATE item 
+    SET last_updated = CURRENT_TIMESTAMP
+    WHERE item_id = NEW.item_id;
 END;
 
--- Create trigger to update Item and ItemHistory when InquiryItem is inserted
-DROP TRIGGER IF EXISTS update_item_history_on_inquiry;
-CREATE TRIGGER update_item_history_on_inquiry
-AFTER INSERT ON InquiryItem
-WHEN NEW.RetailPrice IS NOT NULL OR NEW.ImportMarkup IS NOT NULL
+CREATE TRIGGER update_price_history_on_inquiry
+AFTER INSERT ON inquiry_item
+WHEN NEW.retail_price IS NOT NULL
 BEGIN
-    -- Update Item table if it doesn't exist
-    INSERT OR IGNORE INTO Item (
-        ItemID,
-        HebrewDescription,
-        EnglishDescription,
-        ImportMarkup,
-        HSCode,
-        Image
+    INSERT INTO price_history (
+        item_id,
+        ils_retail_price,
+        qty_in_stock,
+        qty_sold_this_year,
+        qty_sold_last_year,
+        date
     )
     VALUES (
-        NEW.ItemID,
-        NEW.HebrewDescription,
-        NEW.EnglishDescription,
-        COALESCE(NEW.ImportMarkup, 1.30),
-        NEW.HSCode,
-        NULL
+        NEW.item_id,
+        NEW.retail_price,
+        NEW.qty_in_stock,
+        NEW.sold_this_year,
+        NEW.sold_last_year,
+        (SELECT date FROM inquiry WHERE inquiry_id = NEW.inquiry_id)
     );
-
-    -- Insert into ItemHistory if retail price exists
-    INSERT INTO ItemHistory (
-        ItemID,
-        ILSRetailPrice,
-        QtyInStock,
-        QtySoldThisYear,
-        QtySoldLastYear,
-        Date
-    )
-    SELECT
-        NEW.ItemID,
-        NEW.RetailPrice,
-        COALESCE(NEW.QtyInStock, 0),
-        COALESCE(NEW.SoldThisYear, 0),
-        COALESCE(NEW.SoldLastYear, 0),
-        datetime('now')
-    WHERE NEW.RetailPrice IS NOT NULL;
 END;
 
--- Create view for consistent item details retrieval
-DROP VIEW IF EXISTS ItemDetails;
-CREATE VIEW ItemDetails AS
-WITH LatestHistory AS (
-    SELECT 
-        ih.ItemID,
-        ih.ILSRetailPrice,
-        ih.QtyInStock,
-        ih.QtySoldThisYear,
-        ih.QtySoldLastYear,
-        ih.Date as HistoryDate
-    FROM ItemHistory ih
-    INNER JOIN (
-        SELECT ItemID, MAX(Date) as MaxDate
-        FROM ItemHistory
-        GROUP BY ItemID
-    ) latest ON ih.ItemID = latest.ItemID AND ih.Date = latest.MaxDate
-)
-SELECT 
-    i.ItemID,
-    i.HebrewDescription,
-    i.EnglishDescription,
-    COALESCE(CAST(i.ImportMarkup AS REAL), 1.30) as ImportMarkup,
-    i.HSCode,
-    i.Image,
-    h.ILSRetailPrice as RetailPrice,
-    COALESCE(h.QtyInStock, 0) as QtyInStock,
-    COALESCE(h.QtySoldThisYear, 0) as SoldThisYear,
-    COALESCE(h.QtySoldLastYear, 0) as SoldLastYear,
-    h.HistoryDate as LastUpdated
-FROM Item i
-LEFT JOIN LatestHistory h ON i.ItemID = h.ItemID;
+CREATE TRIGGER prevent_self_reference
+BEFORE INSERT ON inquiry_item
+WHEN NEW.item_id = NEW.new_reference_id
+BEGIN
+    SELECT RAISE(ABORT, 'Cannot reference an item to itself');
+END;
+
+CREATE TRIGGER prevent_self_reference_change
+BEFORE INSERT ON item_reference_change
+WHEN NEW.original_item_id = NEW.new_reference_id
+BEGIN
+    SELECT RAISE(ABORT, 'Cannot reference an item to itself');
+END;
+
+-- Final verification
+SELECT 'Tables created:', COUNT(*) FROM sqlite_master WHERE type='table';
+SELECT 'Views created:', COUNT(*) FROM sqlite_master WHERE type='view';
+SELECT 'Triggers created:', COUNT(*) FROM sqlite_master WHERE type='trigger';
+SELECT 'Indexes created:', COUNT(*) FROM sqlite_master WHERE type='index';

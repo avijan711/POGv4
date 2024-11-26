@@ -14,44 +14,68 @@ import {
   Grid,
 } from '@mui/material';
 
-const REQUIRED_FIELDS = [
-  { field: 'itemID', label: 'Item ID', description: 'Unique identifier for each item', hebrewLabels: ['קוד פריט', 'מספר פריט'] },
-  { field: 'HebrewDescription', label: 'Hebrew Description', description: 'Item description in Hebrew', hebrewLabels: ['שם פריט'] },
-  { field: 'RequestedQty', label: 'Requested Quantity', description: 'Number of items being requested', hebrewLabels: ['כמות', 'כמות שהוזמנה'] }
+const INVENTORY_REQUIRED_FIELDS = [
+  { field: 'item_id', label: 'Item ID', description: 'Unique identifier for each item', hebrewLabels: ['קוד פריט', 'מספר פריט'] },
+  { field: 'hebrew_description', label: 'Hebrew Description', description: 'Item description in Hebrew', hebrewLabels: ['שם פריט'] },
+  { field: 'requested_qty', label: 'Requested Quantity', description: 'Number of items being requested', hebrewLabels: ['כמות', 'כמות שהוזמנה'] }
 ];
 
-const OPTIONAL_FIELDS = [
-  { field: 'EnglishDescription', label: 'English Description', description: 'Item description in English' },
-  { field: 'ImportMarkup', label: 'Import Markup', description: 'Value between 1.00 and 2.00', hebrewLabels: ['% מס'] },
-  { field: 'HSCode', label: 'HS Code', description: 'Harmonized System code', hebrewLabels: ['קוד יצרן'] },
-  { field: 'QtyInStock', label: 'Current Stock', description: 'Current quantity in stock', hebrewLabels: ['כמות במלאי'] },
-  { field: 'RetailPrice', label: 'Retail Price (ILS)', description: 'Retail price in Israeli Shekels', hebrewLabels: ['מחירון'] },
-  { field: 'QtySoldThisYear', label: 'Sold This Year', description: 'Units sold in current year', hebrewLabels: ['כמות שנמכרה'] },
-  { field: 'QtySoldLastYear', label: 'Sold Last Year', description: 'Units sold in previous year', hebrewLabels: ['כמות נמכרה ש'] },
-  { field: 'NewReferenceID', label: 'New Reference ID', description: 'ID of the replacement item' },
-  { field: 'ReferenceNotes', label: 'Reference Notes', description: 'Additional reference information' }
+const INVENTORY_OPTIONAL_FIELDS = [
+  { field: 'english_description', label: 'English Description', description: 'Item description in English' },
+  { field: 'import_markup', label: 'Import Markup', description: 'Value between 1.00 and 2.00', hebrewLabels: ['% מס'] },
+  { field: 'hs_code', label: 'HS Code', description: 'Harmonized System code', hebrewLabels: ['קוד יצרן'] },
+  { field: 'qty_in_stock', label: 'Current Stock', description: 'Current quantity in stock', hebrewLabels: ['כמות במלאי'] },
+  { field: 'retail_price', label: 'Retail Price (ILS)', description: 'Retail price in Israeli Shekels', hebrewLabels: ['מחירון'] },
+  { field: 'qty_sold_this_year', label: 'Sold This Year', description: 'Units sold in current year', hebrewLabels: ['כמות שנמכרה'] },
+  { field: 'qty_sold_last_year', label: 'Sold Last Year', description: 'Units sold in previous year', hebrewLabels: ['כמות נמכרה ש'] },
+  { field: 'new_reference_id', label: 'New Reference ID', description: 'ID of the replacement item' },
+  { field: 'reference_notes', label: 'Reference Notes', description: 'Additional reference information' },
+  { field: 'notes', label: 'Notes', description: 'General notes about the item', hebrewLabels: ['הערות'] },
+  { field: 'origin', label: 'Origin', description: 'Item origin or source', hebrewLabels: ['מקור', 'ארץ מקור'] }
 ];
 
-function ColumnMappingDialog({ open, onClose, excelColumns = [], onConfirm }) {
+const SUPPLIER_RESPONSE_REQUIRED_FIELDS = [
+  { field: 'item_id', label: 'Item ID', description: 'Unique identifier for each item', hebrewLabels: ['קוד פריט', 'מספר פריט'] },
+  { field: 'price_quoted', label: 'Price Quoted', description: 'Price quoted by supplier', hebrewLabels: ['מחיר'] }
+];
+
+const SUPPLIER_RESPONSE_OPTIONAL_FIELDS = [
+  { field: 'hebrew_description', label: 'Hebrew Description', description: 'Item description in Hebrew', hebrewLabels: ['שם פריט'] },
+  { field: 'english_description', label: 'English Description', description: 'Item description in English' },
+  { field: 'hs_code', label: 'HS Code', description: 'Harmonized System code', hebrewLabels: ['קוד יצרן'] },
+  { field: 'new_reference_id', label: 'New Reference ID', description: 'ID of the replacement item' },
+  { field: 'notes', label: 'Notes', description: 'Additional notes', hebrewLabels: ['הערות'] },
+  { field: 'origin', label: 'Origin', description: 'Item origin or source', hebrewLabels: ['מקור', 'ארץ מקור'] }
+];
+
+function ColumnMappingDialog({ open, onClose, columns = [], onConfirm, uploadType = 'inventory' }) {
   const [mapping, setMapping] = useState({});
   const [errors, setErrors] = useState([]);
 
+  const requiredFields = uploadType === 'supplier_response' 
+    ? SUPPLIER_RESPONSE_REQUIRED_FIELDS 
+    : INVENTORY_REQUIRED_FIELDS;
+
+  const optionalFields = uploadType === 'supplier_response'
+    ? SUPPLIER_RESPONSE_OPTIONAL_FIELDS
+    : INVENTORY_OPTIONAL_FIELDS;
+
   // Process Excel columns once
   const processedColumns = React.useMemo(() => {
-    return excelColumns
+    return columns
       .filter(col => col != null)
       .map((col, index) => ({
         id: `col-${index}`,
         value: String(col).trim()
       }))
       .filter(col => col.value.length > 0);
-  }, [excelColumns]);
+  }, [columns]);
 
   useEffect(() => {
     // Try to auto-map columns based on similar names
     if (processedColumns.length > 0) {
       const initialMapping = {};
-      const allFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
+      const allFields = [...requiredFields, ...optionalFields];
       
       allFields.forEach(({ field, label, hebrewLabels }) => {
         // Try to match Hebrew labels first
@@ -84,13 +108,13 @@ function ColumnMappingDialog({ open, onClose, excelColumns = [], onConfirm }) {
       
       setMapping(initialMapping);
     }
-  }, [processedColumns]);
+  }, [processedColumns, requiredFields, optionalFields]);
 
   const validateMapping = () => {
     const newErrors = [];
     
     // Check required fields
-    REQUIRED_FIELDS.forEach(({ field, label }) => {
+    requiredFields.forEach(({ field, label }) => {
       if (!mapping[field]) {
         newErrors.push(`${label} is required`);
       }
@@ -202,14 +226,14 @@ function ColumnMappingDialog({ open, onClose, excelColumns = [], onConfirm }) {
           Required Fields
         </Typography>
         <Grid container spacing={2}>
-          {REQUIRED_FIELDS.map(field => renderField({ ...field, required: true }))}
+          {requiredFields.map(field => renderField({ ...field, required: true }))}
         </Grid>
 
         <Typography variant="subtitle1" gutterBottom sx={{ mt: 3 }}>
           Optional Fields
         </Typography>
         <Grid container spacing={2}>
-          {OPTIONAL_FIELDS.map(field => renderField({ ...field }))}
+          {optionalFields.map(field => renderField({ ...field }))}
         </Grid>
       </DialogContent>
       <DialogActions>

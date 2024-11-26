@@ -3,218 +3,218 @@ module.exports = `
     check_tables AS (
         SELECT EXISTS (
             SELECT 1 FROM sqlite_master 
-            WHERE type = 'table' AND name = 'SupplierResponse'
+            WHERE type = 'table' AND name = 'supplier_response'
         ) as has_supplier_response
     ),
-    InquiryItems AS (
+    inquiry_items AS (
         SELECT DISTINCT 
-            ii.ItemID,
-            i.HebrewDescription,
-            i.EnglishDescription,
-            ii.RequestedQty,
-            ii.RetailPrice
-        FROM InquiryItem ii
-        JOIN Item i ON ii.ItemID = i.ItemID
-        WHERE ii.InquiryID = ?
+            ii.item_id,
+            i.hebrew_description,
+            i.english_description,
+            ii.requested_qty,
+            ii.retail_price
+        FROM inquiry_item ii
+        JOIN item i ON ii.item_id = i.item_id
+        WHERE ii.inquiry_id = ?
     ),
-    ResponseStats AS (
+    response_stats AS (
         -- Get all response items for this supplier and date
         SELECT DISTINCT
-            sr.ItemID as ResponseItemID,
-            ii.ItemID as InquiryItemID,
-            irc.NewReferenceID as ReplacementID,
-            sr.SupplierID,
-            sr.ResponseDate,
-            ii.HebrewDescription,
-            ii.EnglishDescription,
-            ii.RequestedQty,
-            ii.RetailPrice,
-            sr.PriceQuoted,
-            sr.Status as ResponseStatus,
-            sr.SupplierResponseID,
+            sr.item_id as response_item_id,
+            ii.item_id as inquiry_item_id,
+            irc.new_reference_id as replacement_id,
+            sr.supplier_id,
+            sr.response_date,
+            ii.hebrew_description,
+            ii.english_description,
+            ii.requested_qty,
+            ii.retail_price,
+            sr.price_quoted,
+            sr.status as response_status,
+            sr.supplier_response_id,
             CASE
-                WHEN ii.ItemID IS NULL THEN 'extra'
-                WHEN irc.NewReferenceID IS NOT NULL THEN 'replacement'
+                WHEN ii.item_id IS NULL THEN 'extra'
+                WHEN irc.new_reference_id IS NOT NULL THEN 'replacement'
                 ELSE 'matched'
-            END as ItemStatus
+            END as item_status
         FROM check_tables ct
         CROSS JOIN (SELECT 1) params
-        LEFT JOIN SupplierResponse sr ON ct.has_supplier_response = 1
-        LEFT JOIN InquiryItems ii ON sr.ItemID = ii.ItemID
-        LEFT JOIN ItemReferenceChange irc ON sr.ItemID = irc.OriginalItemID 
-            AND sr.SupplierID = irc.SupplierID
-            AND date(sr.ResponseDate) = date(irc.ChangeDate)
-        WHERE ct.has_supplier_response = 0 OR sr.ItemID IS NOT NULL
+        LEFT JOIN supplier_response sr ON ct.has_supplier_response = 1
+        LEFT JOIN inquiry_items ii ON sr.item_id = ii.item_id
+        LEFT JOIN item_reference_change irc ON sr.item_id = irc.original_item_id 
+            AND sr.supplier_id = irc.supplier_id
+            AND date(sr.response_date) = date(irc.change_date)
+        WHERE ct.has_supplier_response = 0 OR sr.item_id IS NOT NULL
     ),
-    SupplierStats AS (
+    supplier_stats AS (
         -- Calculate statistics per supplier
         SELECT 
-            rs.SupplierID,
-            rs.ResponseDate,
-            COUNT(DISTINCT CASE WHEN rs.ItemStatus = 'extra' THEN rs.ResponseItemID END) as ExtraCount,
-            COUNT(DISTINCT CASE WHEN rs.ItemStatus = 'replacement' THEN rs.ResponseItemID END) as ReplacementCount,
-            COUNT(DISTINCT rs.ResponseItemID) as TotalCount
-        FROM ResponseStats rs
-        WHERE rs.ResponseItemID IS NOT NULL
-        GROUP BY rs.SupplierID, rs.ResponseDate
+            rs.supplier_id,
+            rs.response_date,
+            COUNT(DISTINCT CASE WHEN rs.item_status = 'extra' THEN rs.response_item_id END) as extra_count,
+            COUNT(DISTINCT CASE WHEN rs.item_status = 'replacement' THEN rs.response_item_id END) as replacement_count,
+            COUNT(DISTINCT rs.response_item_id) as total_count
+        FROM response_stats rs
+        WHERE rs.response_item_id IS NOT NULL
+        GROUP BY rs.supplier_id, rs.response_date
     ),
-    MissingItems AS (
+    missing_items AS (
         -- Find missing items efficiently
         SELECT DISTINCT
-            sr.SupplierID,
-            sr.ResponseDate,
-            ii.ItemID,
-            ii.HebrewDescription,
-            ii.EnglishDescription,
-            ii.RequestedQty,
-            ii.RetailPrice
-        FROM InquiryItems ii
+            sr.supplier_id,
+            sr.response_date,
+            ii.item_id,
+            ii.hebrew_description,
+            ii.english_description,
+            ii.requested_qty,
+            ii.retail_price
+        FROM inquiry_items ii
         CROSS JOIN (
-            SELECT DISTINCT SupplierID, ResponseDate 
-            FROM ResponseStats
-            WHERE ResponseItemID IS NOT NULL
+            SELECT DISTINCT supplier_id, response_date 
+            FROM response_stats
+            WHERE response_item_id IS NOT NULL
         ) sr
         WHERE NOT EXISTS (
             SELECT 1 
-            FROM ResponseStats rs 
-            WHERE rs.ResponseItemID = ii.ItemID
-            AND rs.SupplierID = sr.SupplierID
-            AND date(rs.ResponseDate) = date(sr.ResponseDate)
+            FROM response_stats rs 
+            WHERE rs.response_item_id = ii.item_id
+            AND rs.supplier_id = sr.supplier_id
+            AND date(rs.response_date) = date(sr.response_date)
         )
     )
     SELECT 
-        date(rs.ResponseDate) as date,
-        rs.SupplierID as supplierId,
-        s.Name as supplierName,
-        ss.TotalCount as itemCount,
-        ss.ExtraCount as extraItemsCount,
-        ss.ReplacementCount as replacementsCount,
+        date(rs.response_date) as date,
+        rs.supplier_id,
+        s.name as supplier_name,
+        ss.total_count as item_count,
+        ss.extra_count as extra_items_count,
+        ss.replacement_count as replacements_count,
         (
-            SELECT COUNT(DISTINCT ItemID)
-            FROM MissingItems mi
-            WHERE mi.SupplierID = rs.SupplierID
-            AND date(mi.ResponseDate) = date(rs.ResponseDate)
-        ) as missingItemsCount,
+            SELECT COUNT(DISTINCT item_id)
+            FROM missing_items mi
+            WHERE mi.supplier_id = rs.supplier_id
+            AND date(mi.response_date) = date(rs.response_date)
+        ) as missing_items_count,
         (
             SELECT json_group_array(
                 json_object(
-                    'itemId', ItemID,
-                    'hebrewDescription', HebrewDescription,
-                    'englishDescription', EnglishDescription,
-                    'requestedQty', RequestedQty,
-                    'retailPrice', RetailPrice
+                    'item_id', item_id,
+                    'hebrew_description', hebrew_description,
+                    'english_description', english_description,
+                    'requested_qty', requested_qty,
+                    'retail_price', retail_price
                 )
             )
             FROM (
                 SELECT DISTINCT 
-                    ItemID,
-                    HebrewDescription,
-                    EnglishDescription,
-                    RequestedQty,
-                    RetailPrice
-                FROM ResponseStats
-                WHERE ItemStatus = 'extra'
-                AND SupplierID = rs.SupplierID
-                AND date(ResponseDate) = date(rs.ResponseDate)
+                    item_id,
+                    hebrew_description,
+                    english_description,
+                    requested_qty,
+                    retail_price
+                FROM response_stats
+                WHERE item_status = 'extra'
+                AND supplier_id = rs.supplier_id
+                AND date(response_date) = date(rs.response_date)
                 LIMIT 100
             )
-        ) as extraItems,
+        ) as extra_items,
         (
             SELECT json_group_array(
                 json_object(
-                    'original', ResponseItemID,
-                    'replacement', ReplacementID,
-                    'hebrewDescription', HebrewDescription,
-                    'englishDescription', EnglishDescription,
-                    'requestedQty', RequestedQty,
-                    'retailPrice', RetailPrice
+                    'original', response_item_id,
+                    'replacement', replacement_id,
+                    'hebrew_description', hebrew_description,
+                    'english_description', english_description,
+                    'requested_qty', requested_qty,
+                    'retail_price', retail_price
                 )
             )
             FROM (
                 SELECT DISTINCT 
-                    ResponseItemID,
-                    ReplacementID,
-                    HebrewDescription,
-                    EnglishDescription,
-                    RequestedQty,
-                    RetailPrice
-                FROM ResponseStats
-                WHERE ItemStatus = 'replacement'
-                AND SupplierID = rs.SupplierID
-                AND date(ResponseDate) = date(rs.ResponseDate)
+                    response_item_id,
+                    replacement_id,
+                    hebrew_description,
+                    english_description,
+                    requested_qty,
+                    retail_price
+                FROM response_stats
+                WHERE item_status = 'replacement'
+                AND supplier_id = rs.supplier_id
+                AND date(response_date) = date(rs.response_date)
             )
         ) as replacements,
         (
             SELECT json_group_array(
                 json_object(
-                    'itemId', ItemID,
-                    'hebrewDescription', HebrewDescription,
-                    'englishDescription', EnglishDescription,
-                    'requestedQty', RequestedQty,
-                    'retailPrice', RetailPrice
+                    'item_id', item_id,
+                    'hebrew_description', hebrew_description,
+                    'english_description', english_description,
+                    'requested_qty', requested_qty,
+                    'retail_price', retail_price
                 )
             )
             FROM (
                 SELECT DISTINCT 
-                    ItemID,
-                    HebrewDescription,
-                    EnglishDescription,
-                    RequestedQty,
-                    RetailPrice
-                FROM MissingItems mi
-                WHERE mi.SupplierID = rs.SupplierID
-                AND date(mi.ResponseDate) = date(rs.ResponseDate)
+                    item_id,
+                    hebrew_description,
+                    english_description,
+                    requested_qty,
+                    retail_price
+                FROM missing_items mi
+                WHERE mi.supplier_id = rs.supplier_id
+                AND date(mi.response_date) = date(rs.response_date)
             )
-        ) as missingItems,
+        ) as missing_items,
         COALESCE(
             (
-                SELECT GROUP_CONCAT(DISTINCT PromotionName)
+                SELECT GROUP_CONCAT(DISTINCT promotion_name)
                 FROM check_tables ct
-                LEFT JOIN SupplierResponse sr2 ON ct.has_supplier_response = 1
+                LEFT JOIN supplier_response sr2 ON ct.has_supplier_response = 1
                 WHERE ct.has_supplier_response = 1
-                AND sr2.SupplierID = rs.SupplierID
-                AND sr2.IsPromotion = 1
-                AND date(sr2.ResponseDate) = date(rs.ResponseDate)
+                AND sr2.supplier_id = rs.supplier_id
+                AND sr2.is_promotion = 1
+                AND date(sr2.response_date) = date(rs.response_date)
             ),
             ''
-        ) as debugPromotions,
+        ) as debug_promotions,
         (
             SELECT json_group_array(
                 json_object(
-                    'itemId', ResponseItemID,
-                    'priceQuoted', PriceQuoted,
-                    'status', COALESCE(ResponseStatus, ''),
-                    'responseId', SupplierResponseID,
-                    'hebrewDescription', HebrewDescription,
-                    'englishDescription', EnglishDescription,
-                    'itemType', ItemStatus,
-                    'itemKey', CASE 
-                        WHEN ItemStatus = 'replacement' 
-                        THEN 'ref-' || ResponseItemID || '-' || ReplacementID
-                        ELSE 'resp-' || ResponseItemID
+                    'item_id', response_item_id,
+                    'price_quoted', price_quoted,
+                    'status', COALESCE(response_status, ''),
+                    'response_id', supplier_response_id,
+                    'hebrew_description', hebrew_description,
+                    'english_description', english_description,
+                    'item_type', item_status,
+                    'item_key', CASE 
+                        WHEN item_status = 'replacement' 
+                        THEN 'ref-' || response_item_id || '-' || replacement_id
+                        ELSE 'resp-' || response_item_id
                     END
                 )
             )
             FROM (
                 SELECT DISTINCT 
-                    ResponseItemID,
-                    PriceQuoted,
-                    ResponseStatus,
-                    SupplierResponseID,
-                    HebrewDescription,
-                    EnglishDescription,
-                    ItemStatus,
-                    ReplacementID
-                FROM ResponseStats
-                WHERE SupplierID = rs.SupplierID
-                AND date(ResponseDate) = date(rs.ResponseDate)
-                AND ResponseItemID IS NOT NULL
+                    response_item_id,
+                    price_quoted,
+                    response_status,
+                    supplier_response_id,
+                    hebrew_description,
+                    english_description,
+                    item_status,
+                    replacement_id
+                FROM response_stats
+                WHERE supplier_id = rs.supplier_id
+                AND date(response_date) = date(rs.response_date)
+                AND response_item_id IS NOT NULL
             )
         ) as items
-    FROM ResponseStats rs
-    JOIN Supplier s ON rs.SupplierID = s.SupplierID
-    JOIN SupplierStats ss ON rs.SupplierID = ss.SupplierID 
-        AND date(rs.ResponseDate) = date(ss.ResponseDate)
-    WHERE rs.ResponseItemID IS NOT NULL
-    GROUP BY date(rs.ResponseDate), rs.SupplierID, s.Name
-    ORDER BY rs.ResponseDate DESC`;
+    FROM response_stats rs
+    JOIN supplier s ON rs.supplier_id = s.supplier_id
+    JOIN supplier_stats ss ON rs.supplier_id = ss.supplier_id 
+        AND date(rs.response_date) = date(ss.response_date)
+    WHERE rs.response_item_id IS NOT NULL
+    GROUP BY date(rs.response_date), rs.supplier_id, s.name
+    ORDER BY rs.response_date DESC`;

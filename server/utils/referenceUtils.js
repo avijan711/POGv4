@@ -2,8 +2,8 @@ async function cleanupSelfReferences(db) {
     return new Promise((resolve, reject) => {
         console.log('Cleaning up self-references...');
         db.run(
-            `DELETE FROM ItemReferenceChange 
-             WHERE OriginalItemID = NewReferenceID`,
+            `DELETE FROM item_reference_change 
+             WHERE original_item_id = new_reference_id`,
             function(err) {
                 if (err) {
                     console.error('Error cleaning up self-references:', err);
@@ -20,7 +20,7 @@ async function cleanupSelfReferences(db) {
 async function checkReferenceExists(db, originalItemId, newReferenceId) {
     return new Promise((resolve, reject) => {
         db.get(
-            'SELECT ChangeID FROM ItemReferenceChange WHERE OriginalItemID = ? AND NewReferenceID = ?',
+            'SELECT change_id FROM item_reference_change WHERE original_item_id = ? AND new_reference_id = ?',
             [originalItemId, newReferenceId],
             (err, row) => {
                 if (err) reject(err);
@@ -34,7 +34,7 @@ async function addReferenceChange(db, originalItemId, newReferenceId, supplierId
     return new Promise((resolve, reject) => {
         const now = new Date().toISOString();
         db.run(
-            `INSERT INTO ItemReferenceChange (OriginalItemID, NewReferenceID, SupplierID, ChangeDate, Notes)
+            `INSERT INTO item_reference_change (original_item_id, new_reference_id, supplier_id, change_date, notes)
              VALUES (?, ?, ?, ?, ?)`,
             [originalItemId, newReferenceId, supplierId, now, notes],
             function(err) {
@@ -57,7 +57,7 @@ async function getReferenceChain(db, itemId, visited = new Set()) {
 
     return new Promise((resolve, reject) => {
         db.all(
-            'SELECT NewReferenceID FROM ItemReferenceChange WHERE OriginalItemID = ?',
+            'SELECT new_reference_id FROM item_reference_change WHERE original_item_id = ?',
             [itemId],
             async (err, rows) => {
                 if (err) {
@@ -67,7 +67,7 @@ async function getReferenceChain(db, itemId, visited = new Set()) {
 
                 const chain = [itemId];
                 for (const row of rows) {
-                    const subChain = await getReferenceChain(db, row.NewReferenceID, visited);
+                    const subChain = await getReferenceChain(db, row.new_reference_id, visited);
                     chain.push(...subChain);
                 }
                 resolve(chain);

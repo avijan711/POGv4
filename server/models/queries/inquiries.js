@@ -1,199 +1,202 @@
 function getInquiriesQuery(status) {
     return `
-        WITH InquiryStats AS (
+        WITH inquiry_stats AS (
             SELECT 
-                i.InquiryID,
-                COUNT(DISTINCT ii.InquiryItemID) as itemCount,
-                COUNT(DISTINCT sr.SupplierID) as respondedSuppliersCount,
-                SUM(CASE WHEN sr.SupplierResponseID IS NULL THEN 1 ELSE 0 END) as notRespondedItemsCount,
-                COUNT(DISTINCT irc.ChangeID) as totalReplacementsCount
-            FROM Inquiry i
-            LEFT JOIN InquiryItem ii ON i.InquiryID = ii.InquiryID
-            LEFT JOIN SupplierResponse sr ON sr.InquiryID = i.InquiryID AND sr.Status != 'pending'
-            LEFT JOIN ItemReferenceChange irc ON irc.OriginalItemID = ii.ItemID
-            GROUP BY i.InquiryID
+                i.inquiry_id,
+                COUNT(DISTINCT ii.inquiry_item_id) as item_count,
+                COUNT(DISTINCT sr.supplier_id) as responded_suppliers_count,
+                SUM(CASE WHEN sr.supplier_response_id IS NULL THEN 1 ELSE 0 END) as not_responded_items_count,
+                COUNT(DISTINCT irc.change_id) as total_replacements_count
+            FROM inquiry i
+            LEFT JOIN inquiry_item ii ON i.inquiry_id = ii.inquiry_id
+            LEFT JOIN supplier_response sr ON sr.inquiry_id = i.inquiry_id AND sr.status != 'pending'
+            LEFT JOIN item_reference_change irc ON irc.original_item_id = ii.item_id
+            GROUP BY i.inquiry_id
         )
         SELECT 
-            i.InquiryID as inquiryID,
-            i.InquiryNumber as customNumber,
-            i.CreatedDate as date,
-            COALESCE(i.Status, 'new') as status,
-            COALESCE(s.itemCount, 0) as itemCount,
-            COALESCE(s.respondedSuppliersCount, 0) as respondedSuppliersCount,
-            COALESCE(s.notRespondedItemsCount, 0) as notRespondedItemsCount,
-            COALESCE(s.totalReplacementsCount, 0) as totalReplacementsCount
-        FROM Inquiry i
-        LEFT JOIN InquiryStats s ON i.InquiryID = s.InquiryID
-        ${status ? 'WHERE i.Status = ?' : ''}
-        ORDER BY i.CreatedDate DESC`;
+            i.inquiry_id,
+            i.inquiry_number as custom_number,
+            i.date,
+            COALESCE(i.status, 'new') as status,
+            COALESCE(s.item_count, 0) as item_count,
+            COALESCE(s.responded_suppliers_count, 0) as responded_suppliers_count,
+            COALESCE(s.not_responded_items_count, 0) as not_responded_items_count,
+            COALESCE(s.total_replacements_count, 0) as total_replacements_count
+        FROM inquiry i
+        LEFT JOIN inquiry_stats s ON i.inquiry_id = s.inquiry_id
+        ${status ? 'WHERE i.status = ?' : ''}
+        ORDER BY i.date DESC`;
 }
 
 function getInquiryByIdQuery() {
     return `
-        WITH InquiryData AS (
+        WITH inquiry_data AS (
             SELECT 
-                i.InquiryID as inquiryID,
-                i.InquiryNumber as customNumber,
-                i.CreatedDate as date,
-                COALESCE(i.Status, 'new') as status
-            FROM Inquiry i
-            WHERE i.InquiryID = ?
+                i.inquiry_id,
+                i.inquiry_number as custom_number,
+                i.date,
+                COALESCE(i.status, 'new') as status
+            FROM inquiry i
+            WHERE i.inquiry_id = ?
         ),
-        ReferenceChanges AS (
+        reference_changes AS (
             -- Get all reference changes where inquiry items are either original or new reference
             SELECT 
-                irc.OriginalItemID,
-                irc.ChangeID,
-                irc.NewReferenceID,
-                irc.Notes,
-                s.Name as SupplierName,
-                irc.ChangeDate,
+                irc.original_item_id,
+                irc.change_id,
+                irc.new_reference_id,
+                irc.notes,
+                s.name as supplier_name,
+                irc.change_date,
                 'supplier' as source,
-                ii.InquiryID
-            FROM ItemReferenceChange irc
-            LEFT JOIN SupplierResponse sr ON irc.SupplierID = sr.SupplierID
-            LEFT JOIN Supplier s ON irc.SupplierID = s.SupplierID
-            JOIN InquiryItem ii ON (
-                ii.ItemID = irc.OriginalItemID OR 
-                ii.ItemID = irc.NewReferenceID OR
-                ii.OriginalItemID = irc.OriginalItemID OR
-                ii.OriginalItemID = irc.NewReferenceID
+                ii.inquiry_id
+            FROM item_reference_change irc
+            LEFT JOIN supplier_response sr ON irc.supplier_id = sr.supplier_id
+            LEFT JOIN supplier s ON irc.supplier_id = s.supplier_id
+            JOIN inquiry_item ii ON (
+                ii.item_id = irc.original_item_id OR 
+                ii.item_id = irc.new_reference_id OR
+                ii.original_item_id = irc.original_item_id OR
+                ii.original_item_id = irc.new_reference_id
             )
-            WHERE ii.InquiryID = ?
+            WHERE ii.inquiry_id = ?
         ),
-        SupplierResponses AS (
+        supplier_responses AS (
             SELECT 
-                sr.ItemID,
+                sr.item_id,
                 json_group_array(
                     json_object(
-                        'responseId', sr.SupplierResponseID,
-                        'supplierId', sr.SupplierID,
-                        'supplierName', s.Name,
-                        'date', sr.ResponseDate,
-                        'priceQuoted', COALESCE(sr.PriceQuoted, 0),
-                        'status', sr.Status,
-                        'notes', sri.Notes,
-                        'hsCode', sri.HSCode,
-                        'englishDescription', sri.EnglishDescription,
-                        'newReferenceID', sri.NewReferenceID
+                        'response_id', sr.supplier_response_id,
+                        'supplier_id', sr.supplier_id,
+                        'supplier_name', s.name,
+                        'date', sr.response_date,
+                        'price_quoted', COALESCE(sr.price_quoted, 0),
+                        'status', sr.status,
+                        'notes', COALESCE(sri.notes, ''),
+                        'hs_code', COALESCE(sri.hs_code, ''),
+                        'english_description', COALESCE(sri.english_description, ''),
+                        'origin', COALESCE(sri.origin, ''),
+                        'new_reference_id', sri.new_reference_id
                     )
                 ) as responses
-            FROM SupplierResponse sr
-            JOIN Supplier s ON sr.SupplierID = s.SupplierID
-            JOIN SupplierResponseItem sri ON sr.SupplierResponseID = sri.SupplierResponseID
-            WHERE sr.InquiryID = ?
-            GROUP BY sr.ItemID
+            FROM supplier_response sr
+            JOIN supplier s ON sr.supplier_id = s.supplier_id
+            LEFT JOIN supplier_response_item sri ON sr.supplier_response_id = sri.supplier_response_id
+            WHERE sr.inquiry_id = ?
+            GROUP BY sr.item_id
         ),
-        ItemsData AS (
+        items_data AS (
             SELECT 
-                ii.InquiryItemID as inquiryItemID,
-                ii.ItemID as itemID,
-                ii.OriginalItemID as originalItemID,
-                ii.HebrewDescription as hebrewDescription,
-                COALESCE(ii.EnglishDescription, '') as englishDescription,
-                COALESCE(CAST(ii.ImportMarkup AS REAL), 1.30) as importMarkup,
-                COALESCE(ii.HSCode, '') as hsCode,
-                COALESCE(ii.QtyInStock, 0) as qtyInStock,
-                COALESCE(ii.SoldThisYear, 0) as soldThisYear,
-                COALESCE(ii.SoldLastYear, 0) as soldLastYear,
-                ii.RetailPrice as retailPrice,
-                COALESCE(ii.RequestedQty, 0) as requestedQty,
-                ii.NewReferenceID as newReferenceID,
-                ii.ReferenceNotes as referenceNotes,
+                ii.inquiry_item_id,
+                ii.item_id,
+                ii.original_item_id,
+                ii.hebrew_description,
+                COALESCE(ii.english_description, '') as english_description,
+                COALESCE(CAST(ii.import_markup AS REAL), 1.30) as import_markup,
+                COALESCE(ii.hs_code, '') as hs_code,
+                COALESCE(ii.origin, '') as origin,
+                COALESCE(ii.qty_in_stock, 0) as qty_in_stock,
+                COALESCE(ii.sold_this_year, 0) as sold_this_year,
+                COALESCE(ii.sold_last_year, 0) as sold_last_year,
+                ii.retail_price,
+                COALESCE(ii.requested_qty, 0) as requested_qty,
+                ii.new_reference_id,
+                ii.reference_notes,
                 CASE 
-                    WHEN ii.NewReferenceID IS NOT NULL THEN 1
+                    WHEN ii.new_reference_id IS NOT NULL THEN 1
                     WHEN EXISTS (
-                        SELECT 1 FROM ReferenceChanges rc 
-                        WHERE rc.OriginalItemID = ii.ItemID OR rc.OriginalItemID = ii.OriginalItemID
+                        SELECT 1 FROM reference_changes rc 
+                        WHERE rc.original_item_id = ii.item_id OR rc.original_item_id = ii.original_item_id
                     ) THEN 1 
                     ELSE 0 
-                END as hasReferenceChange,
+                END as has_reference_change,
                 CASE 
                     WHEN EXISTS (
-                        SELECT 1 FROM ReferenceChanges rc 
-                        WHERE rc.NewReferenceID = ii.ItemID OR rc.NewReferenceID = ii.OriginalItemID
+                        SELECT 1 FROM reference_changes rc 
+                        WHERE rc.new_reference_id = ii.item_id OR rc.new_reference_id = ii.original_item_id
                     ) THEN 1 
                     ELSE 0 
-                END as isReferencedBy,
+                END as is_referenced_by,
                 CASE
-                    WHEN ii.NewReferenceID IS NOT NULL THEN json_object(
-                        'newReferenceID', ii.NewReferenceID,
+                    WHEN ii.new_reference_id IS NOT NULL THEN json_object(
+                        'new_reference_id', ii.new_reference_id,
                         'source', 'inquiry_item',
-                        'notes', COALESCE(ii.ReferenceNotes, '')
+                        'notes', COALESCE(ii.reference_notes, '')
                     )
                     ELSE (
                         SELECT json_object(
-                            'changeId', rc.ChangeID,
-                            'newReferenceID', rc.NewReferenceID,
+                            'change_id', rc.change_id,
+                            'new_reference_id', rc.new_reference_id,
                             'source', rc.source,
-                            'supplierName', COALESCE(rc.SupplierName, ''),
-                            'notes', COALESCE(rc.Notes, '')
+                            'supplier_name', COALESCE(rc.supplier_name, ''),
+                            'notes', COALESCE(rc.notes, '')
                         )
-                        FROM ReferenceChanges rc
-                        WHERE rc.OriginalItemID = ii.ItemID OR rc.OriginalItemID = ii.OriginalItemID
-                        ORDER BY rc.ChangeDate DESC
+                        FROM reference_changes rc
+                        WHERE rc.original_item_id = ii.item_id OR rc.original_item_id = ii.original_item_id
+                        ORDER BY rc.change_date DESC
                         LIMIT 1
                     )
-                END as referenceChange,
+                END as reference_change,
                 COALESCE(
                     (
                         SELECT json_group_array(
                             json_object(
-                                'itemID', rc.OriginalItemID,
-                                'referenceChange', json_object(
-                                    'changeId', rc.ChangeID,
+                                'item_id', rc.original_item_id,
+                                'reference_change', json_object(
+                                    'change_id', rc.change_id,
                                     'source', rc.source,
-                                    'supplierName', COALESCE(rc.SupplierName, ''),
-                                    'notes', COALESCE(rc.Notes, '')
+                                    'supplier_name', COALESCE(rc.supplier_name, ''),
+                                    'notes', COALESCE(rc.notes, '')
                                 )
                             )
                         )
-                        FROM ReferenceChanges rc
-                        WHERE rc.NewReferenceID = ii.ItemID OR rc.NewReferenceID = ii.OriginalItemID
+                        FROM reference_changes rc
+                        WHERE rc.new_reference_id = ii.item_id OR rc.new_reference_id = ii.original_item_id
                     ),
                     '[]'
-                ) as referencingItems,
-                COALESCE(sr.responses, '[]') as supplierResponses
-            FROM InquiryItem ii
-            LEFT JOIN SupplierResponses sr ON ii.ItemID = sr.ItemID
-            WHERE ii.InquiryID = ?
+                ) as referencing_items,
+                COALESCE(sr.responses, '[]') as supplier_responses
+            FROM inquiry_item ii
+            LEFT JOIN supplier_responses sr ON ii.item_id = sr.item_id
+            WHERE ii.inquiry_id = ?
         )
         SELECT 
             json_object(
-                'inquiryID', id.inquiryID,
-                'customNumber', id.customNumber,
+                'inquiry_id', id.inquiry_id,
+                'custom_number', id.custom_number,
                 'date', id.date,
                 'status', id.status
             ) as inquiry,
             COALESCE(
                 json_group_array(
                     json_object(
-                        'inquiryItemID', itd.inquiryItemID,
-                        'itemID', itd.itemID,
-                        'originalItemID', itd.originalItemID,
-                        'hebrewDescription', itd.hebrewDescription,
-                        'englishDescription', itd.englishDescription,
-                        'importMarkup', itd.importMarkup,
-                        'hsCode', itd.hsCode,
-                        'qtyInStock', itd.qtyInStock,
-                        'soldThisYear', itd.soldThisYear,
-                        'soldLastYear', itd.soldLastYear,
-                        'retailPrice', itd.retailPrice,
-                        'requestedQty', itd.requestedQty,
-                        'newReferenceID', itd.newReferenceID,
-                        'referenceNotes', COALESCE(itd.referenceNotes, ''),
-                        'hasReferenceChange', itd.hasReferenceChange,
-                        'isReferencedBy', itd.isReferencedBy,
-                        'referenceChange', COALESCE(itd.referenceChange, 'null'),
-                        'referencingItems', COALESCE(itd.referencingItems, '[]'),
-                        'supplierResponses', json(itd.supplierResponses)
+                        'inquiry_item_id', itd.inquiry_item_id,
+                        'item_id', itd.item_id,
+                        'original_item_id', itd.original_item_id,
+                        'hebrew_description', itd.hebrew_description,
+                        'english_description', itd.english_description,
+                        'import_markup', itd.import_markup,
+                        'hs_code', itd.hs_code,
+                        'origin', itd.origin,
+                        'qty_in_stock', itd.qty_in_stock,
+                        'sold_this_year', itd.sold_this_year,
+                        'sold_last_year', itd.sold_last_year,
+                        'retail_price', itd.retail_price,
+                        'requested_qty', itd.requested_qty,
+                        'new_reference_id', itd.new_reference_id,
+                        'reference_notes', COALESCE(itd.reference_notes, ''),
+                        'has_reference_change', itd.has_reference_change,
+                        'is_referenced_by', itd.is_referenced_by,
+                        'reference_change', COALESCE(itd.reference_change, 'null'),
+                        'referencing_items', COALESCE(itd.referencing_items, '[]'),
+                        'supplier_responses', json(itd.supplier_responses)
                     )
                 ),
                 '[]'
             ) as items
-        FROM InquiryData id
-        LEFT JOIN ItemsData itd ON 1=1
-        GROUP BY id.inquiryID`;
+        FROM inquiry_data id
+        LEFT JOIN items_data itd ON 1=1
+        GROUP BY id.inquiry_id`;
 }
 
 module.exports = {

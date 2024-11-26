@@ -1,158 +1,150 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Paper,
   Box,
   Typography,
-  Alert,
-  LinearProgress,
+  Paper,
+  Grid,
+  Chip,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
 import {
-  ItemStatsDialog,
-  DeleteDialog,
-  ResponseHeader,
-  ResponseAccordion,
-  useSupplierResponses
-} from './SupplierResponse';
-import { useParams } from 'react-router-dom';
+  Business as BusinessIcon,
+  AttachMoney as AttachMoneyIcon,
+  LocalOffer as LocalOfferIcon,
+  Refresh as RefreshIcon,
+} from '@mui/icons-material';
 
-function SupplierResponseList({ responses = [], onRefresh }) {
-  const { inquiryId } = useParams();
-  const [statsDialogOpen, setStatsDialogOpen] = useState(false);
-  const [statsDialogTitle, setStatsDialogTitle] = useState('');
-  const [statsDialogItems, setStatsDialogItems] = useState([]);
-  const [statsDialogType, setStatsDialogType] = useState('missing'); // Initialize with a valid type
+function SupplierResponseList({ responses, onRefresh }) {
+  if (!responses || responses.length === 0) {
+    return null;
+  }
 
-  // Ensure responses is always an array and items are properly formatted
-  const safeResponses = Array.isArray(responses) ? responses.map(response => {
-    if (!response) return null;
-    return {
-      ...response,
-      items: Array.isArray(response.items) ? response.items.map(item => {
-        if (!item) return null;
-        return {
-          ...item,
-          itemId: item.itemId || '',
-          hebrewDescription: item.hebrewDescription || '',
-          englishDescription: item.englishDescription || '',
-          priceQuoted: item.priceQuoted || 0,
-          status: item.status || 'Pending',
-          itemType: item.itemType || 'regular'
+  // Group responses by supplier
+  const groupedResponses = responses.reduce((acc, item) => {
+    if (!item.supplier_responses) return acc;
+
+    item.supplier_responses.forEach(response => {
+      const key = response.supplier_id;
+      if (!acc[key]) {
+        acc[key] = {
+          supplier_name: response.supplier_name,
+          responses: []
         };
-      }).filter(Boolean) : [],
-      date: response.date || new Date().toISOString(),
-      supplierId: response.supplierId || '',
-      supplierName: response.supplierName || 'Unknown Supplier'
-    };
-  }).filter(Boolean) : [];
+      }
+      acc[key].responses.push({
+        ...response,
+        item_id: item.item_id,
+        hebrew_description: item.hebrew_description,
+        english_description: item.english_description
+      });
+    });
+    return acc;
+  }, {});
 
-  const {
-    deleteDialogOpen,
-    deleteType,
-    itemToDelete,
-    error,
-    isDeleting,
-    isLoading,
-    handleDeleteClick,
-    handleDeleteConfirm,
-    closeDeleteDialog,
-    setError
-  } = useSupplierResponses(inquiryId, safeResponses);
+  const formatPrice = (price) => {
+    if (!price) return '₪0.00';
+    return `₪${Number(price).toFixed(2)}`;
+  };
 
-  const handleShowStats = (title, items, type) => {
-    // Ensure items is an array and all items have required properties
-    const safeItems = Array.isArray(items) ? items.map(item => {
-      if (!item) return null;
-      return {
-        ...item,
-        itemId: item.itemId || '',
-        hebrewDescription: item.hebrewDescription || '',
-        englishDescription: item.englishDescription || '',
-        priceQuoted: item.priceQuoted || 0,
-        status: item.status || 'Pending',
-        itemType: item.itemType || 'regular'
-      };
-    }).filter(Boolean) : [];
-
-    setStatsDialogTitle(title);
-    setStatsDialogItems(safeItems);
-    setStatsDialogType(type || 'missing'); // Ensure a valid type is always set
-    setStatsDialogOpen(true);
+  const formatDate = (date) => {
+    if (!date) return '';
+    return new Date(date).toLocaleDateString();
   };
 
   return (
-    <Paper sx={{ p: 3, backgroundColor: '#f8f9fa' }} elevation={0}>
-      <ResponseHeader responsesCount={safeResponses?.length || 0} />
+    <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6">
+          Supplier Responses
+        </Typography>
+        <Tooltip title="Refresh Responses">
+          <IconButton onClick={onRefresh} size="small">
+            <RefreshIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
-      {error && (
-        <Alert 
-          severity="error" 
-          sx={{ mb: 2 }}
-          onClose={() => setError(null)}
-        >
-          {error}
-        </Alert>
-      )}
+      <Grid container spacing={2}>
+        {Object.entries(groupedResponses).map(([supplierId, data]) => (
+          <Grid item xs={12} key={supplierId}>
+            <Paper sx={{ p: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                <BusinessIcon color="primary" />
+                <Typography variant="subtitle1" fontWeight="bold">
+                  {data.supplier_name}
+                </Typography>
+                <Chip
+                  label={`${data.responses.length} Items`}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                />
+              </Box>
 
-      {isLoading && safeResponses.length === 0 ? (
-        <Box sx={{ width: '100%', textAlign: 'center', py: 4 }}>
-          <LinearProgress 
-            sx={{ 
-              maxWidth: 300,
-              mx: 'auto',
-              mb: 2,
-              height: 6,
-              borderRadius: 3
-            }}
-          />
-          <Typography color="textSecondary">
-            Loading supplier responses...
-          </Typography>
-        </Box>
-      ) : (
-        <>
-          {safeResponses.map((response) => (
-            <ResponseAccordion
-              key={`${response.date}-${response.supplierId}`}
-              response={response}
-              onDelete={handleDeleteClick}
-              onShowStats={handleShowStats}
-              isLoading={isLoading}
-            />
-          ))}
-          
-          {isLoading && safeResponses.length > 0 && (
-            <Box sx={{ width: '100%', textAlign: 'center', py: 2 }}>
-              <LinearProgress 
-                sx={{ 
-                  maxWidth: 200,
-                  mx: 'auto',
-                  height: 4,
-                  borderRadius: 2
-                }}
-              />
-            </Box>
-          )}
-        </>
-      )}
+              <Grid container spacing={2}>
+                {data.responses.map((response, index) => (
+                  <Grid item xs={12} sm={6} md={4} key={`${response.supplier_response_id}-${index}`}>
+                    <Paper 
+                      variant="outlined" 
+                      sx={{ 
+                        p: 2,
+                        backgroundColor: response.is_promotion ? 'rgba(156, 39, 176, 0.1)' : 'inherit'
+                      }}
+                    >
+                      <Box sx={{ mb: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Item ID
+                        </Typography>
+                        <Typography>{response.item_id}</Typography>
+                      </Box>
 
-      <ItemStatsDialog
-        open={statsDialogOpen}
-        onClose={() => setStatsDialogOpen(false)}
-        title={statsDialogTitle}
-        items={statsDialogItems}
-        type={statsDialogType}
-      />
+                      <Box sx={{ mb: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Description
+                        </Typography>
+                        <Typography>{response.hebrew_description}</Typography>
+                        <Typography variant="body2">{response.english_description}</Typography>
+                      </Box>
 
-      <DeleteDialog
-        open={deleteDialogOpen}
-        onClose={closeDeleteDialog}
-        onConfirm={handleDeleteConfirm}
-        itemToDelete={itemToDelete}
-        deleteType={deleteType}
-        error={error}
-        isDeleting={isDeleting}
-      />
-    </Paper>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <Chip
+                          icon={<AttachMoneyIcon />}
+                          label={formatPrice(response.price_quoted)}
+                          color={response.is_promotion ? "secondary" : "default"}
+                          variant="outlined"
+                          size="small"
+                        />
+                        {response.is_promotion && (
+                          <Chip
+                            icon={<LocalOfferIcon />}
+                            label="Promotion"
+                            color="secondary"
+                            size="small"
+                          />
+                        )}
+                      </Box>
+
+                      <Typography variant="caption" color="text.secondary">
+                        Response Date: {formatDate(response.response_date)}
+                      </Typography>
+
+                      {response.notes && (
+                        <Box sx={{ mt: 1 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Notes: {response.notes}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+            </Paper>
+          </Grid>
+        ))}
+      </Grid>
+    </Box>
   );
 }
 

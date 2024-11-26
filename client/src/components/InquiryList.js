@@ -40,7 +40,7 @@ import { formatIlsPrice } from '../utils/priceUtils';
 import { dataDebug, perfDebug } from '../utils/debug';
 
 function InquiryItemsDialog({ open, onClose, items, onViewDetails }) {
-  const [sortField, setSortField] = useState('itemID');
+  const [sortField, setSortField] = useState('item_id');
   const [sortDirection, setSortDirection] = useState('asc');
 
   const handleSort = (field) => {
@@ -98,36 +98,36 @@ function InquiryItemsDialog({ open, onClose, items, onViewDetails }) {
             <TableHead>
               <TableRow>
                 <TableCell 
-                  onClick={() => handleSort('itemID')}
+                  onClick={() => handleSort('item_id')}
                   sx={{ cursor: 'pointer' }}
                 >
-                  Item ID <SortIcon field="itemID" />
+                  Item ID <SortIcon field="item_id" />
                 </TableCell>
                 <TableCell 
-                  onClick={() => handleSort('hebrewDescription')}
+                  onClick={() => handleSort('hebrew_description')}
                   sx={{ cursor: 'pointer' }}
                 >
-                  Hebrew Description <SortIcon field="hebrewDescription" />
+                  Hebrew Description <SortIcon field="hebrew_description" />
                 </TableCell>
                 <TableCell 
-                  onClick={() => handleSort('englishDescription')}
+                  onClick={() => handleSort('english_description')}
                   sx={{ cursor: 'pointer' }}
                 >
-                  English Description <SortIcon field="englishDescription" />
-                </TableCell>
-                <TableCell 
-                  align="right"
-                  onClick={() => handleSort('importMarkup')}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  Import Markup <SortIcon field="importMarkup" />
+                  English Description <SortIcon field="english_description" />
                 </TableCell>
                 <TableCell 
                   align="right"
-                  onClick={() => handleSort('retailPrice')}
+                  onClick={() => handleSort('import_markup')}
                   sx={{ cursor: 'pointer' }}
                 >
-                  Retail Price <SortIcon field="retailPrice" />
+                  Import Markup <SortIcon field="import_markup" />
+                </TableCell>
+                <TableCell 
+                  align="right"
+                  onClick={() => handleSort('retail_price')}
+                  sx={{ cursor: 'pointer' }}
+                >
+                  Retail Price <SortIcon field="retail_price" />
                 </TableCell>
               </TableRow>
             </TableHead>
@@ -138,13 +138,13 @@ function InquiryItemsDialog({ open, onClose, items, onViewDetails }) {
                 </TableRow>
               ) : (
                 sortedItems.map((item, index) => (
-                  <TableRow key={`${item.inquiryItemID || item.itemID || index}`}>
-                    <TableCell>{item.itemID}</TableCell>
-                    <TableCell>{item.hebrewDescription}</TableCell>
-                    <TableCell>{item.englishDescription}</TableCell>
-                    <TableCell align="right">{item.importMarkup?.toFixed(2)}</TableCell>
+                  <TableRow key={`${item.inquiry_item_id || item.item_id || index}`}>
+                    <TableCell>{item.item_id}</TableCell>
+                    <TableCell>{item.hebrew_description}</TableCell>
+                    <TableCell>{item.english_description}</TableCell>
+                    <TableCell align="right">{item.import_markup?.toFixed(2)}</TableCell>
                     <TableCell align="right">
-                      {formatIlsPrice(item.retailPrice) || (
+                      {formatIlsPrice(item.retail_price) || (
                         <Typography variant="body2" color="error">
                           No Price
                         </Typography>
@@ -187,7 +187,7 @@ function InquiryList() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [inquiryItems, setInquiryItems] = useState([]);
   const [currentInquiryId, setCurrentInquiryId] = useState(null);
-  const [sortField, setSortField] = useState('customNumber');
+  const [sortField, setSortField] = useState('custom_number');
   const [sortDirection, setSortDirection] = useState('asc');
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [inquiryToDelete, setInquiryToDelete] = useState(null);
@@ -365,7 +365,7 @@ function InquiryList() {
         });
       }, 200);
 
-      await axios.delete(`${API_BASE_URL}/api/inquiries/${inquiryToDelete.inquiryID}`);
+      await axios.delete(`${API_BASE_URL}/api/inquiries/${inquiryToDelete.inquiry_id}`);
       clearInterval(progressInterval);
       setLoadingProgress(100);
       
@@ -428,10 +428,10 @@ function InquiryList() {
           <TableHead>
             <TableRow>
               <TableCell 
-                onClick={() => handleSort('customNumber')}
+                onClick={() => handleSort('custom_number')}
                 sx={{ cursor: 'pointer' }}
               >
-                Custom Number <SortIcon field="customNumber" />
+                Custom Number <SortIcon field="custom_number" />
               </TableCell>
               <TableCell 
                 onClick={() => handleSort('date')}
@@ -447,10 +447,10 @@ function InquiryList() {
               </TableCell>
               <TableCell 
                 align="right"
-                onClick={() => handleSort('itemCount')}
+                onClick={() => handleSort('item_count')}
                 sx={{ cursor: 'pointer' }}
               >
-                Items <SortIcon field="itemCount" />
+                Items <SortIcon field="item_count" />
               </TableCell>
               <TableCell>Response Stats</TableCell>
               <TableCell align="center">Actions</TableCell>
@@ -465,8 +465,8 @@ function InquiryList() {
               </TableRow>
             ) : (
               sortedInquiries.map((inquiry) => (
-                <TableRow key={inquiry.inquiryID}>
-                  <TableCell>{inquiry.customNumber}</TableCell>
+                <TableRow key={inquiry.inquiry_id}>
+                  <TableCell>{inquiry.custom_number}</TableCell>
                   <TableCell>{new Date(inquiry.date || 0).toLocaleString()}</TableCell>
                   <TableCell>
                     <Chip
@@ -475,27 +475,27 @@ function InquiryList() {
                       size="small"
                     />
                   </TableCell>
-                  <TableCell align="right">{inquiry.itemCount || 0}</TableCell>
+                  <TableCell align="right">{inquiry.item_count || 0}</TableCell>
                   <TableCell>
                     <Stack direction="row" spacing={1}>
                       <Chip
                         icon={<PeopleIcon />}
-                        label={`${inquiry.respondedSuppliersCount || 0} Suppliers`}
+                        label={`${inquiry.responded_suppliers_count || 0} Suppliers`}
                         color="primary"
                         size="small"
                       />
-                      {inquiry.notRespondedItemsCount > 0 && (
+                      {inquiry.not_responded_items_count > 0 && (
                         <Chip
                           icon={<WarningIcon />}
-                          label={`${inquiry.notRespondedItemsCount} Not Responded`}
+                          label={`${inquiry.not_responded_items_count} Not Responded`}
                           color="error"
                           size="small"
                         />
                       )}
-                      {inquiry.totalReplacementsCount > 0 && (
+                      {inquiry.total_replacements_count > 0 && (
                         <Chip
                           icon={<SwapHorizIcon />}
-                          label={`${inquiry.totalReplacementsCount} Replacements`}
+                          label={`${inquiry.total_replacements_count} Replacements`}
                           color="info"
                           size="small"
                         />
@@ -506,7 +506,7 @@ function InquiryList() {
                     <Tooltip title="Quick View">
                       <IconButton 
                         size="small"
-                        onClick={() => handleViewInquiry(inquiry.inquiryID)}
+                        onClick={() => handleViewInquiry(inquiry.inquiry_id)}
                       >
                         <ViewIcon />
                       </IconButton>
@@ -514,7 +514,7 @@ function InquiryList() {
                     <Tooltip title="View Details">
                       <IconButton 
                         size="small"
-                        onClick={() => navigate(`/inquiries/${inquiry.inquiryID}`)}
+                        onClick={() => navigate(`/inquiries/${inquiry.inquiry_id}`)}
                       >
                         <ArrowForwardIcon />
                       </IconButton>
@@ -522,7 +522,7 @@ function InquiryList() {
                     <Tooltip title="Export for Suppliers">
                       <IconButton 
                         size="small"
-                        onClick={() => handleExportInquiry(inquiry.inquiryID)}
+                        onClick={() => handleExportInquiry(inquiry.inquiry_id)}
                         disabled={isExporting}
                       >
                         <DownloadIcon />

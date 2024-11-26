@@ -23,21 +23,21 @@ function ItemTable({
     // Filter out self-references
     return items.filter(otherItem => {
       // Parse referenceChange if it's a string
-      const referenceChange = otherItem.referenceChange ? 
-        (typeof otherItem.referenceChange === 'string' ? 
-          JSON.parse(otherItem.referenceChange) : 
-          otherItem.referenceChange) : null;
+      const referenceChange = otherItem.reference_change ? 
+        (typeof otherItem.reference_change === 'string' ? 
+          JSON.parse(otherItem.reference_change) : 
+          otherItem.reference_change) : null;
 
       return referenceChange && 
-             referenceChange.newReferenceID === itemId && 
-             otherItem.itemID !== itemId; // Exclude self-references
+             referenceChange.new_reference_id === itemId && 
+             otherItem.item_id !== itemId; // Exclude self-references
     });
   };
 
   const handleReferenceClick = (e, itemId) => {
     e.stopPropagation();
     // Find the referenced item
-    const referencedItem = items.find(item => item.itemID === itemId);
+    const referencedItem = items.find(item => item.item_id === itemId);
     if (referencedItem) {
       onRowClick(referencedItem);
     }
@@ -45,24 +45,24 @@ function ItemTable({
 
   const processItem = (item) => {
     // Parse referenceChange if it's a string
-    const referenceChange = item.referenceChange ? 
-      (typeof item.referenceChange === 'string' ? 
-        JSON.parse(item.referenceChange) : 
-        item.referenceChange) : null;
+    const referenceChange = item.reference_change ? 
+      (typeof item.reference_change === 'string' ? 
+        JSON.parse(item.reference_change) : 
+        item.reference_change) : null;
 
     // Find items that reference this item
-    const referencingItems = findReferencingItems(item.itemID);
+    const referencingItems = findReferencingItems(item.item_id);
     const isNewReference = referencingItems.length > 0;
 
     // Check if this item has a self-reference
-    const isSelfReferenced = referenceChange && referenceChange.newReferenceID === item.itemID;
+    const isSelfReferenced = referenceChange && referenceChange.new_reference_id === item.item_id;
 
     return {
       ...item,
-      referenceChange: isSelfReferenced ? null : referenceChange, // Remove self-references
-      hasReferenceChange: !isSelfReferenced && referenceChange !== null,
-      isReferencedBy: isNewReference,
-      referencingItems
+      reference_change: isSelfReferenced ? null : referenceChange, // Remove self-references
+      has_reference_change: !isSelfReferenced && referenceChange !== null,
+      is_referenced_by: isNewReference,
+      referencing_items: referencingItems
     };
   };
 
@@ -106,12 +106,12 @@ function ItemTable({
           ) : (
             displayedItems.map((item, index) => {
               const processedItem = processItem(item);
-              const referencingItems = findReferencingItems(processedItem.itemID);
+              const referencingItems = findReferencingItems(processedItem.item_id);
               const isNewReference = referencingItems.length > 0;
 
               return (
                 <ItemTableRow
-                  key={`${processedItem.itemID}-${index}`}
+                  key={`${processedItem.item_id}-${index}`}
                   item={processedItem}
                   index={index}
                   isNewReference={isNewReference}
