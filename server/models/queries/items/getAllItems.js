@@ -4,8 +4,8 @@ module.exports = `
             ph.item_id,
             ph.ils_retail_price,
             ph.qty_in_stock,
-            ph.qty_sold_this_year,
-            ph.qty_sold_last_year,
+            ph.sold_this_year,
+            ph.sold_last_year,
             ph.date as history_date
         FROM price_history ph
         INNER JOIN (
@@ -55,8 +55,8 @@ module.exports = `
             i.image,
             COALESCE(li.retail_price, h.ils_retail_price) as retail_price,
             COALESCE(li.qty_in_stock, h.qty_in_stock, 0) as qty_in_stock,
-            COALESCE(li.sold_this_year, h.qty_sold_this_year, 0) as sold_this_year,
-            COALESCE(li.sold_last_year, h.qty_sold_last_year, 0) as sold_last_year,
+            COALESCE(li.sold_this_year, h.sold_this_year, 0) as sold_this_year,
+            COALESCE(li.sold_last_year, h.sold_last_year, 0) as sold_last_year,
             COALESCE(li.inquiry_date, h.history_date) as last_updated,
             COALESCE(li.new_reference_id, NULL) as new_reference_id,
             COALESCE(li.reference_notes, NULL) as reference_notes
@@ -80,7 +80,7 @@ module.exports = `
             COALESCE(li.sold_this_year, 0) as sold_this_year,
             COALESCE(li.sold_last_year, 0) as sold_last_year,
             li.inquiry_date as last_updated,
-            NULL as new_reference_id, -- Never copy new_reference_id for new items
+            NULL as new_reference_id,
             NULL as reference_notes
         FROM latest_inquiry_items li
         WHERE li.item_id NOT IN (SELECT item_id FROM item)

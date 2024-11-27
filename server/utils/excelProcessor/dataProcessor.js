@@ -16,14 +16,16 @@ const fieldMap = {
     'ImportMarkup': 'import_markup',
     'requestedQty': 'requested_qty',
     'RequestedQty': 'requested_qty',
-    'qtyInStock': 'qty_in_stock',
-    'QtyInStock': 'qty_in_stock',
+    'stockQuantity': 'qty_in_stock',
+    'StockQuantity': 'qty_in_stock',
     'retailPrice': 'retail_price',
     'RetailPrice': 'retail_price',
-    'qtySoldThisYear': 'qty_sold_this_year',
-    'QtySoldThisYear': 'qty_sold_this_year',
-    'qtySoldLastYear': 'qty_sold_last_year',
-    'QtySoldLastYear': 'qty_sold_last_year',
+    'qtySoldThisYear': 'sold_this_year',
+    'QtySoldThisYear': 'sold_this_year',
+    'qty_sold_this_year': 'sold_this_year',
+    'qtySoldLastYear': 'sold_last_year',
+    'QtySoldLastYear': 'sold_last_year',
+    'qty_sold_last_year': 'sold_last_year',
     'referenceNotes': 'reference_notes',
     'ReferenceNotes': 'reference_notes',
     'notes': 'notes',
@@ -39,6 +41,8 @@ function convertToSnakeCase(field) {
 
 async function processInquiryData(filePath, columnMapping, db) {
     try {
+        debug.log('Processing inquiry data with mapping:', columnMapping);
+        
         const workbook = XLSX.readFile(filePath);
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         
@@ -72,6 +76,8 @@ async function processInquiryData(filePath, columnMapping, db) {
                 // Convert field to snake_case
                 const dbField = convertToSnakeCase(field);
                 
+                debug.log(`Processing field ${dbField} with value "${value}" from Excel column "${excelCol}"`);
+
                 switch (dbField) {
                     case 'item_id':
                         if (!value) {
@@ -181,10 +187,68 @@ async function processInquiryData(filePath, columnMapping, db) {
                         }
                         break;
 
-                    case 'retail_price':
+                    case 'sold_this_year':
+                    case 'sold_last_year':
+                        // Convert to number and ensure non-negative
+                        if (value) {
+                            // Remove any spaces and handle both comma and period as decimal separators
+                            const cleanValue = value.replace(/\s/g, '').replace(/,/g, '.');
+                            const numericValue = parseInt(cleanValue, 10);
+                            
+                            debug.log(`Processing ${dbField}:`, {
+                                originalValue: value,
+                                cleanedValue: cleanValue,
+                                parsedValue: numericValue,
+                                itemId: processedRow.item_id
+                            });
+
+                            if (!isNaN(numericValue) && numericValue >= 0) {
+                                processedRow[dbField] = numericValue;
+                                debug.log(`Successfully processed ${dbField}:`, {
+                                    field: dbField,
+                                    itemId: processedRow.item_id,
+                                    originalValue: value,
+                                    finalValue: numericValue
+                                });
+                            } else {
+                                debug.error(`Invalid ${dbField} format:`, {
+                                    field: dbField,
+                                    itemId: processedRow.item_id,
+                                    originalValue: value,
+                                    cleanedValue: cleanValue,
+                                    parsedValue: numericValue
+                                });
+                                processedRow[dbField] = 0; // Default to 0 for invalid values
+                            }
+                        } else {
+                            debug.log(`Empty ${dbField}, defaulting to 0:`, {
+                                field: dbField,
+                                itemId: processedRow.item_id
+                            });
+                            processedRow[dbField] = 0; // Default to 0 for empty values
+                        }
+                        break;
+
                     case 'qty_in_stock':
-                    case 'qty_sold_this_year':
-                    case 'qty_sold_last_year':
+                        // Convert to number and ensure non-negative
+                        if (value) {
+                            // Remove any spaces and handle both comma and period as decimal separators
+                            const cleanValue = value.replace(/\s/g, '').replace(/,/g, '.');
+                            const numericValue = Number(cleanValue);
+                            
+                            if (!isNaN(numericValue) && numericValue >= 0) {
+                                processedRow[dbField] = numericValue;
+                                debug.log(`Processed ${dbField} for item ${processedRow.item_id}: ${value} -> ${numericValue}`);
+                            } else {
+                                debug.error(`Invalid ${dbField} format for item ${processedRow.item_id}: ${value}`);
+                                processedRow[dbField] = 0; // Default to 0 for invalid values
+                            }
+                        } else {
+                            processedRow[dbField] = 0; // Default to 0 for empty values
+                        }
+                        break;
+
+                    case 'retail_price':
                         if (value) {
                             const num = parseFloat(value.replace(/,/g, '.'));
                             if (!isNaN(num) && num >= 0) {
@@ -208,6 +272,14 @@ async function processInquiryData(filePath, columnMapping, db) {
                         }
                 }
             }
+
+            // Log the final processed row
+            debug.log('Processed row:', {
+                itemId: processedRow.item_id,
+                soldThisYear: processedRow.sold_this_year,
+                soldLastYear: processedRow.sold_last_year,
+                rowIndex: index + 2
+            });
 
             return processedRow;
         }));
@@ -236,9 +308,13 @@ async function processInquiryData(filePath, columnMapping, db) {
         // Sort by original Excel order
         processedData.sort((a, b) => a.excel_row_index - b.excel_row_index);
 
-        debug.log('Processed inquiry data:', {
+        debug.log('Final processed data:', {
             totalRows: processedData.length,
-            sampleRow: processedData[0],
+            sampleRows: processedData.slice(0, 3).map(row => ({
+                itemId: row.item_id,
+                soldThisYear: row.sold_this_year,
+                soldLastYear: row.sold_last_year
+            })),
             duplicates: Object.entries(itemIdCounts).filter(([_, count]) => count > 1).length
         });
 

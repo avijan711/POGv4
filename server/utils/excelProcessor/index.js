@@ -18,10 +18,14 @@ const fieldMap = {
     'hebrewDescription': 'hebrew_description',
     'importMarkup': 'import_markup',
     'requestedQty': 'requested_qty',
-    'qtyInStock': 'qty_in_stock',
+    'stockQuantity': 'qty_in_stock',
+    'StockQuantity': 'qty_in_stock',
     'retailPrice': 'retail_price',
-    'qtySoldThisYear': 'qty_sold_this_year',
-    'qtySoldLastYear': 'qty_sold_last_year',
+    'RetailPrice': 'retail_price',
+    'qtySoldThisYear': 'sold_this_year',
+    'QtySoldThisYear': 'sold_this_year',
+    'qtySoldLastYear': 'sold_last_year',
+    'QtySoldLastYear': 'sold_last_year',
     'referenceNotes': 'reference_notes'
 };
 

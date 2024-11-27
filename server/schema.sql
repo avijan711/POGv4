@@ -67,14 +67,14 @@ CREATE TABLE price_history (
     item_id TEXT NOT NULL,
     ils_retail_price REAL,
     qty_in_stock INTEGER DEFAULT 0,
-    qty_sold_this_year INTEGER DEFAULT 0,
-    qty_sold_last_year INTEGER DEFAULT 0,
+    sold_this_year INTEGER DEFAULT 0,
+    sold_last_year INTEGER DEFAULT 0,
     date DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (item_id) REFERENCES item(item_id),
     CHECK (ils_retail_price IS NULL OR ils_retail_price >= 0),
     CHECK (qty_in_stock >= 0),
-    CHECK (qty_sold_this_year >= 0),
-    CHECK (qty_sold_last_year >= 0)
+    CHECK (sold_this_year >= 0),
+    CHECK (sold_last_year >= 0)
 );
 
 CREATE TABLE item_reference_change (
@@ -258,15 +258,11 @@ WITH latest_price AS (
         item_id,
         ils_retail_price,
         qty_in_stock,
-        qty_sold_this_year,
-        qty_sold_last_year,
-        date
+        sold_this_year,
+        sold_last_year,
+        date,
+        ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY date DESC, history_id DESC) as rn
     FROM price_history
-    WHERE (item_id, date) IN (
-        SELECT item_id, MAX(date)
-        FROM price_history
-        GROUP BY item_id
-    )
 )
 SELECT
     i.item_id,
@@ -280,11 +276,11 @@ SELECT
     i.last_updated,
     p.ils_retail_price as retail_price,
     p.qty_in_stock as current_stock,
-    p.qty_sold_this_year as current_year_sales,
-    p.qty_sold_last_year as last_year_sales,
+    p.sold_this_year as current_year_sales,
+    p.sold_last_year as last_year_sales,
     p.date as last_price_update
 FROM item i
-LEFT JOIN latest_price p ON i.item_id = p.item_id;
+LEFT JOIN latest_price p ON i.item_id = p.item_id AND p.rn = 1;
 
 -- Create triggers
 CREATE TRIGGER update_item_timestamp
@@ -297,24 +293,50 @@ END;
 
 CREATE TRIGGER update_price_history_on_inquiry
 AFTER INSERT ON inquiry_item
-WHEN NEW.retail_price IS NOT NULL
 BEGIN
     INSERT INTO price_history (
         item_id,
         ils_retail_price,
         qty_in_stock,
-        qty_sold_this_year,
-        qty_sold_last_year,
+        sold_this_year,
+        sold_last_year,
         date
     )
-    VALUES (
+    SELECT 
         NEW.item_id,
-        NEW.retail_price,
-        NEW.qty_in_stock,
-        NEW.sold_this_year,
-        NEW.sold_last_year,
-        (SELECT date FROM inquiry WHERE inquiry_id = NEW.inquiry_id)
-    );
+        CAST(NEW.retail_price AS REAL),
+        CAST(NEW.qty_in_stock AS INTEGER),
+        CAST(NEW.sold_this_year AS INTEGER),
+        CAST(NEW.sold_last_year AS INTEGER),
+        i.date
+    FROM inquiry i
+    WHERE i.inquiry_id = NEW.inquiry_id;
+END;
+
+CREATE TRIGGER update_price_history_on_inquiry_update
+AFTER UPDATE ON inquiry_item
+WHEN NEW.qty_in_stock != OLD.qty_in_stock 
+   OR NEW.sold_this_year != OLD.sold_this_year 
+   OR NEW.sold_last_year != OLD.sold_last_year
+   OR NEW.retail_price != OLD.retail_price
+BEGIN
+    INSERT INTO price_history (
+        item_id,
+        ils_retail_price,
+        qty_in_stock,
+        sold_this_year,
+        sold_last_year,
+        date
+    )
+    SELECT 
+        NEW.item_id,
+        CAST(NEW.retail_price AS REAL),
+        CAST(NEW.qty_in_stock AS INTEGER),
+        CAST(NEW.sold_this_year AS INTEGER),
+        CAST(NEW.sold_last_year AS INTEGER),
+        i.date
+    FROM inquiry i
+    WHERE i.inquiry_id = NEW.inquiry_id;
 END;
 
 CREATE TRIGGER prevent_self_reference

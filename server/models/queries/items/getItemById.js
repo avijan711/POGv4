@@ -31,16 +31,16 @@ module.exports = `
             ph.item_id,
             ph.ils_retail_price,
             ph.qty_in_stock,
-            ph.qty_sold_this_year,
-            ph.qty_sold_last_year,
+            ph.sold_this_year,
+            ph.sold_last_year,
             ph.date as history_date
         FROM price_history ph
-        INNER JOIN (
-            SELECT item_id, MAX(date) as max_date
-            FROM price_history
-            GROUP BY item_id
-        ) latest ON ph.item_id = latest.item_id AND ph.date = latest.max_date
         WHERE ph.item_id = ?
+        AND ph.date = (
+            SELECT MAX(date)
+            FROM price_history
+            WHERE item_id = ph.item_id
+        )
     ),
     price_history_data AS (
         SELECT
@@ -48,8 +48,8 @@ module.exports = `
             ph.date,
             ph.ils_retail_price,
             ph.qty_in_stock,
-            NULLIF(ph.qty_sold_this_year, 0) as qty_sold_this_year,
-            NULLIF(ph.qty_sold_last_year, 0) as qty_sold_last_year
+            ph.sold_this_year,
+            ph.sold_last_year
         FROM price_history ph
         WHERE ph.item_id = ?
         ORDER BY ph.date DESC
@@ -108,10 +108,10 @@ module.exports = `
             COALESCE(li.origin, i.origin, '') as origin,
             i.image,
             i.notes,
-            li.retail_price,  -- Use InquiryItem's retail_price directly
+            COALESCE(li.retail_price, h.ils_retail_price) as retail_price,
             COALESCE(li.qty_in_stock, h.qty_in_stock, 0) as qty_in_stock,
-            COALESCE(li.sold_this_year, h.qty_sold_this_year, 0) as sold_this_year,
-            COALESCE(li.sold_last_year, h.qty_sold_last_year, 0) as sold_last_year,
+            COALESCE(li.sold_this_year, h.sold_this_year, 0) as sold_this_year,
+            COALESCE(li.sold_last_year, h.sold_last_year, 0) as sold_last_year,
             COALESCE(li.inquiry_date, h.history_date) as last_updated,
             li.new_reference_id,
             li.reference_notes
@@ -178,20 +178,18 @@ module.exports = `
         i.english_description,
         i.import_markup,
         i.hs_code,
+        i.origin,
         i.image,
         i.notes,
-        i.origin,
-        i.last_updated,
         COALESCE(ph.ils_retail_price, li.retail_price) as retail_price,
         COALESCE(ph.qty_in_stock, li.qty_in_stock, 0) as qty_in_stock,
-        COALESCE(NULLIF(ph.qty_sold_this_year, 0), NULLIF(li.sold_this_year, 0), 0) as sold_this_year,
-        COALESCE(NULLIF(ph.qty_sold_last_year, 0), NULLIF(li.sold_last_year, 0), 0) as sold_last_year,
+        COALESCE(ph.sold_this_year, li.sold_this_year, 0) as sold_this_year,
+        COALESCE(ph.sold_last_year, li.sold_last_year, 0) as sold_last_year,
         COALESCE(ph.date, li.inquiry_date) as last_price_update,
         lr.new_reference_id as reference_id,
         lr.reference_notes,
         lr.change_date as reference_change_date,
         lr.supplier_name as reference_supplier,
-        lr.supplier_status as reference_status,
         CASE 
             WHEN lr.new_reference_id IS NOT NULL THEN 1
             ELSE 0

@@ -140,12 +140,12 @@ function ItemDetailsDialog({ open, onClose, item }) {
                     <Divider orientation="vertical" flexItem />
                     <Box>
                       <Typography variant="body2" color="text.secondary">Sold This Year</Typography>
-                      <Typography>{item.qty_sold_this_year || 0}</Typography>
+                      <Typography>{item.sold_this_year || 0}</Typography>
                     </Box>
                     <Divider orientation="vertical" flexItem />
                     <Box>
                       <Typography variant="body2" color="text.secondary">Sold Last Year</Typography>
-                      <Typography>{item.qty_sold_last_year || 0}</Typography>
+                      <Typography>{item.sold_last_year || 0}</Typography>
                     </Box>
                   </Box>
                 </Grid>
@@ -163,7 +163,7 @@ function ItemDetailsDialog({ open, onClose, item }) {
                 <Typography color="text.secondary" variant="body2">No notes available</Typography>
               )}
               {item.reference_change && (
-                <>
+                <div>
                   <Divider sx={{ my: 2 }} />
                   <Typography variant="body2" color="text.secondary" gutterBottom>Reference Change</Typography>
                   <Stack spacing={1}>
@@ -182,7 +182,7 @@ function ItemDetailsDialog({ open, onClose, item }) {
                       </Typography>
                     )}
                   </Stack>
-                </>
+                </div>
               )}
             </Paper>
           </Grid>

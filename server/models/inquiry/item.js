@@ -41,8 +41,8 @@ class InquiryItemModel extends BaseModel {
                     item_id,
                     ils_retail_price,
                     qty_in_stock,
-                    qty_sold_this_year,
-                    qty_sold_last_year,
+                    sold_this_year,
+                    sold_last_year,
                     date
                 ) VALUES (?, NULL, 0, 0, 0, datetime('now'))
             `;
@@ -119,8 +119,8 @@ class InquiryItemModel extends BaseModel {
                     english_description,
                     import_markup,
                     hs_code,
-                    qty_in_stock,
                     retail_price,
+                    qty_in_stock,
                     sold_this_year,
                     sold_last_year,
                     requested_qty,
@@ -138,8 +138,8 @@ class InquiryItemModel extends BaseModel {
                 itemData.english_description || '',
                 itemData.import_markup || 1.3,
                 itemData.hs_code || '',
-                itemData.qty_in_stock || 0,
                 itemData.retail_price,
+                itemData.qty_in_stock || 0,
                 itemData.sold_this_year || 0,
                 itemData.sold_last_year || 0,
                 itemData.requested_qty || 0,

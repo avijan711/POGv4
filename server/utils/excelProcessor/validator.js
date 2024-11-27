@@ -224,21 +224,14 @@ const typeValidations = {
         type: 'string',
         validator: value => true // Optional field
     },
-    qty_in_stock: {  // Match database field name
+    stock_quantity: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = Number(value);
             return Number.isInteger(num) && num >= 0;
         }
     },
-    qty_sold_this_year: {  // Match database field name
-        type: 'number',
-        validator: value => {
-            const num = Number(value);
-            return Number.isInteger(num) && num >= 0;
-        }
-    },
-    qty_sold_last_year: {  // Match database field name
+    sold_this_year: {  // Match database field name
         type: 'number',
         validator: value => {
             const num = Number(value);
@@ -297,10 +290,9 @@ const validationSets = {
             requested_qty: typeValidations.requested_qty,
             import_markup: typeValidations.import_markup,
             hs_code: typeValidations.hs_code,
-            qty_in_stock: typeValidations.qty_in_stock,
             retail_price: typeValidations.retail_price,
-            qty_sold_this_year: typeValidations.qty_sold_this_year,
-            qty_sold_last_year: typeValidations.qty_sold_last_year,
+            stock_quantity: typeValidations.stock_quantity,
+            sold_this_year: typeValidations.sold_this_year,
             notes: typeValidations.notes,  // Add new field
             origin: typeValidations.origin  // Add new field
         }

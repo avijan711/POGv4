@@ -1,26 +1,44 @@
 const debug = {
-    log: (message, data) => {
-        if (process.env.NODE_ENV === 'development' && process.env.DEBUG_LEVEL === 'verbose') {
-            console.log(message, data);
+    log: function(message, data = null) {
+        const timestamp = new Date().toISOString();
+        if (data && typeof data === 'object') {
+            // Special handling for sales data
+            if (data.qtySoldThisYear !== undefined || data.qtySoldLastYear !== undefined) {
+                console.log(`[${timestamp}] [DEBUG] ${message}`, {
+                    ...data,
+                    _salesDataNote: 'Sales data present in this log'
+                });
+            } else {
+                console.log(`[${timestamp}] [DEBUG] ${message}`, data);
+            }
+        } else {
+            console.log(`[${timestamp}] [DEBUG] ${message}`);
         }
     },
-    error: (message, error) => {
-        console.error(message, error);
-    },
-    time: (label) => {
-        if (process.env.NODE_ENV === 'development' && process.env.DEBUG_LEVEL === 'verbose') {
-            console.time(label);
+
+    error: function(message, error = null) {
+        const timestamp = new Date().toISOString();
+        if (error) {
+            console.error(`[${timestamp}] [ERROR] ${message}`, error);
+        } else {
+            console.error(`[${timestamp}] [ERROR] ${message}`);
         }
     },
-    timeEnd: (label) => {
-        if (process.env.NODE_ENV === 'development' && process.env.DEBUG_LEVEL === 'verbose') {
-            console.timeEnd(label);
-        }
+
+    time: function(label) {
+        console.time(`[DEBUG] ${label}`);
     },
-    logQuery: (message, query, params) => {
-        if (process.env.NODE_ENV === 'development' && process.env.DEBUG_LEVEL === 'verbose') {
-            console.log(message, { query, params });
-        }
+
+    timeEnd: function(label) {
+        console.timeEnd(`[DEBUG] ${label}`);
+    },
+
+    logQuery: function(description, query, params = []) {
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] [DEBUG] SQL ${description}:`, {
+            query: query.replace(/\s+/g, ' ').trim(),
+            params
+        });
     }
 };
 

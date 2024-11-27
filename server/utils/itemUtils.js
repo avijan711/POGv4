@@ -54,7 +54,7 @@ const itemUtils = {
             hs_code: data.hs_code || '',
             origin: data.origin || '',
             image: data.image || '',
-            qty_in_stock: parseInt(data.qty_in_stock) || 0,
+            stock_quantity: parseInt(data.stock_quantity) || 0,
             sold_this_year: parseInt(data.sold_this_year) || 0,
             sold_last_year: parseInt(data.sold_last_year) || 0,
             retail_price: data.retail_price !== undefined && data.retail_price !== '' ? 
@@ -99,7 +99,7 @@ const itemUtils = {
             data.import_markup || 1.30,
             data.hs_code || '',
             data.origin || '',
-            data.qty_in_stock || 0,
+            data.stock_quantity || 0,
             data.retail_price,
             data.sold_this_year || 0,
             data.sold_last_year || 0

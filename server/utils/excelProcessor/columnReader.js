@@ -31,7 +31,8 @@ function getExcelColumns(filePath) {
             const workbook = XLSX.readFile(filePath, {
                 cellDates: true,
                 cellNF: false,
-                cellText: false
+                cellText: false,
+                raw: true // Add raw option to get unformatted values
             });
 
             if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
@@ -59,11 +60,20 @@ function getExcelColumns(filePath) {
                 const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
                 const cell = firstSheet[cellAddress];
                 
-                // Ensure cell value is converted to string and properly formatted
+                // Enhanced debugging for each cell
                 if (cell && cell.v != null) {
-                    // Convert any value to string and trim
                     const headerValue = String(cell.v).trim();
-                    if (headerValue) {  // Only add non-empty headers
+                    if (headerValue) {
+                        // Log detailed information about the header
+                        debug.log('Column header details:', {
+                            column: col,
+                            rawValue: cell.v,
+                            trimmedValue: headerValue,
+                            charCodes: Array.from(headerValue).map(char => ({
+                                char,
+                                code: char.charCodeAt(0)
+                            }))
+                        });
                         columns.push(headerValue);
                     }
                 }
@@ -77,7 +87,18 @@ function getExcelColumns(filePath) {
 
             debug.log('Found Excel columns:', {
                 count: columns.length,
-                headers: columns
+                headers: columns,
+                // Log detailed information about specific Hebrew headers
+                hebrewHeaders: columns
+                    .filter(col => /[\u0590-\u05FF]/.test(col)) // Filter Hebrew characters
+                    .map(col => ({
+                        value: col,
+                        length: col.length,
+                        charCodes: Array.from(col).map(char => ({
+                            char,
+                            code: char.charCodeAt(0)
+                        }))
+                    }))
             });
 
             return columns;

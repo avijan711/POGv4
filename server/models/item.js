@@ -159,8 +159,8 @@ class ItemModel extends BaseModel {
                 item_id,
                 ils_retail_price,
                 qty_in_stock,
-                qty_sold_this_year,
-                qty_sold_last_year,
+                sold_this_year,
+                sold_last_year,
                 date
             ) VALUES (?, ?, ?, ?, ?, datetime('now'))
         `;
