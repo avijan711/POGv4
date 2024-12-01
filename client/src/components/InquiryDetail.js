@@ -56,9 +56,14 @@ function InquiryDetail() {
     if (!safeItems.length) return {};
 
     const uniqueItems = new Set(safeItems.map(item => item.item_id)).size;
-    const uniqueSuppliers = new Set(safeItems.flatMap(item => 
-      item.supplier_responses?.map(resp => resp.supplier_name) || []
-    )).size;
+    
+    // Safely extract supplier names, filtering out any null/undefined responses or names
+    const uniqueSuppliers = new Set(safeItems.flatMap(item => {
+      const responses = item.supplier_responses || [];
+      return responses
+        .filter(resp => resp && resp.supplier_name) // Filter out null/undefined responses and ensure supplier_name exists
+        .map(resp => resp.supplier_name);
+    })).size;
 
     const startDate = new Date(inquiryDate);
     const today = new Date();

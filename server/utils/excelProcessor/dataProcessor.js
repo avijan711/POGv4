@@ -39,16 +39,46 @@ function convertToSnakeCase(field) {
     return fieldMap[field] || field.toLowerCase().replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 }
 
+// Helper function to safely parse numeric values
+function parseNumericValue(value, defaultValue = 0) {
+    if (value === null || value === undefined || value === '') {
+        return defaultValue;
+    }
+
+    // If it's already a number (Excel might provide it as such)
+    if (typeof value === 'number') {
+        return Math.max(0, value);
+    }
+
+    // Convert to string and clean up
+    const strValue = String(value).trim();
+    
+    // Remove any spaces and handle both comma and period as decimal separators
+    const cleanValue = strValue.replace(/\s/g, '').replace(/,/g, '.');
+    const numValue = Number(cleanValue);
+
+    return !isNaN(numValue) ? Math.max(0, numValue) : defaultValue;
+}
+
 async function processInquiryData(filePath, columnMapping, db) {
     try {
         debug.log('Processing inquiry data with mapping:', columnMapping);
         
-        const workbook = XLSX.readFile(filePath);
+        // Read Excel file with specific options to handle numeric values correctly
+        const workbook = XLSX.readFile(filePath, {
+            raw: true,      // Get raw values
+            cellDates: true, // Handle dates properly
+            cellNF: false,   // Don't parse number formats
+            cellText: false  // Don't generate text values
+        });
+        
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         
-        const data = XLSX.utils.sheet_to_json(firstSheet, { 
-            raw: false,
-            defval: ''
+        // Convert sheet to JSON with specific options
+        const data = XLSX.utils.sheet_to_json(firstSheet, {
+            raw: true,      // Get raw values
+            defval: '',     // Default value for empty cells
+            blankrows: false // Skip blank rows
         });
 
         if (data.length === 0) {
@@ -71,7 +101,6 @@ async function processInquiryData(filePath, columnMapping, db) {
                 if (!excelCol) continue;
                 
                 let value = row[excelCol];
-                value = value != null ? String(value).trim() : null;
                 
                 // Convert field to snake_case
                 const dbField = convertToSnakeCase(field);
@@ -83,6 +112,7 @@ async function processInquiryData(filePath, columnMapping, db) {
                         if (!value) {
                             throw new Error(`Missing required Item ID in row ${index + 2}`);
                         }
+                        value = String(value).trim();
                         processedRow.item_id = value;
                         processedRow.original_item_id = value;
                         
@@ -138,26 +168,17 @@ async function processInquiryData(filePath, columnMapping, db) {
                         if (!value) {
                             throw new Error(`Missing required Hebrew description in row ${index + 2}`);
                         }
-                        processedRow.hebrew_description = value;
+                        processedRow.hebrew_description = String(value).trim();
                         break;
 
                     case 'requested_qty':
-                        // Default to 0 if value is empty or not provided
-                        if (!value) {
-                            processedRow.requested_qty = 0;
-                            break;
-                        }
-                        const qty = parseInt(value.replace(/,/g, ''), 10);
-                        if (isNaN(qty) || qty < 0) {
-                            throw new Error(`Invalid requested quantity in row ${index + 2}: ${value}`);
-                        }
-                        processedRow.requested_qty = qty;
+                        processedRow.requested_qty = parseNumericValue(value, 0);
                         break;
 
                     case 'import_markup':
                         if (value) {
-                            const markup = parseFloat(value.replace(/,/g, '.'));
-                            if (!isNaN(markup) && markup >= 1.0 && markup <= 2.0) {
+                            const markup = parseNumericValue(value);
+                            if (markup >= 1.0 && markup <= 2.0) {
                                 processedRow.import_markup = markup;
                             }
                         }
@@ -165,14 +186,14 @@ async function processInquiryData(filePath, columnMapping, db) {
 
                     case 'new_reference_id':
                         if (value) {
-                            const refId = value.trim();
+                            const refId = String(value).trim();
                             // Only set reference if it's different from the item_id
                             if (refId !== processedRow.item_id) {
                                 processedRow.new_reference_id = refId;
                                 // If there's a notes column mapped, get the notes
                                 const notesCol = columnMapping['reference_notes'];
                                 if (notesCol && row[notesCol]) {
-                                    processedRow.reference_notes = row[notesCol].trim();
+                                    processedRow.reference_notes = String(row[notesCol]).trim();
                                 }
                                 // Create reference change information
                                 processedRow.has_reference_change = true;
@@ -189,71 +210,33 @@ async function processInquiryData(filePath, columnMapping, db) {
 
                     case 'sold_this_year':
                     case 'sold_last_year':
-                        // Convert to number and ensure non-negative
-                        if (value) {
-                            // Remove any spaces and handle both comma and period as decimal separators
-                            const cleanValue = value.replace(/\s/g, '').replace(/,/g, '.');
-                            const numericValue = parseInt(cleanValue, 10);
-                            
-                            debug.log(`Processing ${dbField}:`, {
-                                originalValue: value,
-                                cleanedValue: cleanValue,
-                                parsedValue: numericValue,
-                                itemId: processedRow.item_id
-                            });
-
-                            if (!isNaN(numericValue) && numericValue >= 0) {
-                                processedRow[dbField] = numericValue;
-                                debug.log(`Successfully processed ${dbField}:`, {
-                                    field: dbField,
-                                    itemId: processedRow.item_id,
-                                    originalValue: value,
-                                    finalValue: numericValue
-                                });
-                            } else {
-                                debug.error(`Invalid ${dbField} format:`, {
-                                    field: dbField,
-                                    itemId: processedRow.item_id,
-                                    originalValue: value,
-                                    cleanedValue: cleanValue,
-                                    parsedValue: numericValue
-                                });
-                                processedRow[dbField] = 0; // Default to 0 for invalid values
-                            }
-                        } else {
-                            debug.log(`Empty ${dbField}, defaulting to 0:`, {
+                        // Handle numeric values directly from Excel
+                        const numericValue = parseNumericValue(value, null);
+                        if (numericValue !== null) {
+                            processedRow[dbField] = Math.floor(numericValue); // Ensure whole number
+                            debug.log(`Successfully processed ${dbField}:`, {
                                 field: dbField,
-                                itemId: processedRow.item_id
+                                itemId: processedRow.item_id,
+                                originalValue: value,
+                                finalValue: processedRow[dbField]
                             });
-                            processedRow[dbField] = 0; // Default to 0 for empty values
+                        } else {
+                            debug.error(`Invalid ${dbField} format:`, {
+                                field: dbField,
+                                itemId: processedRow.item_id,
+                                originalValue: value
+                            });
+                            processedRow[dbField] = 0;
                         }
                         break;
 
                     case 'qty_in_stock':
-                        // Convert to number and ensure non-negative
-                        if (value) {
-                            // Remove any spaces and handle both comma and period as decimal separators
-                            const cleanValue = value.replace(/\s/g, '').replace(/,/g, '.');
-                            const numericValue = Number(cleanValue);
-                            
-                            if (!isNaN(numericValue) && numericValue >= 0) {
-                                processedRow[dbField] = numericValue;
-                                debug.log(`Processed ${dbField} for item ${processedRow.item_id}: ${value} -> ${numericValue}`);
-                            } else {
-                                debug.error(`Invalid ${dbField} format for item ${processedRow.item_id}: ${value}`);
-                                processedRow[dbField] = 0; // Default to 0 for invalid values
-                            }
-                        } else {
-                            processedRow[dbField] = 0; // Default to 0 for empty values
-                        }
+                        processedRow[dbField] = parseNumericValue(value, 0);
                         break;
 
                     case 'retail_price':
                         if (value) {
-                            const num = parseFloat(value.replace(/,/g, '.'));
-                            if (!isNaN(num) && num >= 0) {
-                                processedRow[dbField] = num;
-                            }
+                            processedRow[dbField] = parseNumericValue(value);
                         }
                         break;
 
@@ -262,13 +245,13 @@ async function processInquiryData(filePath, columnMapping, db) {
                     case 'notes':
                     case 'origin':
                         if (value) {
-                            processedRow[dbField] = value;
+                            processedRow[dbField] = String(value).trim();
                         }
                         break;
 
                     default:
                         if (value) {
-                            processedRow[dbField] = value;
+                            processedRow[dbField] = String(value).trim();
                         }
                 }
             }
@@ -327,12 +310,19 @@ async function processInquiryData(filePath, columnMapping, db) {
 
 function processSupplierResponse(filePath, columnMapping) {
     try {
-        const workbook = XLSX.readFile(filePath);
+        const workbook = XLSX.readFile(filePath, {
+            raw: true,      // Get raw values
+            cellDates: true, // Handle dates properly
+            cellNF: false,   // Don't parse number formats
+            cellText: false  // Don't generate text values
+        });
+        
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         
-        const data = XLSX.utils.sheet_to_json(firstSheet, { 
-            raw: false,
-            defval: ''
+        const data = XLSX.utils.sheet_to_json(firstSheet, {
+            raw: true,      // Get raw values
+            defval: '',     // Default value for empty cells
+            blankrows: false // Skip blank rows
         });
 
         if (data.length === 0) {
@@ -352,7 +342,6 @@ function processSupplierResponse(filePath, columnMapping) {
                 if (!excelCol) return;
                 
                 let value = row[excelCol];
-                value = value != null ? String(value).trim() : null;
                 
                 // Convert field to snake_case
                 const dbField = convertToSnakeCase(field);
@@ -362,58 +351,27 @@ function processSupplierResponse(filePath, columnMapping) {
                         if (!value) {
                             throw new Error(`Missing required Item ID in row ${index + 2}`);
                         }
-                        processedRow.item_id = value;
-                        processedRow.original_item_id = value;
+                        processedRow.item_id = String(value).trim();
+                        processedRow.original_item_id = processedRow.item_id;
                         
                         // Track duplicates
-                        itemIdCounts[value] = (itemIdCounts[value] || 0) + 1;
-                        if (itemIdCounts[value] === 1) {
-                            itemIdFirstIndex[value] = index;
+                        itemIdCounts[processedRow.item_id] = (itemIdCounts[processedRow.item_id] || 0) + 1;
+                        if (itemIdCounts[processedRow.item_id] === 1) {
+                            itemIdFirstIndex[processedRow.item_id] = index;
                         }
-                        processedRow.is_duplicate = itemIdCounts[value] > 1;
+                        processedRow.is_duplicate = itemIdCounts[processedRow.item_id] > 1;
                         if (processedRow.is_duplicate) {
-                            processedRow.original_row_index = itemIdFirstIndex[value];
+                            processedRow.original_row_index = itemIdFirstIndex[processedRow.item_id];
                         }
                         break;
                         
                     case 'price':
-                        // Initialize price as null
-                        processedRow.price = null;
-                        
-                        if (value) {
-                            // Remove any spaces and handle both comma and period as decimal separators
-                            const cleanValue = value.replace(/\s/g, '');
-                            
-                            // Check if the value uses comma as decimal separator
-                            const hasCommaDecimal = /^\d+,\d+$/.test(cleanValue);
-                            const hasPeriodDecimal = /^\d+\.\d+$/.test(cleanValue);
-                            
-                            let numericValue;
-                            if (hasCommaDecimal) {
-                                // Replace comma with period for decimal
-                                numericValue = parseFloat(cleanValue.replace(',', '.'));
-                            } else if (hasPeriodDecimal) {
-                                // Already in correct format
-                                numericValue = parseFloat(cleanValue);
-                            } else {
-                                // Handle whole numbers or other formats
-                                // First remove any thousands separators (both commas and periods)
-                                const stripped = cleanValue.replace(/[,.](?=\d{3})/g, '');
-                                numericValue = parseFloat(stripped);
-                            }
-                            
-                            if (!isNaN(numericValue) && numericValue >= 0) {
-                                processedRow.price = numericValue;
-                                debug.log(`Processed price for item ${processedRow.item_id}: ${value} -> ${numericValue}`);
-                            } else {
-                                debug.error(`Invalid price format for item ${processedRow.item_id}: ${value}`);
-                            }
-                        }
+                        processedRow.price = parseNumericValue(value, null);
                         break;
                         
                     case 'new_reference_id':
                         if (value) {
-                            const refId = value.trim();
+                            const refId = String(value).trim();
                             // Only set reference if it's different from the item_id
                             if (refId !== processedRow.item_id) {
                                 processedRow.new_reference_id = refId;
@@ -434,13 +392,13 @@ function processSupplierResponse(filePath, columnMapping) {
                     case 'hs_code':
                     case 'english_description':
                         if (value) {
-                            processedRow[dbField] = value;
+                            processedRow[dbField] = String(value).trim();
                         }
                         break;
 
                     default:
                         if (value) {
-                            processedRow[dbField] = value;
+                            processedRow[dbField] = String(value).trim();
                         }
                 }
             });

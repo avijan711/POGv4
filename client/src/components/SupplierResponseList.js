@@ -22,9 +22,12 @@ function SupplierResponseList({ responses, onRefresh }) {
 
   // Group responses by supplier
   const groupedResponses = responses.reduce((acc, item) => {
-    if (!item.supplier_responses) return acc;
+    if (!item?.supplier_responses) return acc;
 
     item.supplier_responses.forEach(response => {
+      // Skip if response or supplier_id is null/undefined
+      if (!response?.supplier_id || !response?.supplier_name) return;
+
       const key = response.supplier_id;
       if (!acc[key]) {
         acc[key] = {

@@ -8,7 +8,7 @@ function getInquiryItemsQuery() {
             i.import_markup,
             i.hs_code,
             i.origin,
-            i.stock_quantity,
+            ii.qty_in_stock,
             ii.requested_qty,
             ii.retail_price,
             p.id as promotion_id,

@@ -211,8 +211,8 @@ function ItemTableRow({
         )}
       </TableCell>
       <TableCell align="right">{item.qty_in_stock || 0}</TableCell>
-      <TableCell align="right">{item.qty_sold_this_year || 0}</TableCell>
-      <TableCell align="right">{item.qty_sold_last_year || 0}</TableCell>
+      <TableCell align="right">{item.sold_this_year || 0}</TableCell>
+      <TableCell align="right">{item.sold_last_year || 0}</TableCell>
       <TableCell align="right">
         {formatPrice(item.retail_price) || (
           <Typography variant="body2" color="error">
