@@ -1,5 +1,6 @@
 const BaseModel = require('./BaseModel');
 const debug = require('../utils/debug');
+const { getInquiriesQuery, getInquiryByIdQuery } = require('./queries/inquiries');
 
 class InquiryModel extends BaseModel {
     constructor(db) {
@@ -107,33 +108,39 @@ class InquiryModel extends BaseModel {
 
     async getAllInquiries() {
         const sql = `
-            SELECT i.*, 
-                   COUNT(ii.inquiry_item_id) as item_count,
-                   GROUP_CONCAT(DISTINCT s.name) as suppliers
+            SELECT 
+                i.inquiry_id,
+                i.inquiry_number as custom_number,
+                i.status,
+                i.date,
+                COUNT(ii.inquiry_item_id) as item_count,
+                COUNT(DISTINCT sr.supplier_id) as responded_suppliers_count,
+                SUM(CASE WHEN sr.supplier_id IS NULL THEN 1 ELSE 0 END) as not_responded_items_count,
+                SUM(CASE WHEN ii.new_reference_id IS NOT NULL THEN 1 ELSE 0 END) as total_replacements_count
             FROM inquiry i
             LEFT JOIN inquiry_item ii ON i.inquiry_id = ii.inquiry_id
-            LEFT JOIN supplier_response sr ON i.inquiry_id = sr.inquiry_id
-            LEFT JOIN supplier s ON sr.supplier_id = s.supplier_id
-            GROUP BY i.inquiry_id
+            LEFT JOIN supplier_response sr ON i.inquiry_id = sr.inquiry_id AND ii.item_id = sr.item_id
+            GROUP BY i.inquiry_id, i.inquiry_number, i.status, i.date
             ORDER BY i.date DESC
         `;
         return await this.executeQuery(sql);
     }
 
     async getInquiryById(inquiryId) {
-        const sql = `
-            SELECT i.*,
-                   COUNT(DISTINCT ii.item_id) as total_items,
-                   COUNT(DISTINCT sr.supplier_id) as total_suppliers,
-                   GROUP_CONCAT(DISTINCT s.name) as supplier_names
-            FROM inquiry i
-            LEFT JOIN inquiry_item ii ON i.inquiry_id = ii.inquiry_id
-            LEFT JOIN supplier_response sr ON i.inquiry_id = sr.inquiry_id
-            LEFT JOIN supplier s ON sr.supplier_id = s.supplier_id
-            WHERE i.inquiry_id = ?
-            GROUP BY i.inquiry_id
-        `;
-        return await this.executeQuerySingle(sql, [inquiryId]);
+        const sql = getInquiryByIdQuery();
+        const result = await this.executeQuerySingle(sql, [inquiryId, inquiryId, inquiryId, inquiryId]);
+        
+        if (!result) return null;
+
+        // Parse the JSON strings
+        try {
+            const inquiry = JSON.parse(result.inquiry);
+            const items = JSON.parse(result.items);
+            return { inquiry, items };
+        } catch (error) {
+            debug.error('Error parsing inquiry result:', error);
+            throw new Error('Failed to parse inquiry data');
+        }
     }
 
     async getInquiryItems(inquiryId) {

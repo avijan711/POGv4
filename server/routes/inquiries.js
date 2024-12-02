@@ -9,6 +9,7 @@ const debug = require('../utils/debug');
 const { handleUpload, cleanupFile } = require('../middleware/upload');
 const XLSX = require('xlsx');
 const path = require('path');
+const fs = require('fs');
 
 function createRouter({ db, inquiryModel, inquiryItemModel }) {
     const router = express.Router();
@@ -176,24 +177,32 @@ function createRouter({ db, inquiryModel, inquiryItemModel }) {
             // Create workbook
             const wb = XLSX.utils.book_new();
             
-            // Transform items into rows with snake_case column names
+            // Transform items into rows with all relevant fields
             const rows = items.map(item => ({
                 item_id: item.item_id || '',
-                requested_qty: item.requested_qty || ''
+                hebrew_description: item.hebrew_description || '',
+                english_description: item.english_description || '',
+                requested_qty: item.requested_qty || '',
+                hs_code: item.hs_code || '',
+                origin: item.origin || '',
+                reference_notes: item.reference_notes || ''
             }));
 
-            // Create worksheet with no header row
-            const ws = XLSX.utils.json_to_sheet(rows, { skipHeader: true });
-
-            // Add header row manually
-            XLSX.utils.sheet_add_aoa(ws, [['item_id', 'requested_qty']], { origin: 'A1' });
+            // Create worksheet
+            const ws = XLSX.utils.json_to_sheet(rows);
 
             // Add worksheet to workbook
             XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
 
-            // Generate filename
-            const filename = `inquiry_export_${Date.now()}.xlsx`;
-            const filepath = path.join(__dirname, '..', 'uploads', filename);
+            // Ensure uploads directory exists
+            const uploadsDir = path.join(process.cwd(), 'server', 'uploads');
+            if (!fs.existsSync(uploadsDir)) {
+                fs.mkdirSync(uploadsDir, { recursive: true });
+            }
+
+            // Generate filename with inquiry number
+            const filename = `inquiry_export_${inquiry.inquiry.inquiry_number}_${Date.now()}.xlsx`;
+            const filepath = path.join(uploadsDir, filename);
 
             // Write file
             XLSX.writeFile(wb, filepath);
