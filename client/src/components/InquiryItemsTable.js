@@ -252,21 +252,31 @@ function InquiryItemsTable({
               </TableRow>
             ) : (
               sortedItems.map((item, index) => {
-                const supplierPrices = item.supplier_prices ? JSON.parse(item.supplier_prices) : [];
+                // Parse supplier prices only if it's a string
+                const supplierPrices = typeof item.supplier_prices === 'string' 
+                  ? JSON.parse(item.supplier_prices) 
+                  : (item.supplier_prices || []);
+                const isReplacement = item.reference_change?.item_id === item.item_id;
                 
                 return (
                   <TableRow 
                     key={item.inquiry_item_id}
                     onClick={() => {
                       if (editingQty !== item.inquiry_item_id) {
-                        onViewDetails(item);
+                        // Pass the item with already parsed supplier_prices
+                        onViewDetails({
+                          ...item,
+                          supplier_prices: supplierPrices
+                        });
                       }
                     }}
                     sx={{ 
                       backgroundColor: item.is_duplicate 
                         ? 'rgba(255, 152, 0, 0.1)'
                         : item.has_reference_change && item.reference_change
-                          ? 'rgba(255, 243, 224, 0.9)'
+                          ? isReplacement 
+                            ? 'rgba(76, 175, 80, 0.1)'  // Light green for replacement items
+                            : 'rgba(244, 67, 54, 0.1)'  // Light red for old items
                           : item.is_referenced_by
                             ? '#e8f5e9'
                             : item.promotion_id
@@ -276,7 +286,9 @@ function InquiryItemsTable({
                         backgroundColor: item.is_duplicate
                           ? 'rgba(255, 152, 0, 0.2)'
                           : item.has_reference_change && item.reference_change
-                            ? 'rgba(255, 243, 224, 1)' 
+                            ? isReplacement
+                              ? 'rgba(76, 175, 80, 0.2)'  // Darker green on hover
+                              : 'rgba(244, 67, 54, 0.2)'  // Darker red on hover
                             : item.is_referenced_by
                               ? '#c8e6c9'
                               : item.promotion_id
@@ -315,12 +327,35 @@ function InquiryItemsTable({
                           sx={{ width: '80px' }}
                         />
                       ) : (
-                        <Box 
-                          onClick={() => onEditQty(item.inquiry_item_id)}
-                          sx={{ cursor: 'text' }}
-                        >
-                          {item.requested_qty || 0}
-                        </Box>
+                        <Tooltip title="Click to edit quantity">
+                          <Box 
+                            onClick={() => onEditQty(item.inquiry_item_id)}
+                            sx={{ 
+                              cursor: 'text',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'flex-end',
+                              gap: 1,
+                              '&:hover': {
+                                '& .edit-icon': {
+                                  opacity: 1,
+                                },
+                                color: 'primary.main',
+                              }
+                            }}
+                          >
+                            <span>{item.requested_qty || 0}</span>
+                            <EditIcon 
+                              className="edit-icon"
+                              sx={{ 
+                                fontSize: '0.9rem',
+                                opacity: 0,
+                                transition: 'opacity 0.2s',
+                                color: 'primary.main'
+                              }} 
+                            />
+                          </Box>
+                        </Tooltip>
                       )}
                     </TableCell>
                     <TableCell align="right">{item.qty_in_stock || 0}</TableCell>
@@ -351,6 +386,7 @@ function InquiryItemsTable({
                       <ReferenceChip
                         reference_change={item.reference_change}
                         onDelete={() => handleDeleteClick(item, 'reference')}
+                        isReplacement={isReplacement}
                       />
                     </TableCell>
                     <TableCell align="center" onClick={(e) => e.stopPropagation()}>

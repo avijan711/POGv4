@@ -5,7 +5,7 @@ const debug = require('../utils/debug');
 class Promotion extends BaseModel {
     constructor(db) {
         super(db);
-        this.tableName = 'promotions';
+        this.tableName = 'promotion';
         this.progressCallbacks = new Map();
     }
 
@@ -27,7 +27,7 @@ class Promotion extends BaseModel {
     async createPromotion(data) {
         try {
             const result = await this.executeRun(
-                'INSERT INTO promotions (name, supplier_id, start_date, end_date) VALUES (?, ?, ?, ?)',
+                'INSERT INTO promotion (name, supplier_id, start_date, end_date, is_active) VALUES (?, ?, ?, ?, 1)',
                 [data.name, data.supplierId, data.startDate, data.endDate]
             );
             return this.getPromotionById(result.lastID);
@@ -42,11 +42,11 @@ class Promotion extends BaseModel {
             const promotion = await this.executeQuerySingle(`
                 SELECT 
                     p.*,
-                    s.Name as SupplierName,
-                    (SELECT COUNT(*) FROM promotion_items WHERE promotion_id = p.id) as ItemCount
-                FROM promotions p
-                LEFT JOIN Supplier s ON p.supplier_id = s.SupplierID
-                WHERE p.id = ?
+                    s.name as supplier_name,
+                    (SELECT COUNT(*) FROM promotion_item WHERE promotion_id = p.promotion_id) as item_count
+                FROM promotion p
+                LEFT JOIN supplier s ON p.supplier_id = s.supplier_id
+                WHERE p.promotion_id = ?
             `, [id]);
 
             if (!promotion) {
@@ -54,8 +54,8 @@ class Promotion extends BaseModel {
             }
 
             const items = await this.executeQuery(`
-                SELECT item_id as ItemID, promotion_price as PromoPrice
-                FROM promotion_items
+                SELECT item_id, promotion_price
+                FROM promotion_item
                 WHERE promotion_id = ?
             `, [id]);
 
@@ -74,10 +74,10 @@ class Promotion extends BaseModel {
             return await this.executeQuery(`
                 SELECT 
                     p.*,
-                    s.Name as SupplierName,
-                    (SELECT COUNT(*) FROM promotion_items WHERE promotion_id = p.id) as ItemCount
-                FROM promotions p
-                LEFT JOIN Supplier s ON p.supplier_id = s.SupplierID
+                    s.name as supplier_name,
+                    (SELECT COUNT(*) FROM promotion_item WHERE promotion_id = p.promotion_id) as item_count
+                FROM promotion p
+                LEFT JOIN supplier s ON p.supplier_id = s.supplier_id
                 ORDER BY p.created_at DESC
             `);
         } catch (error) {
@@ -86,10 +86,30 @@ class Promotion extends BaseModel {
         }
     }
 
+    async getActivePromotions() {
+        try {
+            return await this.executeQuery(`
+                SELECT 
+                    p.*,
+                    s.name as supplier_name,
+                    (SELECT COUNT(*) FROM promotion_item WHERE promotion_id = p.promotion_id) as item_count
+                FROM promotion p
+                LEFT JOIN supplier s ON p.supplier_id = s.supplier_id
+                WHERE p.is_active = 1
+                AND p.start_date <= datetime('now')
+                AND p.end_date >= datetime('now')
+                ORDER BY p.created_at DESC
+            `);
+        } catch (error) {
+            debug.error('Error getting active promotions:', error);
+            throw error;
+        }
+    }
+
     async updatePromotion(id, data) {
         try {
             await this.executeRun(
-                'UPDATE promotions SET name = ?, start_date = ?, end_date = ?, is_active = ? WHERE id = ?',
+                'UPDATE promotion SET name = ?, start_date = ?, end_date = ?, is_active = ? WHERE promotion_id = ?',
                 [data.name, data.startDate, data.endDate, data.isActive, id]
             );
             return this.getPromotionById(id);
@@ -101,7 +121,7 @@ class Promotion extends BaseModel {
 
     async deletePromotion(id) {
         try {
-            const result = await this.executeRun('DELETE FROM promotions WHERE id = ?', [id]);
+            const result = await this.executeRun('DELETE FROM promotion WHERE promotion_id = ?', [id]);
             return result.changes > 0;
         } catch (error) {
             debug.error('Error deleting promotion:', error);
@@ -219,7 +239,7 @@ class Promotion extends BaseModel {
                 // Create promotion
                 debug.log('Creating promotion record');
                 const promotionResult = await this.executeRun(
-                    'INSERT INTO promotions (name, supplier_id, start_date, end_date) VALUES (?, ?, ?, ?)',
+                    'INSERT INTO promotion (name, supplier_id, start_date, end_date, is_active) VALUES (?, ?, ?, ?, 1)',
                     [data.name, data.supplierId, data.startDate, data.endDate]
                 );
 
@@ -237,7 +257,7 @@ class Promotion extends BaseModel {
                     const batch = processedData.slice(i, i + batchSize);
                     await Promise.all(batch.map(item =>
                         this.executeRun(
-                            'INSERT INTO promotion_items (promotion_id, item_id, promotion_price) VALUES (?, ?, ?)',
+                            'INSERT INTO promotion_item (promotion_id, item_id, promotion_price) VALUES (?, ?, ?)',
                             [promotionResult.lastID, item.itemId, item.promotionPrice]
                         )
                     ));
@@ -277,13 +297,13 @@ class Promotion extends BaseModel {
             const offset = (page - 1) * pageSize;
 
             const totalItems = await this.executeQuerySingle(
-                'SELECT COUNT(*) as count FROM promotion_items WHERE promotion_id = ?',
+                'SELECT COUNT(*) as count FROM promotion_item WHERE promotion_id = ?',
                 [promotionId]
             );
 
             const items = await this.executeQuery(`
-                SELECT item_id as ItemID, promotion_price as PromoPrice
-                FROM promotion_items
+                SELECT item_id, promotion_price
+                FROM promotion_item
                 WHERE promotion_id = ?
                 LIMIT ? OFFSET ?
             `, [promotionId, pageSize, offset]);

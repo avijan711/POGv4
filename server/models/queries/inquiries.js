@@ -115,6 +115,7 @@ const getInquiryByIdQuery = () => `
         FROM supplier_response sr
         JOIN supplier s ON sr.supplier_id = s.supplier_id
         WHERE sr.inquiry_id = ?
+        AND sr.status != 'deleted'
     ),
     items_data AS (
         SELECT 
@@ -157,10 +158,10 @@ const getInquiryByIdQuery = () => `
                         json_object(
                             'supplier_name', sr.supplier_name,
                             'price_quoted', sr.price_quoted,
-                            'status', sr.status,
                             'response_date', sr.response_date,
-                            'is_promotion', sr.is_promotion,
-                            'promotion_name', sr.promotion_name
+                            'is_promotion', COALESCE(sr.is_promotion, 0),
+                            'promotion_name', sr.promotion_name,
+                            'status', sr.status
                         )
                     ELSE NULL
                 END
@@ -168,7 +169,7 @@ const getInquiryByIdQuery = () => `
         FROM inquiry_item ii
         LEFT JOIN item i ON ii.item_id = i.item_id
         LEFT JOIN reference_changes rc ON ii.item_id = rc.item_id
-        LEFT JOIN supplier_responses sr ON ii.item_id = sr.item_id
+        LEFT JOIN supplier_responses sr ON ii.item_id = sr.item_id AND ii.inquiry_id = sr.inquiry_id
         WHERE ii.inquiry_id = ?
         GROUP BY 
             ii.inquiry_id,

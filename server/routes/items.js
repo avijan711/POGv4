@@ -1,9 +1,10 @@
 const express = require('express');
-const router = express.Router();
 const imageUpload = require('../middleware/imageUpload');
 const debug = require('../utils/debug');
 
-module.exports = (itemModel) => {
+function createItemsRouter(itemModel) {
+    const router = express.Router();
+
     // Get all items
     router.get('/', async (req, res) => {
         try {
@@ -13,6 +14,54 @@ module.exports = (itemModel) => {
             console.error('Error fetching items:', err);
             res.status(500).json({ 
                 error: 'Failed to fetch items',
+                details: err.message,
+                suggestion: 'Please try again or contact support if the issue persists'
+            });
+        }
+    });
+
+    // Get item price history
+    router.get('/:id/price-history', async (req, res) => {
+        try {
+            debug.log('Fetching price history for item:', req.params.id);
+            const history = await itemModel.getPriceHistory(req.params.id);
+            res.json(history);
+        } catch (err) {
+            debug.error('Error fetching price history:', err);
+            res.status(500).json({
+                error: 'Failed to fetch price history',
+                details: err.message,
+                suggestion: 'Please try again or contact support if the issue persists'
+            });
+        }
+    });
+
+    // Get item supplier prices
+    router.get('/:id/supplier-prices', async (req, res) => {
+        try {
+            debug.log('Fetching supplier prices for item:', req.params.id);
+            const prices = await itemModel.getSupplierPrices(req.params.id);
+            res.json(prices);
+        } catch (err) {
+            debug.error('Error fetching supplier prices:', err);
+            res.status(500).json({
+                error: 'Failed to fetch supplier prices',
+                details: err.message,
+                suggestion: 'Please try again or contact support if the issue persists'
+            });
+        }
+    });
+
+    // Get item reference changes
+    router.get('/:id/reference-changes', async (req, res) => {
+        try {
+            debug.log('Fetching reference changes for item:', req.params.id);
+            const changes = await itemModel.getReferenceChanges(req.params.id);
+            res.json(changes);
+        } catch (err) {
+            debug.error('Error fetching reference changes:', err);
+            res.status(500).json({
+                error: 'Failed to fetch reference changes',
                 details: err.message,
                 suggestion: 'Please try again or contact support if the issue persists'
             });
@@ -244,4 +293,6 @@ module.exports = (itemModel) => {
     });
 
     return router;
-};
+}
+
+module.exports = createItemsRouter;

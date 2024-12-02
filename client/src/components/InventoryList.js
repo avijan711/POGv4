@@ -93,10 +93,14 @@ function InventoryList() {
     setPage(0);
   };
 
-  const handleItemClick = async (item) => {
-    const success = await loadItemDetails(item);
-    if (success) {
-      setDetailsOpen(true);
+  const handleItemClick = async (itemId) => {
+    // Find the item in the current items list
+    const item = items.find(i => i.item_id === itemId);
+    if (item) {
+      const success = await loadItemDetails(item);
+      if (success) {
+        setDetailsOpen(true);
+      }
     }
   };
 
@@ -117,7 +121,7 @@ function InventoryList() {
   return (
     <Box 
       sx={{ 
-        height: 'calc(100vh - 64px)', // Subtract app bar height
+        height: 'calc(100vh - 64px)',
         display: 'flex',
         flexDirection: 'column',
         p: 2
@@ -183,27 +187,8 @@ function InventoryList() {
         }}
         item={itemDetails}
         onItemClick={handleItemClick}
+        loading={loadingDetails}
       />
-
-      {/* Loading overlay */}
-      {loadingDetails && (
-        <Box
-          sx={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            zIndex: 9999,
-          }}
-        >
-          <CircularProgress />
-        </Box>
-      )}
     </Box>
   );
 }

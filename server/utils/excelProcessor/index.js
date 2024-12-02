@@ -130,7 +130,7 @@ class ExcelProcessor {
         }
     }
 
-    static async processInquiry(filePath, columnMapping, db) {
+    static async processInquiry(filePath, columnMapping, model) {
         debug.log('Processing inquiry file:', {
             filePath,
             mappingKeys: Object.keys(columnMapping)
@@ -151,7 +151,7 @@ class ExcelProcessor {
 
         try {
             // Process the data using the new processInquiryData function
-            const data = await processInquiryData(filePath, convertedMapping, db);
+            const data = await processInquiryData(filePath, convertedMapping, model);
 
             // Validate data types
             validateDataTypes(data, typeValidations);

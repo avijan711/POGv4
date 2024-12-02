@@ -1,220 +1,108 @@
+const express = require('express');
+const cors = require('cors');
 const path = require('path');
+const debug = require('./utils/debug');
 const { initializeDatabase, getDatabase } = require('./config/database');
-const configureServer = require('./config/server');
 const ItemModel = require('./models/item');
 const InquiryModel = require('./models/inquiry');
-const OrderModel = require('./models/order');
-const fs = require('fs');
+const InquiryItemModel = require('./models/inquiry/item');
+const PromotionModel = require('./models/promotion');
+const createItemsRouter = require('./routes/items');
+const createInquiriesRouter = require('./routes/inquiries');
+const createPromotionsRouter = require('./routes/promotions');
 
-// Retry configuration
-const RETRY_ATTEMPTS = 3;
-const RETRY_DELAY = 1000; // 1 second
+const app = express();
+const port = process.env.PORT || 5002;
 
-// Utility function to retry operations
-async function retryOperation(operation, attempts = RETRY_ATTEMPTS, delay = RETRY_DELAY) {
-    for (let i = 0; i < attempts; i++) {
-        try {
-            return await operation();
-        } catch (error) {
-            if (error.code === 'SQLITE_BUSY' && i < attempts - 1) {
-                console.log(`Database busy, retrying operation in ${delay}ms... (Attempt ${i + 1}/${attempts})`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                continue;
-            }
-            throw error;
-        }
+// Configure CORS with credentials
+app.use(cors({
+  origin: 'http://localhost:3000', // React app's origin
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Content-Disposition'],
+  exposedHeaders: ['Content-Disposition']
+}));
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Serve uploaded files with proper MIME types
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  setHeaders: (res, filePath) => {
+    // Set appropriate content type for images
+    if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+    } else if (filePath.endsWith('.png')) {
+      res.setHeader('Content-Type', 'image/png');
+    } else if (filePath.endsWith('.gif')) {
+      res.setHeader('Content-Type', 'image/gif');
     }
-}
+    // Add cache control headers
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+  }
+}));
 
-// Initialize database and start server
 async function startServer() {
-    let server;
-
     try {
-        // Initialize database with retries
+        // Initialize database
         console.log('Initializing database...');
-        await retryOperation(async () => {
-            await initializeDatabase();
-        });
+        await initializeDatabase();
+        const db = getDatabase();
         console.log('Database initialized successfully');
 
-        // Get database instance
-        const db = getDatabase();
-
-        // Configure server
-        const { app, port } = configureServer();
-
-        // Initialize models with the database instance
+        // Create model instances with database connection
         const itemModel = new ItemModel(db);
         const inquiryModel = new InquiryModel(db);
-        const orderModel = new OrderModel(db);
+        const inquiryItemModel = new InquiryItemModel(db);
+        const promotionModel = new PromotionModel(db);
 
-        // Add database reinitialization endpoint with retries
-        app.post('/api/reinitialize-db', async (req, res) => {
-            try {
-                console.log('Reinitializing database...');
-                await retryOperation(async () => {
-                    const db = getDatabase();
-                    
-                    // Read and execute schema without dropping tables
-                    const schemaPath = path.join(__dirname, 'schema.sql');
-                    const schema = fs.readFileSync(schemaPath, 'utf8');
-                    
-                    await new Promise((resolve, reject) => {
-                        db.exec(schema, (err) => {
-                            if (err) {
-                                console.error('Error executing schema:', err);
-                                reject(err);
-                            } else {
-                                console.log('Schema executed successfully');
-                                resolve();
-                            }
-                        });
-                    });
-                });
-                
-                res.json({ 
-                    success: true,
-                    message: 'Database schema updated successfully' 
-                });
-            } catch (error) {
-                console.error('Error reinitializing database:', error);
-                res.status(500).json({ 
-                    success: false,
-                    error: 'Failed to reinitialize database',
-                    details: error.message 
-                });
-            }
-        });
+        // Create and mount routes
+        app.use('/api/items', createItemsRouter(itemModel));
+        app.use('/api/inquiries', createInquiriesRouter({ 
+            db,
+            inquiryModel,
+            inquiryItemModel,
+            promotionModel
+        }));
+        app.use('/api/promotions', createPromotionsRouter(promotionModel));
 
-        // Set up routes with retry-enabled database access
-        app.use('/api/items', require('./routes/items')(itemModel));
-        app.use('/api/inquiries', require('./routes/inquiries')(inquiryModel));
-        app.use('/api/suppliers', require('./routes/suppliers')(db));
-        app.use('/api/supplier-responses', require('./routes/supplier-responses')(db));
-        app.use('/api/settings', require('./routes/settings'));
-        app.use('/api/promotions', require('./routes/promotions')(db));
-        app.use('/api/orders', require('./routes/orders')(orderModel));
-
-        // Add sample file route
-        app.get('/sample.xlsx', (req, res) => {
-            const filePath = path.join(__dirname, 'sample_inventory.xlsx');
-            res.download(filePath, 'sample_inventory.xlsx', (err) => {
-                if (err) {
-                    console.error('Error downloading sample file:', err);
-                    res.status(500).json({ 
-                        error: 'Error downloading file',
-                        details: err.message,
-                        suggestion: 'Please try again or contact support if the issue persists'
-                    });
-                }
-            });
-        });
-
-        // Enhanced error handler with retry suggestions
+        // Error handling middleware
         app.use((err, req, res, next) => {
-            console.error('Unhandled error:', err);
-
-            if (err.code === 'SQLITE_BUSY') {
-                return res.status(503).json({
-                    error: 'Database is busy',
-                    message: 'The system is experiencing high load. Please try again in a few moments.',
-                    suggestion: 'Your request will be automatically retried'
-                });
-            }
-
-            if (err.code === 'SQLITE_CONSTRAINT') {
-                return res.status(400).json({
-                    error: 'Data constraint violation',
-                    message: err.message,
-                    suggestion: 'Please check your input data and try again'
-                });
-            }
-
-            if (err.code === 'SQLITE_LOCKED') {
-                return res.status(503).json({
-                    error: 'Database table is locked',
-                    message: 'Please try again in a moment',
-                    suggestion: 'Your request will be automatically retried'
-                });
-            }
-
+            console.error('Error:', err);
             res.status(500).json({
-                error: 'Internal server error',
+                error: 'Internal Server Error',
                 details: err.message,
                 suggestion: 'Please try again or contact support if the issue persists'
             });
         });
 
-        // Start server with enhanced error handling
-        server = app.listen(port, () => {
-            console.log(`Server running on port ${port}`);
-            console.log(`Upload endpoint: http://localhost:${port}/api/inquiries/upload`);
-            console.log(`Sample file endpoint: http://localhost:${port}/sample.xlsx`);
+        // Start server
+        app.listen(port, () => {
+            console.log(`Server is running on port ${port}`);
+            console.log(`API endpoint: http://localhost:${port}/api`);
         });
-
-        server.on('error', (err) => {
-            if (err.code === 'EADDRINUSE') {
-                console.error(`Port ${port} is already in use. Please:
-                1. Stop any other server instances
-                2. Wait a few seconds
-                3. Try again
-                Or use a different port by setting the PORT environment variable`);
-                process.exit(1);
-            } else {
-                console.error('Server error:', err);
-                process.exit(1);
-            }
-        });
-
-        // Enhanced cleanup function
-        const cleanup = async () => {
-            console.log('\nShutting down gracefully...');
-            
-            if (server) {
-                await new Promise(resolve => server.close(resolve));
-                console.log('Server closed');
-            }
-
-            const db = getDatabase();
-            if (db) {
-                await new Promise(resolve => {
-                    db.run('PRAGMA optimize', () => {
-                        db.close(() => {
-                            console.log('Database connection closed');
-                            resolve();
-                        });
-                    });
-                });
-            }
-
-            process.exit(0);
-        };
-
-        // Enhanced error handling
-        process.on('SIGINT', cleanup);
-        process.on('SIGTERM', cleanup);
-        process.on('uncaughtException', (err) => {
-            console.error('Uncaught exception:', err);
-            cleanup();
-        });
-        process.on('unhandledRejection', (err) => {
-            console.error('Unhandled rejection:', err);
-            cleanup();
-        });
-
     } catch (error) {
         console.error('Failed to start server:', error);
-        const db = getDatabase();
-        if (db) {
-            await new Promise(resolve => db.close(resolve));
-        }
         process.exit(1);
     }
 }
 
-// Start the server
-startServer().catch(error => {
-    console.error('Fatal error starting server:', error);
-    process.exit(1);
+// Handle process termination
+process.on('SIGINT', () => {
+    const db = getDatabase();
+    if (db) {
+        db.close((err) => {
+            if (err) {
+                console.error('Error closing database:', err);
+                process.exit(1);
+            }
+            console.log('Database connection closed');
+            process.exit(0);
+        });
+    } else {
+        process.exit(0);
+    }
 });
+
+startServer();

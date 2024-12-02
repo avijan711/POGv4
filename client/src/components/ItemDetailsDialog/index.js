@@ -6,25 +6,33 @@ import {
   Box,
   Tabs,
   Tab,
-  CircularProgress
+  CircularProgress,
+  AppBar,
+  Toolbar,
+  IconButton,
+  Stack,
+  Chip
 } from '@mui/material';
+import {
+  Close as CloseIcon,
+  SwapHoriz as SwapHorizIcon,
+  Store as StoreIcon,
+  Info as InfoIcon
+} from '@mui/icons-material';
 
 import { useItemDetails } from '../../hooks/useItemDetails';
 import { uiDebug, perfDebug } from '../../utils/debug';
-import DialogHeader from './DialogHeader';
-import TabPanel from './TabPanel';
-import GeneralInfoPanel from './GeneralInfoPanel';
-import PriceHistoryPanel from './PriceHistoryPanel';
-import SupplierPricesPanel from './SupplierPricesPanel';
-import PromotionsPanel from './PromotionsPanel';
+import BasicInfoTab from './BasicInfoTab';
+import PriceHistoryTab from './PriceHistoryTab';
+import SupplierPricesTab from './SupplierPricesTab';
+import ReferenceChangesTab from './ReferenceChangesTab';
 
-// Separate loading dialog component
-function LoadingDialog({ open, onClose }) {
+// Loading dialog component
+function LoadingDialog({ open }) {
   return (
     <Dialog 
       open={open} 
-      onClose={onClose} 
-      maxWidth="md" 
+      maxWidth="lg" 
       fullWidth
       PaperProps={{
         sx: { minHeight: '200px' }
@@ -45,13 +53,13 @@ function LoadingDialog({ open, onClose }) {
   );
 }
 
-// Separate error dialog component
-function ErrorDialog({ open, onClose }) {
+// Error dialog component
+function ErrorDialog({ open, error, onClose }) {
   return (
     <Dialog 
       open={open} 
-      onClose={onClose} 
-      maxWidth="md" 
+      onClose={onClose}
+      maxWidth="lg" 
       fullWidth
       PaperProps={{
         sx: { minHeight: '200px' }
@@ -66,7 +74,7 @@ function ErrorDialog({ open, onClose }) {
           p: 4 
         }}>
           <Typography color="error">
-            Unable to load item details. Please try again.
+            {error || 'Unable to load item details. Please try again.'}
           </Typography>
         </Box>
       </DialogContent>
@@ -74,7 +82,25 @@ function ErrorDialog({ open, onClose }) {
   );
 }
 
-function ItemDetailsDialog({ open, onClose, item, loading = false }) {
+function TabPanel({ children, value, index }) {
+  return (
+    <Box 
+      role="tabpanel"
+      hidden={value !== index}
+      id={`item-tabpanel-${index}`}
+      aria-labelledby={`item-tab-${index}`}
+      sx={{ 
+        flex: 1,
+        overflow: 'auto',
+        height: 'calc(100vh - 200px)'  // Adjust for AppBar and Tabs height
+      }}
+    >
+      {value === index && children}
+    </Box>
+  );
+}
+
+function ItemDetailsDialog({ open, onClose, item, onItemClick, loading = false }) {
   // Log received props for debugging
   uiDebug.log('ItemDetailsDialog received:', { open, loading, item });
   perfDebug.time('ItemDetailsDialog render');
@@ -84,8 +110,9 @@ function ItemDetailsDialog({ open, onClose, item, loading = false }) {
     setTabValue,
     itemData,
     isLoading,
-    hasError
-  } = useItemDetails(item, open);
+    hasError,
+    error
+  } = useItemDetails(item, open, 'view');
 
   const handleTabChange = useCallback((e, newValue) => {
     uiDebug.log('Tab changed', { from: tabValue, to: newValue });
@@ -100,24 +127,21 @@ function ItemDetailsDialog({ open, onClose, item, loading = false }) {
 
   // Show loading state
   if (loading || isLoading) {
-    return <LoadingDialog open={open} onClose={onClose} />;
+    return <LoadingDialog open={open} />;
   }
 
   // Show error state
   if (hasError || !itemData) {
-    return <ErrorDialog open={open} onClose={onClose} />;
+    return <ErrorDialog open={open} error={error} onClose={onClose} />;
   }
 
-  // Extract all required data with defaults
   const {
     itemDetails,
-    priceHistory = [],
-    supplierPrices = [],
-    promotions = [],
-    hasReferenceChange = false,
-    isReferencedBy = false,
-    getChangeSource,
-    getBackgroundColor
+    priceHistory,
+    supplierPrices,
+    referenceChanges,
+    hasReferenceChange,
+    isReferencedBy
   } = itemData;
 
   perfDebug.timeEnd('ItemDetailsDialog render');
@@ -126,58 +150,107 @@ function ItemDetailsDialog({ open, onClose, item, loading = false }) {
     <Dialog 
       open={open} 
       onClose={onClose} 
-      maxWidth="md" 
+      maxWidth="lg" 
       fullWidth
-      TransitionProps={{
-        onExited: () => {
-          // Reset tab value when dialog closes
-          setTabValue(0);
+      PaperProps={{
+        sx: { 
+          height: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+          m: 1  // Add margin around dialog
         }
       }}
     >
-      <DialogHeader
-        itemDetails={itemDetails}
-        hasReferenceChange={hasReferenceChange}
-        isReferencedBy={isReferencedBy}
-        getChangeSource={getChangeSource}
-        getBackgroundColor={getBackgroundColor}
-        onClose={onClose}
-      />
-      <DialogContent>
+      {/* Dialog Header */}
+      <AppBar position="static" color="default" elevation={1}>
+        <Toolbar variant="dense">
+          <Stack direction="row" alignItems="center" spacing={2} sx={{ flex: 1 }}>
+            <Typography variant="h6" component="div">
+              {itemDetails.itemID}
+            </Typography>
+            
+            {hasReferenceChange && (
+              <Chip
+                icon={<SwapHorizIcon />}
+                label="Has Reference Change"
+                color="warning"
+                size="small"
+              />
+            )}
+            
+            {isReferencedBy && (
+              <Chip
+                icon={<StoreIcon />}
+                label="Referenced By Others"
+                color="info"
+                size="small"
+              />
+            )}
+
+            <Chip
+              icon={<InfoIcon />}
+              label={`Last Updated: ${new Date(itemDetails.lastUpdated).toLocaleDateString()}`}
+              variant="outlined"
+              size="small"
+            />
+          </Stack>
+          
+          <IconButton edge="end" onClick={onClose} aria-label="close">
+            <CloseIcon />
+          </IconButton>
+        </Toolbar>
+
         <Tabs 
           value={tabValue} 
           onChange={handleTabChange}
           aria-label="item details tabs"
+          sx={{ 
+            px: 2,
+            borderBottom: 1,
+            borderColor: 'divider'
+          }}
         >
-          <Tab label="General Info" id="tab-0" aria-controls="tabpanel-0" />
-          <Tab label="Price History" id="tab-1" aria-controls="tabpanel-1" />
-          <Tab label="Supplier Prices" id="tab-2" aria-controls="tabpanel-2" />
-          <Tab label="Promotions" id="tab-3" aria-controls="tabpanel-3" />
-        </Tabs>
-
-        <TabPanel value={tabValue} index={0}>
-          <GeneralInfoPanel 
-            itemDetails={itemDetails}
-            hasReferenceChange={hasReferenceChange}
-            isReferencedBy={isReferencedBy}
-            getChangeSource={getChangeSource}
-            getBackgroundColor={getBackgroundColor}
+          <Tab label="Basic Info" id="item-tab-0" aria-controls="item-tabpanel-0" />
+          <Tab label="Price History" id="item-tab-1" aria-controls="item-tabpanel-1" />
+          <Tab 
+            label="Supplier Prices" 
+            id="item-tab-2" 
+            aria-controls="item-tabpanel-2"
+            icon={supplierPrices.length ? <Chip size="small" label={supplierPrices.length} /> : null}
+            iconPosition="end"
           />
+          <Tab 
+            label="Reference Changes" 
+            id="item-tab-3" 
+            aria-controls="item-tabpanel-3"
+            icon={referenceChanges.length ? <Chip size="small" label={referenceChanges.length} /> : null}
+            iconPosition="end"
+          />
+        </Tabs>
+      </AppBar>
+
+      {/* Dialog Content */}
+      <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <TabPanel value={tabValue} index={0}>
+          <BasicInfoTab itemDetails={itemDetails} />
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
-          <PriceHistoryPanel priceHistory={priceHistory} />
+          <PriceHistoryTab priceHistory={priceHistory} />
         </TabPanel>
 
         <TabPanel value={tabValue} index={2}>
-          <SupplierPricesPanel 
+          <SupplierPricesTab 
             supplierPrices={supplierPrices}
             itemDetails={itemDetails}
           />
         </TabPanel>
 
         <TabPanel value={tabValue} index={3}>
-          <PromotionsPanel promotions={promotions} />
+          <ReferenceChangesTab 
+            referenceChanges={referenceChanges}
+            onItemClick={onItemClick}
+          />
         </TabPanel>
       </DialogContent>
     </Dialog>

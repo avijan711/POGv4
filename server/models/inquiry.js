@@ -1,213 +1,183 @@
 const BaseModel = require('./BaseModel');
 const debug = require('../utils/debug');
-const { getInquiriesQuery, getInquiryByIdQuery } = require('./queries/inquiries');
-const ItemModel = require('./item');
-const InquiryItemModel = require('./inquiry/item');
-const itemUtils = require('../utils/itemUtils');
 
 class InquiryModel extends BaseModel {
     constructor(db) {
         super(db);
-        this.itemModel = new ItemModel(db);
-        this.inquiryItemModel = new InquiryItemModel(db);
     }
 
-    async getAllInquiries(status) {
-        const timerLabel = 'getAllInquiries';
-        debug.time(timerLabel);
-        debug.log('Getting all inquiries with status:', status);
+    async createInquiry({ inquiryNumber, items }) {
+        return await this.executeTransaction(async () => {
+            debug.log('Starting inquiry creation:', { inquiryNumber, itemCount: items.length });
 
-        try {
-            const queryTimerLabel = 'getAllInquiries.query';
-            debug.time(queryTimerLabel);
-            const params = status ? [status] : [];
-            const results = await this.executeQuery(getInquiriesQuery(status), params);
-            debug.timeEnd(queryTimerLabel);
+            // Insert inquiry
+            const inquirySql = `INSERT INTO inquiry (inquiry_number) VALUES (?)`;
+            const inquiryResult = await this.executeRun(inquirySql, [inquiryNumber]);
+            const inquiryId = inquiryResult.lastID;
 
-            debug.log('getAllInquiries results:', {
-                count: results.length,
-                status
-            });
-
-            debug.timeEnd(timerLabel);
-            return results;
-        } catch (error) {
-            debug.error('Error in getAllInquiries:', error);
-            throw error;
-        }
-    }
-
-    async getInquiryById(inquiry_id) {
-        const timerLabel = 'getInquiryById';
-        debug.time(timerLabel);
-        debug.log('Getting inquiry by ID:', inquiry_id);
-
-        try {
-            const queryTimerLabel = 'getInquiryById.query';
-            debug.time(queryTimerLabel);
-            // Pass inquiry_id four times for: InquiryData, ReferenceChanges, SupplierResponses, and ItemsData CTEs
-            const results = await this.executeQuery(getInquiryByIdQuery(), [inquiry_id, inquiry_id, inquiry_id, inquiry_id]);
-            debug.timeEnd(queryTimerLabel);
-
-            if (!results || results.length === 0) {
-                debug.log('Inquiry not found:', inquiry_id);
-                throw new Error('Inquiry not found');
-            }
-
-            const parseTimerLabel = 'getInquiryById.parse';
-            debug.time(parseTimerLabel);
-            const result = results[0];
-
-            const response = {
-                inquiry: JSON.parse(result.inquiry),
-                items: JSON.parse(result.items)
-            };
-
-            debug.timeEnd(parseTimerLabel);
-            debug.timeEnd(timerLabel);
-            return response;
-        } catch (error) {
-            debug.error('Error in getInquiryById:', error);
-            throw error;
-        }
-    }
-
-    async createInquiry(data) {
-        const { inquiryNumber, items } = data;
-        const timerLabel = 'createInquiry';
-        debug.time(timerLabel);
-        debug.log('Creating inquiry:', { inquiryNumber, itemCount: items.length });
-
-        return this.executeTransaction(async (db) => {
-            // Create the inquiry with inquiry_number
-            debug.log('Creating inquiry record');
-            const inquiryTimerLabel = 'createInquiry.inquiryInsert';
-            debug.time(inquiryTimerLabel);
-            const result = await this.executeRun(
-                'INSERT INTO inquiry (inquiry_number, status) VALUES (?, ?)',
-                [inquiryNumber, 'new']
-            );
-            const inquiry_id = result.lastID;
-            debug.timeEnd(inquiryTimerLabel);
-
-            // Create inquiry items using InquiryItemModel
-            debug.log('Creating inquiry items');
-            const inquiryItemsTimerLabel = 'createInquiry.itemsInsert';
-            debug.time(inquiryItemsTimerLabel);
-
+            // First pass: Create all items and referenced items
             for (const item of items) {
-                try {
-                    debug.log('Creating inquiry item:', {
-                        item_id: item.item_id,
-                        new_reference_id: item.new_reference_id
-                    });
+                // Check and create the main item if it doesn't exist
+                const existingItem = await this.executeQuerySingle(
+                    'SELECT item_id FROM item WHERE item_id = ?',
+                    [item.item_id]
+                );
 
-                    await this.inquiryItemModel.createInquiryItem(inquiry_id, {
-                        item_id: item.item_id,
-                        hebrew_description: item.hebrew_description,
-                        english_description: item.english_description,
-                        requested_qty: item.requested_qty || 0,
-                        import_markup: item.import_markup,
-                        hs_code: item.hs_code,
-                        retail_price: item.retail_price,
-                        qty_in_stock: item.qty_in_stock,
-                        sold_this_year: item.sold_this_year,
-                        sold_last_year: item.sold_last_year,
-                        new_reference_id: item.new_reference_id,
-                        reference_notes: item.reference_notes
-                    });
-                } catch (error) {
-                    debug.error('Error creating inquiry item:', error);
-                    throw error;
+                if (!existingItem) {
+                    debug.log('Creating new item:', item.item_id);
+                    // Create the item first
+                    const itemSql = `
+                        INSERT INTO item (
+                            item_id, hebrew_description, english_description,
+                            import_markup, hs_code, origin
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                    `;
+                    await this.executeRun(itemSql, [
+                        item.item_id,
+                        item.hebrew_description,
+                        item.english_description || '',
+                        item.import_markup || 1.30,
+                        item.hs_code || '',
+                        item.origin || ''
+                    ]);
+                }
+
+                // If there's a new_reference_id, check and create that item too
+                if (item.new_reference_id) {
+                    const existingRefItem = await this.executeQuerySingle(
+                        'SELECT item_id FROM item WHERE item_id = ?',
+                        [item.new_reference_id]
+                    );
+
+                    if (!existingRefItem) {
+                        debug.log('Creating referenced item:', item.new_reference_id);
+                        // Create the referenced item with minimal information
+                        const refItemSql = `
+                            INSERT INTO item (
+                                item_id, hebrew_description, english_description,
+                                import_markup
+                            ) VALUES (?, ?, ?, ?)
+                        `;
+                        await this.executeRun(refItemSql, [
+                            item.new_reference_id,
+                            `Referenced item for ${item.item_id}`, // Temporary description
+                            '',
+                            1.30 // Default markup
+                        ]);
+                    }
                 }
             }
-            debug.timeEnd(inquiryItemsTimerLabel);
 
-            debug.log('Inquiry creation completed:', { inquiry_id });
-            debug.timeEnd(timerLabel);
-            return { id: inquiry_id };
+            // Second pass: Insert inquiry items now that all referenced items exist
+            for (const item of items) {
+                const inquiryItemSql = `
+                    INSERT INTO inquiry_item (
+                        inquiry_id, item_id, requested_qty,
+                        hebrew_description, english_description,
+                        hs_code, import_markup, qty_in_stock,
+                        retail_price, sold_this_year, sold_last_year,
+                        original_item_id, new_reference_id, reference_notes,
+                        origin
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `;
+
+                await this.executeRun(inquiryItemSql, [
+                    inquiryId,
+                    item.item_id,
+                    item.requested_qty,
+                    item.hebrew_description,
+                    item.english_description || null,
+                    item.hs_code || null,
+                    item.import_markup || 1.30,
+                    item.qty_in_stock || 0,
+                    item.retail_price || null,
+                    item.sold_this_year || 0,
+                    item.sold_last_year || 0,
+                    item.original_item_id || item.item_id,
+                    item.new_reference_id || null,
+                    item.reference_notes || null,
+                    item.origin || ''
+                ]);
+            }
+
+            debug.log('Inquiry creation completed:', { inquiryId });
+            return { id: inquiryId };
         });
     }
 
-    async updateInquiryStatus(inquiry_id, status) {
-        const timerLabel = 'updateInquiryStatus';
-        debug.time(timerLabel);
-        debug.log('Updating inquiry status:', { inquiry_id, status });
-
-        try {
-            const result = await this.executeRun(
-                'UPDATE inquiry SET status = ? WHERE inquiry_id = ?',
-                [status, inquiry_id]
-            );
-
-            if (result.changes === 0) {
-                throw new Error('Inquiry not found');
-            }
-
-            debug.timeEnd(timerLabel);
-        } catch (error) {
-            debug.error('Error updating inquiry status:', error);
-            throw error;
-        }
+    async getAllInquiries() {
+        const sql = `
+            SELECT i.*, 
+                   COUNT(ii.inquiry_item_id) as item_count,
+                   GROUP_CONCAT(DISTINCT s.name) as suppliers
+            FROM inquiry i
+            LEFT JOIN inquiry_item ii ON i.inquiry_id = ii.inquiry_id
+            LEFT JOIN supplier_response sr ON i.inquiry_id = sr.inquiry_id
+            LEFT JOIN supplier s ON sr.supplier_id = s.supplier_id
+            GROUP BY i.inquiry_id
+            ORDER BY i.date DESC
+        `;
+        return await this.executeQuery(sql);
     }
 
-    async updateInquiryItemQuantity(inquiry_item_id, requested_qty) {
-        try {
-            await this.inquiryItemModel.updateInquiryItem(inquiry_item_id, {
-                requested_qty
-            });
-        } catch (error) {
-            debug.error('Error updating inquiry item quantity:', error);
-            throw error;
-        }
+    async getInquiryById(inquiryId) {
+        const sql = `
+            SELECT i.*,
+                   COUNT(DISTINCT ii.item_id) as total_items,
+                   COUNT(DISTINCT sr.supplier_id) as total_suppliers,
+                   GROUP_CONCAT(DISTINCT s.name) as supplier_names
+            FROM inquiry i
+            LEFT JOIN inquiry_item ii ON i.inquiry_id = ii.inquiry_id
+            LEFT JOIN supplier_response sr ON i.inquiry_id = sr.inquiry_id
+            LEFT JOIN supplier s ON sr.supplier_id = s.supplier_id
+            WHERE i.inquiry_id = ?
+            GROUP BY i.inquiry_id
+        `;
+        return await this.executeQuerySingle(sql, [inquiryId]);
     }
 
-    async updateInquiryItemReference(inquiry_item_id, item_id, new_reference_id, reference_notes) {
-        try {
-            await this.inquiryItemModel.updateInquiryItem(inquiry_item_id, {
-                item_id,
-                new_reference_id,
-                reference_notes
-            });
-        } catch (error) {
-            debug.error('Error updating inquiry item reference:', error);
-            throw error;
-        }
+    async getInquiryItems(inquiryId) {
+        const sql = `
+            SELECT ii.*,
+                   i.hebrew_description as current_hebrew_description,
+                   i.english_description as current_english_description,
+                   i.import_markup as current_import_markup,
+                   i.hs_code as current_hs_code,
+                   ph.ils_retail_price as current_retail_price,
+                   ph.qty_in_stock as current_qty_in_stock,
+                   ph.sold_this_year as current_sold_this_year,
+                   ph.sold_last_year as current_sold_last_year
+            FROM inquiry_item ii
+            LEFT JOIN item i ON ii.item_id = i.item_id
+            LEFT JOIN (
+                SELECT *
+                FROM price_history
+                WHERE (item_id, date) IN (
+                    SELECT item_id, MAX(date)
+                    FROM price_history
+                    GROUP BY item_id
+                )
+            ) ph ON i.item_id = ph.item_id
+            WHERE ii.inquiry_id = ?
+            ORDER BY ii.inquiry_item_id
+        `;
+        return await this.executeQuery(sql, [inquiryId]);
     }
 
-    async deleteInquiry(inquiry_id) {
-        const timerLabel = 'deleteInquiry';
-        debug.time(timerLabel);
-        debug.log('Deleting inquiry:', inquiry_id);
+    async updateInquiry(inquiryId, updateData) {
+        const { status } = updateData;
+        const sql = `
+            UPDATE inquiry 
+            SET status = ?
+            WHERE inquiry_id = ?
+        `;
+        await this.executeRun(sql, [status, inquiryId]);
+        return await this.getInquiryById(inquiryId);
+    }
 
-        return this.executeTransaction(async () => {
-            try {
-                const deleteItemsTimerLabel = 'deleteInquiry.items';
-                debug.time(deleteItemsTimerLabel);
-                await this.executeRun(
-                    'DELETE FROM inquiry_item WHERE inquiry_id = ?',
-                    [inquiry_id]
-                );
-                debug.timeEnd(deleteItemsTimerLabel);
-
-                const deleteInquiryTimerLabel = 'deleteInquiry.inquiry';
-                debug.time(deleteInquiryTimerLabel);
-                const result = await this.executeRun(
-                    'DELETE FROM inquiry WHERE inquiry_id = ?',
-                    [inquiry_id]
-                );
-                debug.timeEnd(deleteInquiryTimerLabel);
-
-                if (result.changes === 0) {
-                    throw new Error('Inquiry not found');
-                }
-
-                debug.timeEnd(timerLabel);
-            } catch (error) {
-                debug.error('Error deleting inquiry:', error);
-                throw error;
-            }
-        });
+    async deleteInquiry(inquiryId) {
+        const sql = 'DELETE FROM inquiry WHERE inquiry_id = ?';
+        return await this.executeRun(sql, [inquiryId]);
     }
 }
 

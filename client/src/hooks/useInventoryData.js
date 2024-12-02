@@ -1,8 +1,7 @@
 import { useState, useCallback } from 'react';
-import axios from 'axios';
-import { API_BASE_URL } from '../config';
 import { dataDebug } from '../utils/debug';
 import inventoryUtils from '../utils/inventoryUtils';
+import axiosInstance from '../utils/axiosConfig';
 
 /**
  * Custom hook for managing inventory data and operations
@@ -57,7 +56,7 @@ export const useInventoryData = () => {
     const fetchItems = useCallback(async () => {
         try {
             dataDebug.log('Fetching inventory items');
-            const response = await axios.get(`${API_BASE_URL}/api/items`);
+            const response = await axiosInstance.get('/api/items');
             const processedItems = processItems(response.data);
             setItems(processedItems);
             setError('');
@@ -78,11 +77,11 @@ export const useInventoryData = () => {
         try {
             dataDebug.log('Saving item:', itemData.get('item_id'));
             if (mode === 'add') {
-                await axios.post(`${API_BASE_URL}/api/items`, itemData, {
+                await axiosInstance.post('/api/items', itemData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
             } else {
-                await axios.put(`${API_BASE_URL}/api/items/${itemData.get('item_id')}`, itemData, {
+                await axiosInstance.put(`/api/items/${itemData.get('item_id')}`, itemData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
             }
@@ -107,7 +106,7 @@ export const useInventoryData = () => {
 
         try {
             dataDebug.log('Deleting item:', itemId);
-            await axios.delete(`${API_BASE_URL}/api/items/${itemId}`);
+            await axiosInstance.delete(`/api/items/${itemId}`);
             await fetchItems();
             return true;
         } catch (error) {
@@ -127,7 +126,7 @@ export const useInventoryData = () => {
             dataDebug.log('Loading item details for:', item.item_id);
             setLoadingDetails(true);
             
-            const response = await axios.get(`${API_BASE_URL}/api/items/${item.item_id}`);
+            const response = await axiosInstance.get(`/api/items/${item.item_id}`);
             const rawData = response.data;
             
             // Process the item details to ensure references are parsed and filtered

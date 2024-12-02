@@ -3,9 +3,11 @@ import { Chip, Tooltip, Box } from '@mui/material';
 import {
   SwapHoriz as SwapHorizIcon,
   Close as CloseIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon,
 } from '@mui/icons-material';
 
-function ReferenceChip({ reference_change, onDelete }) {
+function ReferenceChip({ reference_change, onDelete, isReplacement }) {
   if (!reference_change) return null;
 
   const getTooltipText = () => {
@@ -14,23 +16,27 @@ function ReferenceChip({ reference_change, onDelete }) {
       : 'Changed by user';
     const date = new Date(reference_change.change_date).toLocaleDateString();
     const notes = reference_change.notes ? `\nNotes: ${reference_change.notes}` : '';
-    return `${source}\nDate: ${date}${notes}`;
+    const type = isReplacement ? 'Replacement Item' : 'Old Item';
+    return `${type}\n${source}\nDate: ${date}${notes}`;
   };
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <Tooltip title={getTooltipText()}>
         <Chip
-          icon={<SwapHorizIcon />}
+          icon={isReplacement ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />}
           label={reference_change.new_reference_id}
-          color={reference_change.source === 'supplier' ? 'primary' : 'secondary'}
+          color={isReplacement ? 'success' : 'error'}
           size="small"
           variant="outlined"
           onDelete={onDelete}
           deleteIcon={<CloseIcon />}
           sx={{ 
             '& .MuiChip-label': { px: 1 },
-            '& .MuiChip-icon': { fontSize: 16 }
+            '& .MuiChip-icon': { 
+              fontSize: 16,
+              color: isReplacement ? 'success.main' : 'error.main'
+            }
           }}
         />
       </Tooltip>

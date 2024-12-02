@@ -10,10 +10,8 @@ const { handleUpload, cleanupFile } = require('../middleware/upload');
 const XLSX = require('xlsx');
 const path = require('path');
 
-function createRouter(db) {
+function createRouter({ db, inquiryModel, inquiryItemModel }) {
     const router = express.Router();
-    const inquiryModel = new InquiryModel(db);
-    const inquiryItemModel = new InquiryItemModel(db);
 
     // Get Excel columns for mapping
     router.post('/columns', handleUpload, async (req, res, next) => {
@@ -88,8 +86,8 @@ function createRouter(db) {
             // Validate the mapping using snake_case field names
             ExcelProcessor.validateMapping(parsedMapping, ['item_id', 'hebrew_description', 'requested_qty']);
             
-            // Process the Excel file using the processInquiry method, passing the db connection
-            const items = await ExcelProcessor.processInquiry(req.file.path, parsedMapping, db);
+            // Process the Excel file using the processInquiry method, passing the model instance
+            const items = await ExcelProcessor.processInquiry(req.file.path, parsedMapping, inquiryModel);
             
             debug.log('Processed items:', {
                 count: items.length,

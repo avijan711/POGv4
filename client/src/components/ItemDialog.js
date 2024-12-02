@@ -1,3 +1,19 @@
+/**
+ * ItemDialog Component
+ * 
+ * This component provides a dialog for creating and editing inventory items.
+ * It works in conjunction with ItemDetailsDialog but serves a different purpose:
+ * - ItemDialog (this): Form-based editing with validation
+ * - ItemDetailsDialog: Read-only view with reference tracking
+ * 
+ * @param {Object} props
+ * @param {boolean} props.open - Controls dialog visibility
+ * @param {Function} props.onClose - Handler for dialog close
+ * @param {Object} props.item - Item data for editing (null for new items)
+ * @param {Function} props.onSave - Handler for save action
+ * @param {string} props.mode - Either 'add' or 'edit'
+ */
+
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
@@ -12,13 +28,14 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  Paper,
   Tabs,
   Tab,
-  Chip,
+  CircularProgress
 } from '@mui/material';
 import { Image as ImageIcon } from '@mui/icons-material';
 import { format } from 'date-fns';
+import { useItemDetails } from '../hooks/useItemDetails';
+import { API_BASE_URL } from '../config';
 
 // EUR to ILS conversion rate
 const EUR_TO_ILS = 4.1;
@@ -32,6 +49,16 @@ function TabPanel({ children, value, index }) {
 }
 
 function ItemDialog({ open, onClose, item, onSave, mode }) {
+  // Use the enhanced useItemDetails hook in edit mode
+  const {
+    tabValue,
+    setTabValue,
+    itemData,
+    isLoading,
+    hasError,
+    error
+  } = useItemDetails(item, open, 'edit');
+
   const defaultFormData = useMemo(() => ({
     itemID: '',
     hebrewDescription: '',
@@ -48,48 +75,47 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
   const [formData, setFormData] = useState(defaultFormData);
   const [imagePreview, setImagePreview] = useState(null);
   const [retailPriceError, setRetailPriceError] = useState('');
-  const [tabValue, setTabValue] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Calculate discount percentage from retail price
-  const calculateDiscount = (priceEUR, importMarkup, retailPriceILS) => {
-    if (!retailPriceILS) return null;
-    // Convert supplier price to ILS and apply markup
-    const supplierPriceILS = priceEUR * EUR_TO_ILS * importMarkup;
-    // Calculate discount percentage
-    const discount = ((retailPriceILS - supplierPriceILS) / retailPriceILS) * 100;
-    return Math.max(0, Math.min(100, discount)); // Clamp between 0-100%
-  };
-
+  // Initialize form data when itemData changes
   useEffect(() => {
-    if (open && item) {
-      console.log('ItemDialog opened with item:', item);
+    if (open && itemData) {
       setFormData({
-        itemID: item.itemID || '',
-        hebrewDescription: item.hebrewDescription || '',
-        englishDescription: item.englishDescription || '',
-        importMarkup: item.importMarkup?.toString() || '1.30',
-        hsCode: item.hsCode || '',
-        retailPrice: item.retailPrice?.toString().replace(/[₪]/g, '') || '',
-        qtyInStock: item.qtyInStock?.toString() || '0',
-        soldThisYear: item.soldThisYear?.toString() || '0',
-        soldLastYear: item.soldLastYear?.toString() || '0',
-        image: item.image || null,
+        itemID: itemData.itemID || '',
+        hebrewDescription: itemData.hebrewDescription || '',
+        englishDescription: itemData.englishDescription || '',
+        importMarkup: itemData.importMarkup.toString(),
+        hsCode: itemData.hsCode || '',
+        retailPrice: itemData.retailPrice?.toString() || '',
+        qtyInStock: itemData.qtyInStock.toString(),
+        soldThisYear: itemData.soldThisYear.toString(),
+        soldLastYear: itemData.soldLastYear.toString(),
+        image: itemData.image || null,
       });
-      if (item.image) {
-        setImagePreview(`http://localhost:5000/uploads/${item.image}`);
+      
+      if (itemData.image) {
+        setImagePreview(`${API_BASE_URL}/uploads/${itemData.image}`);
       }
     } else if (!open) {
       setFormData(defaultFormData);
       setImagePreview(null);
       setRetailPriceError('');
       setTabValue(0);
+      setIsSubmitting(false);
     }
-  }, [open, item, defaultFormData]);
+  }, [open, itemData, defaultFormData, setTabValue]);
+
+  // Calculate discount percentage from retail price
+  const calculateDiscount = (priceEUR, importMarkup, retailPriceILS) => {
+    if (!retailPriceILS) return null;
+    const supplierPriceILS = priceEUR * EUR_TO_ILS * importMarkup;
+    const discount = ((retailPriceILS - supplierPriceILS) / retailPriceILS) * 100;
+    return Math.max(0, Math.min(100, discount));
+  };
 
   const handleChange = (field) => (event) => {
     let value = event.target.value;
     
-    // Handle numeric fields
     if (['importMarkup', 'qtyInStock', 'soldThisYear', 'soldLastYear', 'retailPrice'].includes(field)) {
       value = value.replace(/[^\d.]/g, '');
       const parts = value.split('.');
@@ -110,7 +136,6 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
           setRetailPriceError('');
         }
       } else {
-        // For other numeric fields, ensure non-negative values
         const numValue = parseFloat(value);
         if (!isNaN(numValue)) {
           value = Math.max(0, numValue).toString();
@@ -140,8 +165,9 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
     }
   };
 
-  const handleSubmit = () => {
-    // Validate retail price if provided
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+
     if (formData.retailPrice) {
       const retailPrice = parseFloat(formData.retailPrice);
       if (!retailPrice || retailPrice <= 0) {
@@ -150,61 +176,50 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
       }
     }
 
-    const submitData = new FormData();
-    
-    // Add all form fields to FormData
-    Object.entries(formData).forEach(([key, value]) => {
-      if (value !== null && value !== '') {
-        submitData.append(key, value);
+    try {
+      setIsSubmitting(true);
+      const submitData = new FormData();
+      
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value !== null && value !== '') {
+          // Convert camelCase to snake_case for backend
+          const backendKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+          submitData.append(backendKey, value);
+        }
+      });
+
+      if (formData.image instanceof File) {
+        submitData.append('image', formData.image);
       }
-    });
 
-    // Add image only if it's a File object (new upload)
-    if (formData.image instanceof File) {
-      submitData.append('image', formData.image);
+      await onSave(submitData);
+    } catch (error) {
+      console.error('Error submitting form:', error);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    console.log('Submitting form data:', {
-      itemID: formData.itemID,
-      hebrewDescription: formData.hebrewDescription,
-      englishDescription: formData.englishDescription,
-      importMarkup: formData.importMarkup,
-      hsCode: formData.hsCode,
-      qtyInStock: formData.qtyInStock,
-      soldThisYear: formData.soldThisYear,
-      soldLastYear: formData.soldLastYear,
-      retailPrice: formData.retailPrice,
-      hasImage: formData.image instanceof File
-    });
-
-    onSave(submitData);
   };
 
   const handleClose = () => {
-    setFormData(defaultFormData);
-    setImagePreview(null);
-    setRetailPriceError('');
-    setTabValue(0);
-    onClose();
+    if (!isSubmitting) {
+      onClose();
+    }
   };
 
-  // Format supplier prices section
   const renderSupplierPrices = () => {
-    if (!item?.supplierPrices?.length) return null;
+    if (!itemData?.supplierPrices?.length) return null;
 
     const retailPrice = parseFloat(formData.retailPrice);
     const importMarkup = parseFloat(formData.importMarkup);
 
-    // Calculate discounts and find the best supplier
     const supplierDiscounts = {};
-    item.supplierPrices.forEach(price => {
+    itemData.supplierPrices.forEach(price => {
       const discount = calculateDiscount(price.price, importMarkup, retailPrice);
       if (discount !== null) {
         supplierDiscounts[price.supplierName] = discount;
       }
     });
 
-    // Find highest and second highest discounts
     const discounts = Object.entries(supplierDiscounts)
       .sort(([, a], [, b]) => b - a);
     const bestSupplier = discounts[0]?.[0];
@@ -224,11 +239,10 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
               <TableCell>Change</TableCell>
               <TableCell>Discount</TableCell>
               <TableCell>Delta</TableCell>
-              <TableCell>History</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {item.supplierPrices.map((price, index) => {
+            {itemData.supplierPrices.map((price, index) => {
               const isBestSupplier = price.supplierName === bestSupplier;
               const discount = supplierDiscounts[price.supplierName];
               
@@ -250,11 +264,6 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
                   <TableCell>
                     {isBestSupplier && delta ? `${delta}%` : ''}
                   </TableCell>
-                  <TableCell>
-                    <Button size="small">
-                      View
-                    </Button>
-                  </TableCell>
                 </TableRow>
               );
             })}
@@ -264,9 +273,8 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
     );
   };
 
-  // Format promotions section
   const renderPromotions = () => {
-    if (!item?.promotions?.length) return null;
+    if (!itemData?.promotions?.length) return null;
 
     return (
       <Box sx={{ mt: 2 }}>
@@ -281,7 +289,7 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {item.promotions.map((promo, index) => (
+            {itemData.promotions.map((promo, index) => (
               <TableRow key={index}>
                 <TableCell>{promo.supplierName}</TableCell>
                 <TableCell>{format(new Date(promo.startDate), 'dd/MM/yyyy')}</TableCell>
@@ -296,8 +304,44 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
     );
   };
 
+  // Show loading state
+  if (isLoading) {
+    return (
+      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+        <DialogContent>
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+            <CircularProgress />
+          </Box>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Show error state
+  if (hasError) {
+    return (
+      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+        <DialogContent>
+          <Box sx={{ p: 2, color: 'error.main' }}>
+            {error || 'An error occurred while loading item data'}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
+
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={handleClose} 
+      maxWidth="md" 
+      fullWidth
+      disableEscapeKeyDown={isSubmitting}
+      disableBackdropClick={isSubmitting}
+    >
       <DialogTitle>
         {mode === 'add' ? 'Add New Item' : 'Edit Item'}
       </DialogTitle>
@@ -318,6 +362,8 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
               onChange={handleChange('itemID')}
               disabled={mode === 'edit'}
               required
+              error={!formData.itemID}
+              helperText={!formData.itemID ? 'Item ID is required' : ''}
             />
             <TextField
               label="Hebrew Description"
@@ -325,6 +371,8 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
               onChange={handleChange('hebrewDescription')}
               required
               dir="rtl"
+              error={!formData.hebrewDescription}
+              helperText={!formData.hebrewDescription ? 'Hebrew description is required' : ''}
             />
             <TextField
               label="English Description"
@@ -390,6 +438,7 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
                   variant="outlined"
                   component="span"
                   startIcon={<ImageIcon />}
+                  disabled={isSubmitting}
                 >
                   Upload Image
                 </Button>
@@ -416,14 +465,19 @@ function ItemDialog({ open, onClose, item, onSave, mode }) {
         </TabPanel>
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose}>Cancel</Button>
+        <Button 
+          onClick={handleClose}
+          disabled={isSubmitting}
+        >
+          Cancel
+        </Button>
         <Button 
           onClick={handleSubmit} 
           variant="contained" 
           color="primary"
-          disabled={!formData.itemID || !formData.hebrewDescription || !!retailPriceError}
+          disabled={isSubmitting || !formData.itemID || !formData.hebrewDescription || !!retailPriceError}
         >
-          {mode === 'add' ? 'Add' : 'Save'}
+          {isSubmitting ? <CircularProgress size={24} /> : (mode === 'add' ? 'Add' : 'Save')}
         </Button>
       </DialogActions>
     </Dialog>

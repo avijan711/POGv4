@@ -1,18 +1,12 @@
 const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
-const cors = require('cors');
 const debug = require('../utils/debug');
 const { uploadConfig } = require('../middleware/upload');
-const Promotion = require('../models/promotion');
 
-function createRouter(db) {
+function createRouter(promotionModel) {
     const router = express.Router();
     const upload = multer(uploadConfig);
-    const promotionModel = new Promotion(db);
-
-    // Enable CORS
-    router.use(cors());
 
     // SSE endpoint for progress updates
     router.get('/progress/:uploadId', (req, res) => {
@@ -40,18 +34,7 @@ function createRouter(db) {
     // Get active promotions
     router.get('/active', async (req, res, next) => {
         try {
-            const promotions = await promotionModel.executeQuery(`
-                SELECT 
-                    p.*,
-                    s.Name as SupplierName,
-                    (SELECT COUNT(*) FROM promotion_items WHERE promotion_id = p.id) as ItemCount
-                FROM promotions p
-                LEFT JOIN Supplier s ON p.supplier_id = s.SupplierID
-                WHERE p.is_active = 1
-                AND p.start_date <= datetime('now')
-                AND p.end_date >= datetime('now')
-                ORDER BY p.created_at DESC
-            `);
+            const promotions = await promotionModel.getActivePromotions();
             res.json(promotions || []);
         } catch (err) {
             debug.error('Error getting active promotions:', err);

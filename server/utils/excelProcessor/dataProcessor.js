@@ -1,6 +1,5 @@
 const XLSX = require('xlsx');
 const debug = require('../debug');
-const BaseModel = require('../../models/BaseModel');
 
 // Common field mapping for converting client-side field names to database field names
 const fieldMap = {
@@ -60,7 +59,7 @@ function parseNumericValue(value, defaultValue = 0) {
     return !isNaN(numValue) ? Math.max(0, numValue) : defaultValue;
 }
 
-async function processInquiryData(filePath, columnMapping, db) {
+async function processInquiryData(filePath, columnMapping, model) {
     try {
         debug.log('Processing inquiry data with mapping:', columnMapping);
         
@@ -88,9 +87,6 @@ async function processInquiryData(filePath, columnMapping, db) {
         // Track duplicates and original positions
         const itemIdCounts = {};
         const itemIdFirstIndex = {};
-
-        // Create BaseModel instance for database queries
-        const model = new BaseModel(db);
 
         const processedData = await Promise.all(data.map(async (row, index) => {
             const processedRow = {

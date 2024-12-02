@@ -23,12 +23,14 @@ function getInquiryItemsQuery() {
                         'supplier_name', s.name,
                         'price_quoted', sr.price_quoted,
                         'response_date', sr.response_date,
-                        'is_promotion', COALESCE(sr.is_promotion, 0)
+                        'is_promotion', COALESCE(sr.is_promotion, 0),
+                        'promotion_name', sr.promotion_name
                     )
                 )
                 FROM supplier_response sr
                 LEFT JOIN supplier s ON sr.supplier_id = s.supplier_id
                 WHERE sr.item_id = ii.item_id
+                AND sr.inquiry_id = ii.inquiry_id
                 AND sr.status != 'deleted'
                 ORDER BY sr.response_date DESC
             ) as supplier_prices

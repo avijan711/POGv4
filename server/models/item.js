@@ -1,306 +1,263 @@
 const BaseModel = require('./BaseModel');
-const getAllItemsQuery = require('./queries/items/getAllItems');
-const getItemByIdQuery = require('./queries/items/getItemById');
 const debug = require('../utils/debug');
-const itemUtils = require('../utils/itemUtils');
 
 class ItemModel extends BaseModel {
     constructor(db) {
         super(db);
-        this.jsonFields = ['reference_change', 'referencing_items', 'price_history', 'supplier_prices', 'promotions'];
     }
 
     async getAllItems() {
-        try {
-            debug.time('getAllItems');
-            const rows = await this.executeQuery(getAllItemsQuery);
-            const items = rows.map(row => itemUtils.parseJsonFields(row, this.jsonFields));
-            debug.timeEnd('getAllItems');
-            return items;
-        } catch (err) {
-            debug.error('Error getting items:', err);
-            throw err;
-        }
-    }
-
-    async getItemById(item_id) {
-        try {
-            debug.time('getItemById');
-            debug.log('Getting item by ID:', item_id);
-
-            // The query needs item_id eight times:
-            // 1. LatestHistory CTE
-            // 2. LatestInquiryItems CTE
-            // 3. PriceHistory CTE
-            // 4. SupplierPrices CTE
-            // 5. ItemPromotions CTE
-            // 6. BaseItems CTE
-            // 7. LatestReferenceChanges CTE
-            // 8. ReferencingItems CTE
-            const params = Array(8).fill(item_id);
-            const row = await this.executeQuerySingle(getItemByIdQuery, params);
-
-            if (!row) {
-                debug.log('No item found for ID:', item_id);
-                return null;
-            }
-
-            const parsedRow = itemUtils.parseJsonFields(row, this.jsonFields);
-            debug.timeEnd('getItemById');
-            return parsedRow;
-        } catch (err) {
-            debug.error('Error getting item:', err);
-            throw err;
-        }
-    }
-
-    async createItem(data) {
-        try {
-            const validation = itemUtils.validateItemData(data);
-            if (!validation.isValid) {
-                throw new Error(`Invalid item data: ${validation.errors.join(', ')}`);
-            }
-
-            const formattedData = itemUtils.formatItemData(data);
-            await this.executeTransaction(async (db) => {
-                await this._insertItemBase(db, formattedData);
-                if (itemUtils.hasRetailPrice(formattedData)) {
-                    await this._insertPriceHistory(db, formattedData);
-                }
-            });
-
-            return formattedData;
-        } catch (err) {
-            debug.error('Error creating item:', err);
-            throw err;
-        }
-    }
-
-    async updateItem(item_id, data) {
-        try {
-            const validation = itemUtils.validateItemData({ ...data, item_id });
-            if (!validation.isValid) {
-                throw new Error(`Invalid item data: ${validation.errors.join(', ')}`);
-            }
-
-            const formattedData = itemUtils.formatItemData({ ...data, item_id });
-            await this.executeTransaction(async (db) => {
-                await this._updateItemBase(db, item_id, formattedData);
-                if (itemUtils.hasRetailPrice(formattedData)) {
-                    await this._insertPriceHistory(db, formattedData);
-                }
-            });
-        } catch (err) {
-            debug.error('Error updating item:', err);
-            throw err;
-        }
-    }
-
-    async deleteItem(item_id) {
-        try {
-            await this.executeTransaction(async (db) => {
-                await this._deleteItemReference(db, item_id);
-                await this._deleteRelatedRecords(db, item_id);
-            });
-        } catch (err) {
-            debug.error('Error deleting item:', err);
-            throw err;
-        }
-    }
-
-    async addReferenceChange(item_id, new_reference_id, supplier_id, notes) {
-        if (item_id === new_reference_id) return;
-
-        try {
-            await this.executeTransaction(async (db) => {
-                const existingItem = await this._checkItemExists(db, new_reference_id);
-                if (!existingItem) {
-                    await this._createReferenceItem(db, new_reference_id);
-                }
-
-                await this._deleteSelfReferences(db);
-                await this._insertReferenceChange(db, item_id, new_reference_id, supplier_id, notes);
-            });
-        } catch (err) {
-            debug.error('Error adding reference change:', err);
-            throw err;
-        }
-    }
-
-    async _insertItemBase(db, data) {
-        const query = `
-            INSERT INTO item (
-                item_id,
-                hebrew_description,
-                english_description,
-                import_markup,
-                hs_code,
-                origin,
-                image
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        const sql = `
+            SELECT i.*, 
+                   p.ils_retail_price as retail_price,
+                   p.qty_in_stock,
+                   p.sold_this_year,
+                   p.sold_last_year,
+                   p.date as last_price_update
+            FROM item i
+            LEFT JOIN (
+                SELECT *
+                FROM price_history
+                WHERE (item_id, date) IN (
+                    SELECT item_id, MAX(date)
+                    FROM price_history
+                    GROUP BY item_id
+                )
+            ) p ON i.item_id = p.item_id
         `;
-        const params = [
-            data.item_id,
-            data.hebrew_description,
-            data.english_description || '',
-            data.import_markup || 1.30,
-            data.hs_code || '',
-            data.origin || '',
-            data.image || ''
-        ];
-
-        debug.logQuery('Insert item base', query, params);
-        await this.executeRun(query, params);
+        return await this.executeQuery(sql);
     }
 
-    async _insertPriceHistory(db, data) {
-        const query = `
-            INSERT INTO price_history (
-                item_id,
+    async getItemById(itemId) {
+        const sql = `
+            SELECT i.*, 
+                   p.ils_retail_price as retail_price,
+                   p.qty_in_stock,
+                   p.sold_this_year,
+                   p.sold_last_year,
+                   p.date as last_price_update,
+                   rc.new_reference_id as reference_id,
+                   rc.notes as reference_notes,
+                   rc.change_date as reference_date,
+                   s.name as reference_supplier
+            FROM item i
+            LEFT JOIN (
+                SELECT *
+                FROM price_history
+                WHERE (item_id, date) IN (
+                    SELECT item_id, MAX(date)
+                    FROM price_history
+                    GROUP BY item_id
+                )
+            ) p ON i.item_id = p.item_id
+            LEFT JOIN item_reference_change rc ON i.item_id = rc.original_item_id
+            LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
+            WHERE i.item_id = ?
+        `;
+        return await this.executeQuerySingle(sql, [itemId]);
+    }
+
+    async getPriceHistory(itemId) {
+        const sql = `
+            SELECT 
+                date,
                 ils_retail_price,
                 qty_in_stock,
                 sold_this_year,
-                sold_last_year,
-                date
-            ) VALUES (?, ?, ?, ?, ?, datetime('now'))
-        `;
-        const params = [
-            data.item_id,
-            data.retail_price,
-            data.qty_in_stock || 0,
-            data.sold_this_year || 0,
-            data.sold_last_year || 0
-        ];
-
-        debug.logQuery('Insert price history', query, params);
-        await this.executeRun(query, params);
-    }
-
-    async _updateItemBase(db, item_id, data) {
-        // First get current item data
-        const currentItem = await this.getItemById(item_id);
-        if (!currentItem) {
-            throw new Error('Item not found');
-        }
-
-        const query = `
-            UPDATE item SET 
-                hebrew_description = COALESCE(?, hebrew_description),
-                english_description = COALESCE(?, english_description),
-                import_markup = COALESCE(?, import_markup),
-                hs_code = COALESCE(?, hs_code),
-                origin = COALESCE(?, origin)
-                ${data.image ? ', image = ?' : ''}
+                sold_last_year
+            FROM price_history
             WHERE item_id = ?
+            ORDER BY date DESC
         `;
+        return await this.executeQuery(sql, [itemId]);
+    }
 
-        const params = [
-            data.hebrew_description || currentItem.hebrew_description,
-            data.english_description !== undefined ? data.english_description : currentItem.english_description,
-            data.import_markup || currentItem.import_markup,
-            data.hs_code !== undefined ? data.hs_code : currentItem.hs_code,
-            data.origin !== undefined ? data.origin : currentItem.origin,
-            ...(data.image ? [data.image] : []),
-            item_id
-        ];
+    async getSupplierPrices(itemId) {
+        const sql = `
+            WITH PriceChanges AS (
+                SELECT 
+                    sr1.supplier_id,
+                    sr1.item_id,
+                    sr1.price_quoted as current_price,
+                    sr1.response_date as current_date,
+                    sr2.price_quoted as previous_price,
+                    sr2.response_date as previous_date,
+                    CASE 
+                        WHEN sr2.price_quoted IS NOT NULL 
+                        THEN ((sr1.price_quoted - sr2.price_quoted) / sr2.price_quoted * 100)
+                        ELSE 0 
+                    END as price_change
+                FROM supplier_response sr1
+                LEFT JOIN supplier_response sr2 ON 
+                    sr1.supplier_id = sr2.supplier_id AND
+                    sr1.item_id = sr2.item_id AND
+                    sr2.response_date = (
+                        SELECT MAX(response_date)
+                        FROM supplier_response sr3
+                        WHERE sr3.supplier_id = sr1.supplier_id
+                        AND sr3.item_id = sr1.item_id
+                        AND sr3.response_date < sr1.response_date
+                    )
+                WHERE sr1.item_id = ?
+            )
+            SELECT 
+                s.name as supplier_name,
+                pc.current_price as price_quoted,
+                pc.current_date as response_date,
+                sr.status,
+                sr.is_promotion,
+                sr.promotion_name,
+                pc.price_change
+            FROM PriceChanges pc
+            JOIN supplier s ON pc.supplier_id = s.supplier_id
+            JOIN supplier_response sr ON 
+                sr.supplier_id = pc.supplier_id AND
+                sr.item_id = pc.item_id AND
+                sr.response_date = pc.current_date
+            ORDER BY pc.current_date DESC
+        `;
+        return await this.executeQuery(sql, [itemId]);
+    }
 
-        debug.logQuery('Update item base', query, params);
-        const result = await this.executeRun(query, params);
-        if (result.changes === 0) {
-            throw new Error('Item not found');
-        }
+    async getReferenceChanges(itemId) {
+        const sql = `
+            SELECT 
+                rc.original_item_id,
+                rc.new_reference_id,
+                s.name as supplier_name,
+                rc.changed_by_user,
+                rc.change_date,
+                rc.notes,
+                i1.hebrew_description as original_description,
+                i2.hebrew_description as new_description
+            FROM item_reference_change rc
+            LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
+            LEFT JOIN item i1 ON rc.original_item_id = i1.item_id
+            LEFT JOIN item i2 ON rc.new_reference_id = i2.item_id
+            WHERE rc.original_item_id = ? OR rc.new_reference_id = ?
+            ORDER BY rc.change_date DESC
+        `;
+        return await this.executeQuery(sql, [itemId, itemId]);
+    }
 
-        // Update history if retail price or quantities changed
-        if (data.retail_price !== undefined || 
-            data.qty_in_stock !== undefined || 
-            data.sold_this_year !== undefined || 
-            data.sold_last_year !== undefined) {
+    async createItem(itemData) {
+        return await this.executeTransaction(async () => {
+            const {
+                itemID,
+                hebrewDescription,
+                englishDescription,
+                importMarkup,
+                hsCode,
+                image,
+                qtyInStock,
+                soldThisYear,
+                soldLastYear,
+                retailPrice
+            } = itemData;
+
+            // Insert into item table
+            const itemSql = `
+                INSERT INTO item (
+                    item_id, hebrew_description, english_description, 
+                    import_markup, hs_code, image
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            `;
+            await this.executeRun(itemSql, [
+                itemID, hebrewDescription, englishDescription,
+                importMarkup, hsCode, image
+            ]);
+
+            // Insert initial price history
+            if (retailPrice !== null || qtyInStock !== null || 
+                soldThisYear !== null || soldLastYear !== null) {
+                const priceSql = `
+                    INSERT INTO price_history (
+                        item_id, ils_retail_price, qty_in_stock,
+                        sold_this_year, sold_last_year
+                    ) VALUES (?, ?, ?, ?, ?)
+                `;
+                await this.executeRun(priceSql, [
+                    itemID, retailPrice, qtyInStock,
+                    soldThisYear, soldLastYear
+                ]);
+            }
+
+            // Return the created item
+            return await this.getItemById(itemID);
+        });
+    }
+
+    async updateItem(itemId, updateData) {
+        return await this.executeTransaction(async () => {
+            const {
+                hebrewDescription,
+                englishDescription,
+                importMarkup,
+                hsCode,
+                image,
+                qtyInStock,
+                soldThisYear,
+                soldLastYear,
+                retailPrice
+            } = updateData;
+
+            // Update item table
+            const itemSql = `
+                UPDATE item 
+                SET hebrew_description = ?,
+                    english_description = ?,
+                    import_markup = ?,
+                    hs_code = ?
+                    ${image ? ', image = ?' : ''}
+                WHERE item_id = ?
+            `;
+            const itemParams = [
+                hebrewDescription,
+                englishDescription,
+                importMarkup,
+                hsCode
+            ];
+            if (image) itemParams.push(image);
+            itemParams.push(itemId);
             
-            const historyData = {
-                item_id,
-                retail_price: data.retail_price !== undefined ? data.retail_price : currentItem.retail_price,
-                qty_in_stock: data.qty_in_stock !== undefined ? data.qty_in_stock : currentItem.qty_in_stock,
-                sold_this_year: data.sold_this_year !== undefined ? data.sold_this_year : currentItem.sold_this_year,
-                sold_last_year: data.sold_last_year !== undefined ? data.sold_last_year : currentItem.sold_last_year
-            };
+            await this.executeRun(itemSql, itemParams);
 
-            await this._insertPriceHistory(db, historyData);
-        }
-    }
-
-    async _deleteRelatedRecords(db, item_id) {
-        const tables = [
-            'inquiry_item',
-            'supplier_response',
-            'promotion_items',
-            'price_history',
-            'item'
-        ];
-
-        for (const table of tables) {
-            const columnName = 'item_id';
-            const query = `DELETE FROM ${table} WHERE ${columnName} = ?`;
-            debug.logQuery(`Delete from ${table}`, query, [item_id]);
-            await this.executeRun(query, [item_id]);
-        }
-    }
-
-    async _deleteItemReference(db, item_id) {
-        const query = 'DELETE FROM item_reference_change WHERE original_item_id = ? OR new_reference_id = ?';
-        debug.logQuery('Delete item reference', query, [item_id, item_id]);
-        await this.executeRun(query, [item_id, item_id]);
-    }
-
-    async _checkItemExists(db, item_id) {
-        const query = 'SELECT item_id FROM item WHERE item_id = ?';
-        debug.logQuery('Check item exists', query, [item_id]);
-        return await this.executeQuerySingle(query, [item_id]);
-    }
-
-    async _createReferenceItem(db, item_id) {
-        await this._insertItemBase(db, {
-            item_id,
-            hebrew_description: 'REF - New Reference Item',
-            english_description: 'REF - New Reference Item',
-            import_markup: 1.30,
-            origin: ''
-        });
-
-        await this._insertPriceHistory(db, {
-            item_id,
-            retail_price: null,
-            qty_in_stock: 0,
-            sold_this_year: 0,
-            sold_last_year: 0
+            // Insert new price history if any price-related fields changed
+            if (retailPrice !== null || qtyInStock !== null || 
+                soldThisYear !== null || soldLastYear !== null) {
+                const priceSql = `
+                    INSERT INTO price_history (
+                        item_id, ils_retail_price, qty_in_stock,
+                        sold_this_year, sold_last_year
+                    ) VALUES (?, ?, ?, ?, ?)
+                `;
+                await this.executeRun(priceSql, [
+                    itemId, retailPrice, qtyInStock,
+                    soldThisYear, soldLastYear
+                ]);
+            }
         });
     }
 
-    async _deleteSelfReferences(db) {
-        // Delete self-references from item_reference_change table
-        const deleteRefQuery = 'DELETE FROM item_reference_change WHERE original_item_id = new_reference_id';
-        debug.logQuery('Delete self references from item_reference_change', deleteRefQuery);
-        await this.executeRun(deleteRefQuery);
-
-        // Delete self-references from inquiry_item table
-        const deleteInquiryQuery = 'UPDATE inquiry_item SET new_reference_id = NULL, reference_notes = NULL WHERE item_id = new_reference_id';
-        debug.logQuery('Delete self references from inquiry_item', deleteInquiryQuery);
-        await this.executeRun(deleteInquiryQuery);
+    async deleteItem(itemId) {
+        const sql = 'DELETE FROM item WHERE item_id = ?';
+        await this.executeRun(sql, [itemId]);
     }
 
-    async _insertReferenceChange(db, item_id, new_reference_id, supplier_id, notes) {
-        const query = `
+    async addReferenceChange(originalItemId, newReferenceId, supplierId, notes) {
+        const sql = `
             INSERT INTO item_reference_change (
-                original_item_id,
-                new_reference_id,
-                changed_by_user,
-                supplier_id,
-                notes,
-                change_date
-            ) VALUES (?, ?, ?, ?, ?, datetime('now'))
+                original_item_id, new_reference_id, supplier_id,
+                changed_by_user, notes, change_date
+            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         `;
-        const params = [item_id, new_reference_id, !supplier_id, supplier_id, notes];
-        debug.logQuery('Insert reference change', query, params);
-        await this.executeRun(query, params);
+        await this.executeRun(sql, [
+            originalItemId,
+            newReferenceId,
+            supplierId || null,
+            supplierId ? 0 : 1,
+            notes
+        ]);
     }
 }
 
