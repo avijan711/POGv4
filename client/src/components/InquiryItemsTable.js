@@ -177,6 +177,118 @@ function InquiryItemsTable({
     }
   };
 
+  const renderQuantityCell = (item) => {
+    if (editingQty === item.inquiry_item_id) {
+      return (
+        <Paper 
+          variant="outlined"
+          sx={{
+            p: 1.5,
+            backgroundColor: 'primary.lighter',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+            minWidth: '180px',
+            boxShadow: 1
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <TextField
+            type="number"
+            value={editedQty ?? (item.requested_qty || 0)}
+            onChange={(e) => handleQtyChange(item, e.target.value)}
+            onKeyDown={(e) => handleQtyKeyPress(e, item)}
+            autoFocus
+            variant="outlined"
+            inputProps={{ min: "0" }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                fontSize: '1.25rem',
+                fontWeight: 'bold',
+                backgroundColor: 'white',
+                '& input': {
+                  textAlign: 'right',
+                  padding: '8px 12px'
+                },
+                '&.Mui-focused': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'primary.main',
+                    borderWidth: 2
+                  }
+                }
+              }
+            }}
+          />
+          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+            <Chip
+              icon={<SaveIcon />}
+              label="Save"
+              color="primary"
+              onClick={() => handleSaveQty(item)}
+              sx={{ 
+                fontWeight: 'bold',
+                '&:hover': {
+                  backgroundColor: 'primary.dark',
+                  boxShadow: 1
+                }
+              }}
+            />
+            <Chip
+              icon={<CloseIcon />}
+              label="Cancel"
+              color="error"
+              onClick={handleCancelEdit}
+              sx={{ 
+                fontWeight: 'bold',
+                '&:hover': {
+                  backgroundColor: 'error.dark',
+                  boxShadow: 1
+                }
+              }}
+            />
+          </Box>
+        </Paper>
+      );
+    }
+
+    return (
+      <Box 
+        onClick={() => onEditQty(item.inquiry_item_id)}
+        sx={{ 
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: 1,
+          padding: '8px 12px',
+          borderRadius: 1,
+          cursor: 'pointer',
+          minWidth: '100px',
+          transition: 'all 0.2s ease',
+          '&:hover': {
+            backgroundColor: 'action.hover',
+            '& .edit-icon': {
+              opacity: 1,
+              color: 'primary.main'
+            }
+          }
+        }}
+      >
+        <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+          {item.requested_qty || 0}
+        </Typography>
+        <EditIcon 
+          className="edit-icon"
+          sx={{ 
+            fontSize: '1.1rem',
+            opacity: 0,
+            transition: 'all 0.2s ease',
+            color: 'text.secondary'
+          }} 
+        />
+      </Box>
+    );
+  };
+
   // Sort items by Excel row index if no other sort is applied
   const sortedItems = [...items].sort((a, b) => {
     if (!sortConfig.field || sortConfig.field === 'excel_row_index') {
@@ -338,82 +450,9 @@ function InquiryItemsTable({
                     <TableCell 
                       align="right" 
                       onClick={(e) => e.stopPropagation()}
-                      sx={{ minWidth: '150px' }}
+                      sx={{ minWidth: '180px' }}
                     >
-                      {editingQty === item.inquiry_item_id ? (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <TextField
-                            type="number"
-                            size="small"
-                            value={editedQty ?? (item.requested_qty || 0)}
-                            onChange={(e) => handleQtyChange(item, e.target.value)}
-                            onKeyDown={(e) => handleQtyKeyPress(e, item)}
-                            autoFocus
-                            sx={{ 
-                              width: '100px',
-                              '& .MuiOutlinedInput-root': {
-                                backgroundColor: 'white',
-                                '&.Mui-focused': {
-                                  '& .MuiOutlinedInput-notchedOutline': {
-                                    borderColor: 'primary.main',
-                                    borderWidth: 2
-                                  }
-                                }
-                              }
-                            }}
-                            InputProps={{
-                              endAdornment: (
-                                <InputAdornment position="end">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => handleSaveQty(item)}
-                                    color="primary"
-                                  >
-                                    <SaveIcon fontSize="small" />
-                                  </IconButton>
-                                  <IconButton
-                                    size="small"
-                                    onClick={handleCancelEdit}
-                                    color="error"
-                                  >
-                                    <CloseIcon fontSize="small" />
-                                  </IconButton>
-                                </InputAdornment>
-                              )
-                            }}
-                          />
-                        </Box>
-                      ) : (
-                        <Box 
-                          onClick={() => onEditQty(item.inquiry_item_id)}
-                          sx={{ 
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'flex-end',
-                            gap: 1,
-                            cursor: 'pointer',
-                            padding: '8px',
-                            borderRadius: 1,
-                            '&:hover': {
-                              backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                              '& .edit-icon': {
-                                opacity: 1,
-                              }
-                            }
-                          }}
-                        >
-                          <Typography>{item.requested_qty || 0}</Typography>
-                          <EditIcon 
-                            className="edit-icon"
-                            sx={{ 
-                              fontSize: '1rem',
-                              opacity: 0,
-                              transition: 'opacity 0.2s',
-                              color: 'primary.main'
-                            }} 
-                          />
-                        </Box>
-                      )}
+                      {renderQuantityCell(item)}
                     </TableCell>
                     <TableCell align="right">{item.qty_in_stock || 0}</TableCell>
                     <TableCell align="right">₪{Number(item.retail_price).toFixed(2)}</TableCell>
