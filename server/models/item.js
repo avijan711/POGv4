@@ -8,14 +8,7 @@ class ItemModel extends BaseModel {
 
     async getAllItems() {
         const sql = `
-            SELECT i.*, 
-                   p.ils_retail_price as retail_price,
-                   p.qty_in_stock,
-                   p.sold_this_year,
-                   p.sold_last_year,
-                   p.date as last_price_update
-            FROM item i
-            LEFT JOIN (
+            WITH LatestPrices AS (
                 SELECT *
                 FROM price_history
                 WHERE (item_id, date) IN (
@@ -23,25 +16,68 @@ class ItemModel extends BaseModel {
                     FROM price_history
                     GROUP BY item_id
                 )
-            ) p ON i.item_id = p.item_id
+            ),
+            ReferenceInfo AS (
+                SELECT 
+                    rc.original_item_id,
+                    rc.new_reference_id,
+                    rc.change_date,
+                    rc.notes,
+                    s.name as supplier_name,
+                    rc.changed_by_user,
+                    JSON_OBJECT(
+                        'new_reference_id', rc.new_reference_id,
+                        'change_date', rc.change_date,
+                        'notes', rc.notes,
+                        'supplier_name', s.name,
+                        'source', CASE WHEN rc.supplier_id IS NOT NULL THEN 'supplier' ELSE 'user' END
+                    ) as reference_change
+                FROM item_reference_change rc
+                LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
+                WHERE (rc.original_item_id, rc.change_date) IN (
+                    SELECT original_item_id, MAX(change_date)
+                    FROM item_reference_change
+                    GROUP BY original_item_id
+                )
+            ),
+            ReferencedBy AS (
+                SELECT 
+                    new_reference_id as item_id,
+                    COUNT(*) as referenced_by_count,
+                    GROUP_CONCAT(original_item_id) as referencing_items
+                FROM item_reference_change
+                GROUP BY new_reference_id
+            )
+            SELECT 
+                i.*,
+                p.ils_retail_price as retail_price,
+                p.qty_in_stock,
+                p.sold_this_year,
+                p.sold_last_year,
+                p.date as last_price_update,
+                ri.reference_change,
+                CASE 
+                    WHEN ri.new_reference_id IS NOT NULL THEN 1 
+                    ELSE 0 
+                END as has_reference_change,
+                CASE 
+                    WHEN rb.referenced_by_count > 0 THEN 1 
+                    ELSE 0 
+                END as is_referenced_by,
+                rb.referenced_by_count,
+                rb.referencing_items
+            FROM item i
+            LEFT JOIN LatestPrices p ON i.item_id = p.item_id
+            LEFT JOIN ReferenceInfo ri ON i.item_id = ri.original_item_id
+            LEFT JOIN ReferencedBy rb ON i.item_id = rb.item_id
+            ORDER BY i.item_id
         `;
         return await this.executeQuery(sql);
     }
 
     async getItemById(itemId) {
         const sql = `
-            SELECT i.*, 
-                   p.ils_retail_price as retail_price,
-                   p.qty_in_stock,
-                   p.sold_this_year,
-                   p.sold_last_year,
-                   p.date as last_price_update,
-                   rc.new_reference_id as reference_id,
-                   rc.notes as reference_notes,
-                   rc.change_date as reference_date,
-                   s.name as reference_supplier
-            FROM item i
-            LEFT JOIN (
+            WITH LatestPrices AS (
                 SELECT *
                 FROM price_history
                 WHERE (item_id, date) IN (
@@ -49,9 +85,60 @@ class ItemModel extends BaseModel {
                     FROM price_history
                     GROUP BY item_id
                 )
-            ) p ON i.item_id = p.item_id
-            LEFT JOIN item_reference_change rc ON i.item_id = rc.original_item_id
-            LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
+            ),
+            ReferenceInfo AS (
+                SELECT 
+                    rc.original_item_id,
+                    rc.new_reference_id,
+                    rc.change_date,
+                    rc.notes,
+                    s.name as supplier_name,
+                    rc.changed_by_user,
+                    JSON_OBJECT(
+                        'new_reference_id', rc.new_reference_id,
+                        'change_date', rc.change_date,
+                        'notes', rc.notes,
+                        'supplier_name', s.name,
+                        'source', CASE WHEN rc.supplier_id IS NOT NULL THEN 'supplier' ELSE 'user' END
+                    ) as reference_change
+                FROM item_reference_change rc
+                LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
+                WHERE (rc.original_item_id, rc.change_date) IN (
+                    SELECT original_item_id, MAX(change_date)
+                    FROM item_reference_change
+                    GROUP BY original_item_id
+                )
+            ),
+            ReferencedBy AS (
+                SELECT 
+                    new_reference_id as item_id,
+                    COUNT(*) as referenced_by_count,
+                    GROUP_CONCAT(original_item_id) as referencing_items
+                FROM item_reference_change
+                GROUP BY new_reference_id
+            )
+            SELECT 
+                i.*,
+                p.ils_retail_price as retail_price,
+                p.qty_in_stock,
+                p.sold_this_year,
+                p.sold_last_year,
+                p.date as last_price_update,
+                ri.reference_change,
+                CASE 
+                    WHEN ri.new_reference_id IS NOT NULL THEN 1 
+                    ELSE 0 
+                END as has_reference_change,
+                CASE 
+                    WHEN rb.referenced_by_count > 0 THEN 1 
+                    ELSE 0 
+                END as is_referenced_by,
+                rb.referenced_by_count,
+                rb.referencing_items
+            FROM item i
+            LEFT JOIN LatestPrices p ON i.item_id = p.item_id
+            LEFT JOIN ReferenceInfo ri ON i.item_id = ri.original_item_id
+            LEFT JOIN ReferencedBy rb ON i.item_id = rb.item_id
             WHERE i.item_id = ?
         `;
         return await this.executeQuerySingle(sql, [itemId]);

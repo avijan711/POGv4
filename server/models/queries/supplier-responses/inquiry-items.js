@@ -1,5 +1,36 @@
 function getInquiryItemsQuery() {
     return `inquiry_items AS (
+        WITH ReferenceInfo AS (
+            SELECT 
+                rc.original_item_id,
+                rc.new_reference_id,
+                rc.change_date,
+                rc.notes,
+                s.name as supplier_name,
+                rc.changed_by_user,
+                JSON_OBJECT(
+                    'new_reference_id', rc.new_reference_id,
+                    'change_date', rc.change_date,
+                    'notes', rc.notes,
+                    'supplier_name', s.name,
+                    'source', CASE WHEN rc.supplier_id IS NOT NULL THEN 'supplier' ELSE 'user' END
+                ) as reference_change
+            FROM item_reference_change rc
+            LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
+            WHERE (rc.original_item_id, rc.change_date) IN (
+                SELECT original_item_id, MAX(change_date)
+                FROM item_reference_change
+                GROUP BY original_item_id
+            )
+        ),
+        ReferencedBy AS (
+            SELECT 
+                new_reference_id as item_id,
+                COUNT(*) as referenced_by_count,
+                GROUP_CONCAT(original_item_id) as referencing_items
+            FROM item_reference_change
+            GROUP BY new_reference_id
+        )
         SELECT DISTINCT 
             ii.inquiry_item_id,
             ii.item_id,
@@ -16,6 +47,16 @@ function getInquiryItemsQuery() {
             pi.promotion_price,
             p.start_date as promotion_start_date,
             p.end_date as promotion_end_date,
+            ri.reference_change,
+            CASE 
+                WHEN ri.new_reference_id IS NOT NULL THEN 1 
+                ELSE 0 
+            END as has_reference_change,
+            CASE 
+                WHEN rb.referenced_by_count > 0 THEN 1 
+                ELSE 0 
+            END as is_referenced_by,
+            rb.referencing_items,
             (
                 SELECT json_group_array(
                     json_object(
@@ -36,6 +77,8 @@ function getInquiryItemsQuery() {
             ) as supplier_prices
         FROM inquiry_item ii
         JOIN item i ON ii.item_id = i.item_id
+        LEFT JOIN ReferenceInfo ri ON ii.item_id = ri.original_item_id
+        LEFT JOIN ReferencedBy rb ON ii.item_id = rb.item_id
         LEFT JOIN promotion_items pi ON ii.item_id = pi.item_id
         LEFT JOIN promotions p ON pi.promotion_id = p.id 
             AND p.is_active = 1 

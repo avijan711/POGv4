@@ -11,13 +11,17 @@ import {
   Toolbar,
   IconButton,
   Stack,
-  Chip
+  Chip,
+  Alert,
+  Paper
 } from '@mui/material';
 import {
   Close as CloseIcon,
   SwapHoriz as SwapHorizIcon,
   Store as StoreIcon,
-  Info as InfoIcon
+  Info as InfoIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon
 } from '@mui/icons-material';
 
 import { useItemDetails } from '../../hooks/useItemDetails';
@@ -161,11 +165,40 @@ function ItemDetailsDialog({ open, onClose, item, onItemClick, loading = false }
         }
       }}
     >
+      {/* Reference Change Alert */}
+      {(hasReferenceChange || isReferencedBy) && (
+        <Alert 
+          severity={isReferencedBy ? "success" : "warning"}
+          icon={isReferencedBy ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />}
+          sx={{ 
+            borderRadius: 0,
+            py: 1,
+            fontWeight: 'bold',
+            fontSize: '1rem',
+            backgroundColor: isReferencedBy ? 'success.light' : 'warning.light',
+            color: '#fff'
+          }}
+        >
+          {isReferencedBy 
+            ? "This is a new replacement item"
+            : "This item has been replaced by a new item"
+          }
+        </Alert>
+      )}
+
       {/* Dialog Header */}
-      <AppBar position="static" color="default" elevation={1}>
+      <AppBar 
+        position="static" 
+        color="default" 
+        elevation={1}
+        sx={{
+          borderBottom: hasReferenceChange || isReferencedBy ? 2 : 1,
+          borderColor: isReferencedBy ? 'success.main' : hasReferenceChange ? 'warning.main' : 'divider'
+        }}
+      >
         <Toolbar variant="dense">
           <Stack direction="row" alignItems="center" spacing={2} sx={{ flex: 1 }}>
-            <Typography variant="h6" component="div">
+            <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>
               {itemDetails.itemID}
             </Typography>
             
@@ -174,7 +207,9 @@ function ItemDetailsDialog({ open, onClose, item, onItemClick, loading = false }
                 icon={<SwapHorizIcon />}
                 label="Has Reference Change"
                 color="warning"
+                variant="filled"
                 size="small"
+                sx={{ fontWeight: 'bold' }}
               />
             )}
             
@@ -182,8 +217,10 @@ function ItemDetailsDialog({ open, onClose, item, onItemClick, loading = false }
               <Chip
                 icon={<StoreIcon />}
                 label="Referenced By Others"
-                color="info"
+                color="success"
+                variant="filled"
                 size="small"
+                sx={{ fontWeight: 'bold' }}
               />
             )}
 
@@ -207,7 +244,10 @@ function ItemDetailsDialog({ open, onClose, item, onItemClick, loading = false }
           sx={{ 
             px: 2,
             borderBottom: 1,
-            borderColor: 'divider'
+            borderColor: 'divider',
+            '& .MuiTab-root': {
+              fontWeight: 'bold'
+            }
           }}
         >
           <Tab label="Basic Info" id="item-tab-0" aria-controls="item-tabpanel-0" />
@@ -223,8 +263,21 @@ function ItemDetailsDialog({ open, onClose, item, onItemClick, loading = false }
             label="Reference Changes" 
             id="item-tab-3" 
             aria-controls="item-tabpanel-3"
-            icon={referenceChanges.length ? <Chip size="small" label={referenceChanges.length} /> : null}
+            icon={referenceChanges.length ? (
+              <Chip 
+                size="small" 
+                label={referenceChanges.length} 
+                color={hasReferenceChange ? "warning" : "default"}
+                sx={{ fontWeight: 'bold' }}
+              />
+            ) : null}
             iconPosition="end"
+            sx={hasReferenceChange ? {
+              color: 'warning.main',
+              '&.Mui-selected': {
+                color: 'warning.dark'
+              }
+            } : {}}
           />
         </Tabs>
       </AppBar>

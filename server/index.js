@@ -10,6 +10,7 @@ const PromotionModel = require('./models/promotion');
 const createItemsRouter = require('./routes/items');
 const createInquiriesRouter = require('./routes/inquiries');
 const createPromotionsRouter = require('./routes/promotions');
+const createSuppliersRouter = require('./routes/suppliers');
 
 const app = express();
 const port = process.env.PORT || 5002;
@@ -66,6 +67,7 @@ async function startServer() {
             promotionModel
         }));
         app.use('/api/promotions', createPromotionsRouter(promotionModel));
+        app.use('/api/suppliers', createSuppliersRouter(db));
 
         // Error handling middleware
         app.use((err, req, res, next) => {

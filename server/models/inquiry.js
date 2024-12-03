@@ -44,7 +44,7 @@ class InquiryModel extends BaseModel {
                 }
 
                 // If there's a new_reference_id, check and create that item too
-                if (item.new_reference_id) {
+                if (item.new_reference_id && item.new_reference_id !== item.item_id) {
                     const existingRefItem = await this.executeQuerySingle(
                         'SELECT item_id FROM item WHERE item_id = ?',
                         [item.new_reference_id]
@@ -64,6 +64,31 @@ class InquiryModel extends BaseModel {
                             `Referenced item for ${item.item_id}`, // Temporary description
                             '',
                             1.30 // Default markup
+                        ]);
+                    }
+
+                    // Create reference change entry
+                    const existingRefChange = await this.executeQuerySingle(
+                        'SELECT change_id FROM item_reference_change WHERE original_item_id = ? AND new_reference_id = ?',
+                        [item.item_id, item.new_reference_id]
+                    );
+
+                    if (!existingRefChange) {
+                        debug.log('Creating reference change:', {
+                            from: item.item_id,
+                            to: item.new_reference_id
+                        });
+                        const refChangeSql = `
+                            INSERT INTO item_reference_change (
+                                original_item_id, new_reference_id,
+                                changed_by_user, notes
+                            ) VALUES (?, ?, ?, ?)
+                        `;
+                        await this.executeRun(refChangeSql, [
+                            item.item_id,
+                            item.new_reference_id,
+                            1, // changed_by_user = true
+                            item.reference_notes || 'Created from inquiry upload'
                         ]);
                     }
                 }
@@ -145,17 +170,61 @@ class InquiryModel extends BaseModel {
 
     async getInquiryItems(inquiryId) {
         const sql = `
-            SELECT ii.*,
-                   i.hebrew_description as current_hebrew_description,
-                   i.english_description as current_english_description,
-                   i.import_markup as current_import_markup,
-                   i.hs_code as current_hs_code,
-                   ph.ils_retail_price as current_retail_price,
-                   ph.qty_in_stock as current_qty_in_stock,
-                   ph.sold_this_year as current_sold_this_year,
-                   ph.sold_last_year as current_sold_last_year
+            WITH ReferenceInfo AS (
+                SELECT 
+                    rc.original_item_id,
+                    rc.new_reference_id,
+                    rc.change_date,
+                    rc.notes,
+                    s.name as supplier_name,
+                    rc.changed_by_user,
+                    JSON_OBJECT(
+                        'new_reference_id', rc.new_reference_id,
+                        'change_date', rc.change_date,
+                        'notes', rc.notes,
+                        'supplier_name', s.name,
+                        'source', CASE WHEN rc.supplier_id IS NOT NULL THEN 'supplier' ELSE 'user' END
+                    ) as reference_change
+                FROM item_reference_change rc
+                LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
+                WHERE (rc.original_item_id, rc.change_date) IN (
+                    SELECT original_item_id, MAX(change_date)
+                    FROM item_reference_change
+                    GROUP BY original_item_id
+                )
+            ),
+            ReferencedBy AS (
+                SELECT 
+                    new_reference_id as item_id,
+                    COUNT(*) as referenced_by_count,
+                    GROUP_CONCAT(original_item_id) as referencing_items
+                FROM item_reference_change
+                GROUP BY new_reference_id
+            )
+            SELECT 
+                ii.*,
+                i.hebrew_description as current_hebrew_description,
+                i.english_description as current_english_description,
+                i.import_markup as current_import_markup,
+                i.hs_code as current_hs_code,
+                ph.ils_retail_price as current_retail_price,
+                ph.qty_in_stock as current_qty_in_stock,
+                ph.sold_this_year as current_sold_this_year,
+                ph.sold_last_year as current_sold_last_year,
+                ri.reference_change,
+                CASE 
+                    WHEN ri.new_reference_id IS NOT NULL THEN 1 
+                    ELSE 0 
+                END as has_reference_change,
+                CASE 
+                    WHEN rb.referenced_by_count > 0 THEN 1 
+                    ELSE 0 
+                END as is_referenced_by,
+                rb.referencing_items
             FROM inquiry_item ii
             LEFT JOIN item i ON ii.item_id = i.item_id
+            LEFT JOIN ReferenceInfo ri ON ii.item_id = ri.original_item_id
+            LEFT JOIN ReferencedBy rb ON ii.item_id = rb.item_id
             LEFT JOIN (
                 SELECT *
                 FROM price_history

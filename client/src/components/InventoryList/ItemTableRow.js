@@ -34,12 +34,15 @@ function ItemReference({ item, isNewReference, referencingItems, getChangeSource
               icon={<SwapHorizIcon fontSize="small" />}
               label={`Replaced by ${item.reference_change.new_reference_id}`}
               color="warning"
-              variant="outlined"
+              variant="filled"
               size="small"
               onClick={(e) => onReferenceClick(e, item.reference_change.new_reference_id)}
-              sx={{ cursor: 'pointer' }}
+              sx={{ 
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
             />
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'bold' }}>
               {getChangeSource(item.reference_change)}
             </Typography>
           </Box>
@@ -50,14 +53,17 @@ function ItemReference({ item, isNewReference, referencingItems, getChangeSource
               icon={<SwapHorizIcon fontSize="small" />}
               label={`Replaces ${filteredReferencingItems.map(i => i.item_id).join(', ')}`}
               color="success"
-              variant="outlined"
+              variant="filled"
               size="small"
               onClick={(e) => {
                 if (filteredReferencingItems.length === 1) {
                   onReferenceClick(e, filteredReferencingItems[0].item_id);
                 }
               }}
-              sx={{ cursor: 'pointer' }}
+              sx={{ 
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
             />
           </Box>
         )}
@@ -122,22 +128,32 @@ function ItemTableRow({
 
   const getBackgroundColor = () => {
     if (isNewReference) {
-      return '#e8f5e9'; // Light green background for new/replacement items
+      return '#c8e6c9'; // Darker green background for new/replacement items
     }
     if (item.has_reference_change && item.reference_change.new_reference_id !== item.item_id) {
-      return 'rgba(255, 152, 0, 0.08)'; // Subtle orange for old/replaced items
+      return 'rgba(255, 152, 0, 0.2)'; // More visible orange for old/replaced items
     }
     return 'inherit';
   };
 
   const getHoverColor = () => {
     if (isNewReference) {
-      return '#c8e6c9'; // Slightly darker green on hover
+      return '#a5d6a7'; // Even darker green on hover
     }
     if (item.has_reference_change && item.reference_change.new_reference_id !== item.item_id) {
-      return 'rgba(255, 152, 0, 0.15)'; // Slightly darker orange on hover
+      return 'rgba(255, 152, 0, 0.3)'; // Darker orange on hover
     }
     return 'rgba(0, 0, 0, 0.04)';
+  };
+
+  const getBorderStyle = () => {
+    if (isNewReference) {
+      return '2px solid #4caf50'; // Green border for new items
+    }
+    if (item.has_reference_change && item.reference_change.new_reference_id !== item.item_id) {
+      return '2px solid #ff9800'; // Orange border for replaced items
+    }
+    return '1px solid rgba(224, 224, 224, 1)';
   };
 
   return (
@@ -147,10 +163,11 @@ function ItemTableRow({
       sx={{ 
         cursor: 'pointer',
         backgroundColor: getBackgroundColor(),
+        border: getBorderStyle(),
         '&:hover': { 
           backgroundColor: getHoverColor()
         },
-        transition: 'background-color 0.2s ease',
+        transition: 'all 0.2s ease',
         '& td': {
           py: 1.5,
           px: 2,
@@ -166,9 +183,10 @@ function ItemTableRow({
             <Chip
               size="small"
               label="New Item"
+              color="success"
+              variant="filled"
               sx={{ 
-                backgroundColor: '#e8f5e9',
-                color: '#2e7d32',
+                fontWeight: 'bold',
                 '.MuiChip-label': { px: 1 }
               }}
             />

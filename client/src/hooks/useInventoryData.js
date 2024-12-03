@@ -15,37 +15,36 @@ export const useInventoryData = () => {
     const [loadingDetails, setLoadingDetails] = useState(false);
 
     /**
-     * Process items to ensure reference data is properly parsed and filtered
+     * Process items to ensure reference data is properly handled
      */
     const processItems = (rawItems) => {
         return rawItems.map(item => {
-            // Parse referenceChange if it's a string
-            const referenceChange = item.reference_change ? 
-                (typeof item.reference_change === 'string' ? 
-                    JSON.parse(item.reference_change) : 
-                    item.reference_change) : null;
+            // No need to parse reference_change as it's already a JSON object from server
+            const referenceChange = item.reference_change;
+            const hasReferenceChange = item.has_reference_change === 1;
+            const isReferencedBy = item.is_referenced_by === 1;
 
-            // Check for self-references
-            const isSelfReferenced = referenceChange && 
-                referenceChange.new_reference_id === item.item_id;
-
-            // Find items that reference this item (excluding self-references)
-            const referencingItems = rawItems.filter(otherItem => {
-                const otherRef = otherItem.reference_change ? 
-                    (typeof otherItem.reference_change === 'string' ? 
-                        JSON.parse(otherItem.reference_change) : 
-                        otherItem.reference_change) : null;
-                return otherRef && 
-                       otherRef.new_reference_id === item.item_id && 
-                       otherItem.item_id !== item.item_id;
-            });
+            // Get referencing items from the referencing_items string if it exists
+            let referencingItems = [];
+            if (item.referencing_items) {
+                const referencingIds = item.referencing_items.split(',');
+                referencingItems = rawItems.filter(otherItem => 
+                    referencingIds.includes(otherItem.item_id)
+                );
+            }
 
             return {
                 ...item,
-                reference_change: isSelfReferenced ? null : referenceChange,
-                has_reference_change: !isSelfReferenced && referenceChange !== null,
-                is_referenced_by: referencingItems.length > 0,
-                referencing_items: referencingItems
+                reference_change: referenceChange,
+                has_reference_change: hasReferenceChange,
+                is_referenced_by: isReferencedBy,
+                referencing_items: referencingItems,
+                // Add background color based on reference status
+                backgroundColor: hasReferenceChange ? 
+                    'rgba(244, 67, 54, 0.1)' :  // Light red for items with reference changes
+                    isReferencedBy ? 
+                        'rgba(76, 175, 80, 0.1)' :  // Light green for items referenced by others
+                        'inherit'
             };
         });
     };
@@ -58,6 +57,7 @@ export const useInventoryData = () => {
             dataDebug.log('Fetching inventory items');
             const response = await axiosInstance.get('/api/items');
             const processedItems = processItems(response.data);
+            dataDebug.log('Processed items:', processedItems);
             setItems(processedItems);
             setError('');
         } catch (err) {
@@ -129,30 +129,17 @@ export const useInventoryData = () => {
             const response = await axiosInstance.get(`/api/items/${item.item_id}`);
             const rawData = response.data;
             
-            // Process the item details to ensure references are parsed and filtered
+            // Process the item details
             const processedData = {
                 ...rawData,
-                reference_change: rawData.reference_change ? 
-                    (typeof rawData.reference_change === 'string' ? 
-                        JSON.parse(rawData.reference_change) : 
-                        rawData.reference_change) : null,
-                referencing_items: items.filter(otherItem => {
-                    const otherRef = otherItem.reference_change ? 
-                        (typeof otherItem.reference_change === 'string' ? 
-                            JSON.parse(otherItem.reference_change) : 
-                            otherItem.reference_change) : null;
-                    return otherRef && 
-                           otherRef.new_reference_id === item.item_id && 
-                           otherItem.item_id !== item.item_id;
-                })
+                reference_change: rawData.reference_change,
+                has_reference_change: rawData.has_reference_change === 1,
+                is_referenced_by: rawData.is_referenced_by === 1,
+                referencing_items: rawData.referencing_items ? 
+                    items.filter(otherItem => 
+                        rawData.referencing_items.split(',').includes(otherItem.item_id)
+                    ) : []
             };
-
-            // Check for self-references
-            if (processedData.reference_change && 
-                processedData.reference_change.new_reference_id === item.item_id) {
-                processedData.reference_change = null;
-                processedData.has_reference_change = false;
-            }
             
             dataDebug.logData('Processed item details', processedData);
             setItemDetails(processedData);

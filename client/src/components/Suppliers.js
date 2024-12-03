@@ -19,7 +19,7 @@ import {
     Typography
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import { API_BASE_URL } from '../config';
+import axiosInstance from '../utils/axiosConfig';
 
 const Suppliers = () => {
     const [suppliers, setSuppliers] = useState([]);
@@ -27,7 +27,7 @@ const Suppliers = () => {
     const [editingSupplier, setEditingSupplier] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
-        contactPerson: '',
+        contact_person: '',
         email: '',
         phone: ''
     });
@@ -39,12 +39,8 @@ const Suppliers = () => {
 
     const fetchSuppliers = async () => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/suppliers`);
-            if (!response.ok) {
-                throw new Error('Failed to fetch suppliers');
-            }
-            const data = await response.json();
-            setSuppliers(data);
+            const response = await axiosInstance.get('/api/suppliers');
+            setSuppliers(response.data);
         } catch (error) {
             console.error('Error fetching suppliers:', error);
             setError('Failed to load suppliers');
@@ -55,16 +51,16 @@ const Suppliers = () => {
         if (supplier) {
             setEditingSupplier(supplier);
             setFormData({
-                name: supplier.Name,
-                contactPerson: supplier.ContactPerson || '',
-                email: supplier.Email || '',
-                phone: supplier.Phone || ''
+                name: supplier.name,
+                contact_person: supplier.contact_person || '',
+                email: supplier.email || '',
+                phone: supplier.phone || ''
             });
         } else {
             setEditingSupplier(null);
             setFormData({
                 name: '',
-                contactPerson: '',
+                contact_person: '',
                 email: '',
                 phone: ''
             });
@@ -77,7 +73,7 @@ const Suppliers = () => {
         setEditingSupplier(null);
         setFormData({
             name: '',
-            contactPerson: '',
+            contact_person: '',
             email: '',
             phone: ''
         });
@@ -93,33 +89,17 @@ const Suppliers = () => {
         }
 
         try {
-            const url = editingSupplier
-                ? `${API_BASE_URL}/api/suppliers/${editingSupplier.SupplierID}`
-                : `${API_BASE_URL}/api/suppliers`;
-            
-            const response = await fetch(url, {
-                method: editingSupplier ? 'PUT' : 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    name: formData.name,
-                    contactPerson: formData.contactPerson,
-                    email: formData.email,
-                    phone: formData.phone
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to save supplier');
+            if (editingSupplier) {
+                await axiosInstance.put(`/api/suppliers/${editingSupplier.supplier_id}`, formData);
+            } else {
+                await axiosInstance.post('/api/suppliers', formData);
             }
 
             await fetchSuppliers();
             handleClose();
         } catch (error) {
             console.error('Error saving supplier:', error);
-            setError(error.message);
+            setError(error.response?.data?.error || 'Failed to save supplier');
         }
     };
 
@@ -129,14 +109,7 @@ const Suppliers = () => {
         }
 
         try {
-            const response = await fetch(`${API_BASE_URL}/api/suppliers/${id}`, {
-                method: 'DELETE'
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to delete supplier');
-            }
-
+            await axiosInstance.delete(`/api/suppliers/${id}`);
             await fetchSuppliers();
         } catch (error) {
             console.error('Error deleting supplier:', error);
@@ -176,11 +149,11 @@ const Suppliers = () => {
                     </TableHead>
                     <TableBody>
                         {suppliers.map((supplier) => (
-                            <TableRow key={supplier.SupplierID}>
-                                <TableCell>{supplier.Name}</TableCell>
-                                <TableCell>{supplier.ContactPerson}</TableCell>
-                                <TableCell>{supplier.Email}</TableCell>
-                                <TableCell>{supplier.Phone}</TableCell>
+                            <TableRow key={supplier.supplier_id}>
+                                <TableCell>{supplier.name}</TableCell>
+                                <TableCell>{supplier.contact_person}</TableCell>
+                                <TableCell>{supplier.email}</TableCell>
+                                <TableCell>{supplier.phone}</TableCell>
                                 <TableCell align="right">
                                     <IconButton
                                         color="primary"
@@ -190,7 +163,7 @@ const Suppliers = () => {
                                     </IconButton>
                                     <IconButton
                                         color="error"
-                                        onClick={() => handleDelete(supplier.SupplierID)}
+                                        onClick={() => handleDelete(supplier.supplier_id)}
                                     >
                                         <DeleteIcon />
                                     </IconButton>
@@ -218,8 +191,8 @@ const Suppliers = () => {
                         <TextField
                             fullWidth
                             label="Contact Person"
-                            value={formData.contactPerson}
-                            onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
+                            value={formData.contact_person}
+                            onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
                             sx={{ mb: 2 }}
                         />
                         <TextField

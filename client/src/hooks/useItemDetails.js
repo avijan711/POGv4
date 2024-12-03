@@ -94,25 +94,26 @@ export const useItemDetails = (item, open, mode = 'view') => {
         soldLastYear: record.qty_sold_last_year
       }));
 
-      // Process supplier prices
+      // Process supplier prices - Keep snake_case to match API response
       const processedSupplierPrices = supplierPrices.map(price => ({
-        supplierName: price.supplier_name,
-        price: price.price_quoted,
-        date: new Date(price.response_date),
+        supplier_name: price.supplier_name || 'Unknown Supplier',
+        price_quoted: price.price_quoted,
+        response_date: new Date(price.response_date),
         status: price.status,
-        isPromotion: Boolean(price.is_promotion),
-        promotionName: price.promotion_name,
-        change: price.price_change || 0
+        is_promotion: Boolean(price.is_promotion),
+        promotion_name: price.promotion_name,
+        price_change: price.price_change || 0
       }));
 
-      // Process reference changes
+      // Process reference changes - Keep snake_case to match API response
       const processedReferenceChanges = referenceChanges.map(change => ({
-        originalItemId: change.original_item_id,
-        newReferenceId: change.new_reference_id,
-        supplierName: change.supplier_name,
-        changeDate: new Date(change.change_date),
+        original_item_id: change.original_item_id,
+        new_reference_id: change.new_reference_id,
+        supplier_name: change.supplier_name,
+        change_date: new Date(change.change_date),
         notes: change.notes,
-        changedByUser: Boolean(change.changed_by_user)
+        changed_by_user: Boolean(change.changed_by_user),
+        source: change.supplier_name ? 'supplier' : 'user'
       }));
 
       // For edit mode, return form-ready data

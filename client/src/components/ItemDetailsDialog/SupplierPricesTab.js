@@ -26,29 +26,39 @@ import { formatIlsPrice } from '../../utils/priceUtils';
 
 function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
   const sortedPrices = useMemo(() => {
-    return [...supplierPrices].sort((a, b) => {
-      // Active prices first
-      if (a.status === 'active' && b.status !== 'active') return -1;
-      if (b.status === 'active' && a.status !== 'active') return 1;
-      // Then by date
-      return new Date(b.date) - new Date(a.date);
-    });
+    // Filter out any null entries and ensure all required fields exist
+    return [...supplierPrices]
+      .filter(price => {
+        // More comprehensive null checks
+        if (!price) return false;
+        if (!price.price_quoted || typeof price.price_quoted !== 'number') return false;
+        // Handle missing supplier name gracefully
+        price.supplier_name = price.supplier_name || 'Unknown Supplier';
+        return true;
+      })
+      .sort((a, b) => {
+        // Active prices first
+        if (a.status === 'active' && b.status !== 'active') return -1;
+        if (b.status === 'active' && a.status !== 'active') return 1;
+        // Then by date
+        return new Date(b.response_date) - new Date(a.response_date);
+      });
   }, [supplierPrices]);
 
   const priceAnalysis = useMemo(() => {
-    const activePrices = supplierPrices.filter(p => p.status === 'active');
+    const activePrices = sortedPrices.filter(p => p.status === 'active');
     if (!activePrices.length) return null;
 
-    const prices = activePrices.map(p => p.price);
+    const prices = activePrices.map(p => p.price_quoted);
     return {
       lowest: Math.min(...prices),
       highest: Math.max(...prices),
       average: prices.reduce((a, b) => a + b, 0) / prices.length
     };
-  }, [supplierPrices]);
+  }, [sortedPrices]);
 
   const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
+    switch (status?.toLowerCase()) {
       case 'active': return 'success';
       case 'pending': return 'warning';
       case 'rejected': return 'error';
@@ -90,6 +100,8 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
     if (!eurPrice || !itemDetails?.retailPrice) return null;
     
     const costPrice = calculateIlsPrice(eurPrice);
+    if (!costPrice) return null;
+    
     const margin = ((itemDetails.retailPrice - costPrice) / itemDetails.retailPrice) * 100;
     
     return {
@@ -152,25 +164,25 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
               </TableHead>
               <TableBody>
                 {sortedPrices.map((price, index) => {
-                  const marginInfo = getMarginInfo(price.price);
-                  const ilsPrice = calculateIlsPrice(price.price);
+                  const marginInfo = getMarginInfo(price.price_quoted);
+                  const ilsPrice = calculateIlsPrice(price.price_quoted);
 
                   return (
                     <TableRow 
                       key={index}
-                      sx={price.isPromotion ? { bgcolor: 'warning.lighter' } : undefined}
+                      sx={price.is_promotion ? { bgcolor: 'warning.lighter' } : undefined}
                     >
                       <TableCell>
                         <Stack direction="row" spacing={1} alignItems="center">
-                          {price.supplierName}
-                          {price.isPromotion && (
+                          {price.supplier_name}
+                          {price.is_promotion && (
                             <Tooltip title="Promotion Price">
                               <PromotionIcon color="warning" fontSize="small" />
                             </Tooltip>
                           )}
                         </Stack>
                       </TableCell>
-                      <TableCell align="right">€{price.price.toFixed(2)}</TableCell>
+                      <TableCell align="right">€{price.price_quoted.toFixed(2)}</TableCell>
                       <TableCell align="right">{formatIlsPrice(ilsPrice)}</TableCell>
                       <TableCell align="right">
                         {marginInfo && (
@@ -181,7 +193,7 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
                       </TableCell>
                       <TableCell>
                         <Chip 
-                          label={price.status}
+                          label={price.status || 'Unknown'}
                           size="small"
                           color={getStatusColor(price.status)}
                         />
@@ -190,11 +202,11 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
                         {getPriceChangeDisplay(price.change)}
                       </TableCell>
                       <TableCell>
-                        {new Date(price.date).toLocaleDateString()}
+                        {price.response_date ? new Date(price.response_date).toLocaleDateString() : 'N/A'}
                       </TableCell>
                       <TableCell>
-                        {price.isPromotion && (
-                          <Tooltip title={`Promotion: ${price.promotionName || 'Unnamed'}`}>
+                        {price.is_promotion && (
+                          <Tooltip title={`Promotion: ${price.promotion_name || 'Unnamed'}`}>
                             <IconButton size="small">
                               <InfoIcon fontSize="small" />
                             </IconButton>

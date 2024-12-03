@@ -38,12 +38,6 @@ async function initializeDatabase() {
 
             console.log('Connected to SQLite database');
             
-            // Debug: Log available methods on db instance
-            console.log('Available database methods:', Object.keys(db));
-            console.log('Is "all" method available?', typeof db.all === 'function');
-            console.log('Is "get" method available?', typeof db.get === 'function');
-            console.log('Is "run" method available?', typeof db.run === 'function');
-
             try {
                 // First, ensure we're not in a transaction
                 await new Promise((resolve, reject) => {
@@ -79,87 +73,84 @@ async function initializeDatabase() {
                     console.error('Error checking JSON1 extension:', e);
                 }
 
-                // Read schema
-                const schema = fs.readFileSync(schemaPath, 'utf8');
-                
-                // Split schema into individual statements, preserving triggers
-                const statements = [];
-                let currentStatement = '';
-                let inTrigger = false;
-
-                schema.split(';').forEach(statement => {
-                    statement = statement.trim();
-                    if (!statement) return;
-
-                    if (statement.toUpperCase().includes('CREATE TRIGGER') || inTrigger) {
-                        inTrigger = true;
-                        currentStatement += statement + ';';
-                        if (statement.toUpperCase().includes('END')) {
-                            statements.push(currentStatement);
-                            currentStatement = '';
-                            inTrigger = false;
+                // Check if database needs initialization
+                const needsInit = await new Promise((resolve) => {
+                    db.get('SELECT COUNT(*) as count FROM sqlite_master WHERE type="table" AND name="item"', [], (err, row) => {
+                        if (err || !row || row.count === 0) {
+                            resolve(true);
+                        } else {
+                            resolve(false);
                         }
-                    } else {
-                        statements.push(statement + ';');
-                    }
+                    });
                 });
 
-                // Begin transaction for schema creation
-                await runStatement('BEGIN IMMEDIATE TRANSACTION;');
+                if (needsInit) {
+                    console.log('Database needs initialization, creating tables...');
+                    // Read schema
+                    const schema = fs.readFileSync(schemaPath, 'utf8');
+                    
+                    // Remove DROP statements
+                    const cleanSchema = schema
+                        .split('\n')
+                        .filter(line => !line.trim().toLowerCase().startsWith('drop'))
+                        .join('\n');
+                    
+                    // Split schema into individual statements, preserving triggers
+                    const statements = [];
+                    let currentStatement = '';
+                    let inTrigger = false;
 
-                try {
-                    console.log('Executing schema statements...');
-                    for (let i = 0; i < statements.length; i++) {
-                        const statement = statements[i].trim();
-                        if (!statement) continue;
-                        
-                        try {
-                            await runStatement(statement);
-                        } catch (err) {
-                            if (err.code !== 'SQLITE_ERROR' || !err.message.includes('already exists')) {
-                                console.error(`Error executing statement ${i + 1}:`, err);
-                                console.error('Statement:', statement);
-                                await runStatement('ROLLBACK;');
-                                reject(err);
-                                return;
+                    cleanSchema.split(';').forEach(statement => {
+                        statement = statement.trim();
+                        if (!statement) return;
+
+                        if (statement.toUpperCase().includes('CREATE TRIGGER') || inTrigger) {
+                            inTrigger = true;
+                            currentStatement += statement + ';';
+                            if (statement.toUpperCase().includes('END')) {
+                                statements.push(currentStatement);
+                                currentStatement = '';
+                                inTrigger = false;
+                            }
+                        } else {
+                            statements.push(statement + ';');
+                        }
+                    });
+
+                    // Begin transaction for schema creation
+                    await runStatement('BEGIN IMMEDIATE TRANSACTION;');
+
+                    try {
+                        console.log('Executing schema statements...');
+                        for (let i = 0; i < statements.length; i++) {
+                            const statement = statements[i].trim();
+                            if (!statement) continue;
+                            
+                            try {
+                                await runStatement(statement);
+                            } catch (err) {
+                                if (err.code !== 'SQLITE_ERROR' || !err.message.includes('already exists')) {
+                                    console.error(`Error executing statement ${i + 1}:`, err);
+                                    console.error('Statement:', statement);
+                                    await runStatement('ROLLBACK;');
+                                    reject(err);
+                                    return;
+                                }
                             }
                         }
+
+                        await runStatement('COMMIT;');
+                        console.log('Database schema initialized successfully');
+                    } catch (error) {
+                        console.error('Error during database initialization:', error);
+                        await runStatement('ROLLBACK;');
+                        reject(error);
                     }
-
-                    // Verify the database setup by checking if the item table exists
-                    const verifyDatabase = () => {
-                        return new Promise((resolveVerify, rejectVerify) => {
-                            db.get('SELECT COUNT(*) as count FROM sqlite_master WHERE type="table" AND name="item"', [], async (err, row) => {
-                                if (err) {
-                                    console.error('Error verifying database setup:', err);
-                                    await runStatement('ROLLBACK;');
-                                    rejectVerify(err);
-                                    return;
-                                }
-
-                                if (row.count === 0) {
-                                    console.error('Database verification failed: item table not found');
-                                    await runStatement('ROLLBACK;');
-                                    rejectVerify(new Error('Database setup incomplete'));
-                                    return;
-                                }
-
-                                console.log('Database verification successful');
-                                resolveVerify();
-                            });
-                        });
-                    };
-
-                    await verifyDatabase();
-                    await runStatement('COMMIT;');
-                    
-                    console.log('Database schema initialized successfully');
-                    resolve(db);
-                } catch (error) {
-                    console.error('Error during database initialization:', error);
-                    await runStatement('ROLLBACK;');
-                    reject(error);
+                } else {
+                    console.log('Database already initialized, skipping schema creation');
                 }
+
+                resolve(db);
             } catch (error) {
                 console.error('Error initializing database:', error);
                 reject(error);

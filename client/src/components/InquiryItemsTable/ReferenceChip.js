@@ -1,5 +1,5 @@
 import React from 'react';
-import { Chip, Tooltip, Box } from '@mui/material';
+import { Chip, Tooltip, Box, Typography } from '@mui/material';
 import {
   SwapHoriz as SwapHorizIcon,
   Close as CloseIcon,
@@ -21,25 +21,77 @@ function ReferenceChip({ reference_change, onDelete, isReplacement }) {
   };
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    <Box sx={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: 1,
+      position: 'relative'
+    }}>
       <Tooltip title={getTooltipText()}>
         <Chip
           icon={isReplacement ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />}
-          label={reference_change.new_reference_id}
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography sx={{ fontWeight: 'bold' }}>
+                {isReplacement ? 'New ID: ' : 'Replaced by: '}
+              </Typography>
+              {reference_change.new_reference_id}
+            </Box>
+          }
           color={isReplacement ? 'success' : 'error'}
           size="small"
-          variant="outlined"
+          variant="filled"
           onDelete={onDelete}
           deleteIcon={<CloseIcon />}
           sx={{ 
-            '& .MuiChip-label': { px: 1 },
+            '& .MuiChip-label': { 
+              px: 1,
+              py: 1.5,
+              fontSize: '0.875rem'
+            },
             '& .MuiChip-icon': { 
-              fontSize: 16,
-              color: isReplacement ? 'success.main' : 'error.main'
+              fontSize: 20,
+              color: isReplacement ? 'success.light' : 'error.light'
+            },
+            fontWeight: 'bold',
+            boxShadow: 1,
+            border: 2,
+            borderColor: isReplacement ? 'success.main' : 'error.main',
+            '&:hover': {
+              backgroundColor: isReplacement ? 'success.dark' : 'error.dark',
             }
           }}
         />
       </Tooltip>
+      {/* Add a pulsing dot for new references */}
+      {isReplacement && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: -2,
+            right: -2,
+            width: 8,
+            height: 8,
+            backgroundColor: 'success.main',
+            borderRadius: '50%',
+            animation: 'pulse 1.5s infinite',
+            '@keyframes pulse': {
+              '0%': {
+                transform: 'scale(0.95)',
+                boxShadow: '0 0 0 0 rgba(76, 175, 80, 0.7)',
+              },
+              '70%': {
+                transform: 'scale(1)',
+                boxShadow: '0 0 0 6px rgba(76, 175, 80, 0)',
+              },
+              '100%': {
+                transform: 'scale(0.95)',
+                boxShadow: '0 0 0 0 rgba(76, 175, 80, 0)',
+              },
+            },
+          }}
+        />
+      )}
     </Box>
   );
 }

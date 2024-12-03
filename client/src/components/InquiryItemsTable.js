@@ -18,6 +18,7 @@ import {
   DialogActions,
   Tooltip,
   Paper,
+  InputAdornment,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -28,6 +29,8 @@ import {
   LocalOffer as LocalOfferIcon,
   ContentCopy as ContentCopyIcon,
   AttachMoney as AttachMoneyIcon,
+  Save as SaveIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
@@ -104,20 +107,42 @@ function InquiryItemsTable({
   const [itemToDelete, setItemToDelete] = useState(null);
   const [deleteType, setDeleteType] = useState(null);
   const [error, setError] = useState(null);
+  const [editedQty, setEditedQty] = useState(null);
 
   const handleQtyChange = (item, value) => {
     const newQty = parseInt(value) || 0;
-    onEditQty(item.inquiry_item_id, newQty);
+    setEditedQty(newQty);
   };
 
   const handleQtyBlur = (item) => {
-    onUpdateQty(item.inquiry_item_id, item.requested_qty);
+    if (editedQty !== null) {
+      onUpdateQty(item.inquiry_item_id, editedQty);
+      setEditedQty(null);
+    }
   };
 
   const handleQtyKeyPress = (e, item) => {
     if (e.key === 'Enter') {
-      onUpdateQty(item.inquiry_item_id, item.requested_qty);
+      if (editedQty !== null) {
+        onUpdateQty(item.inquiry_item_id, editedQty);
+        setEditedQty(null);
+      }
+    } else if (e.key === 'Escape') {
+      setEditedQty(null);
+      onEditQty(null);
     }
+  };
+
+  const handleSaveQty = (item) => {
+    if (editedQty !== null) {
+      onUpdateQty(item.inquiry_item_id, editedQty);
+      setEditedQty(null);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditedQty(null);
+    onEditQty(null);
   };
 
   const handleDeleteClick = (item, type) => {
@@ -252,18 +277,17 @@ function InquiryItemsTable({
               </TableRow>
             ) : (
               sortedItems.map((item, index) => {
-                // Parse supplier prices only if it's a string
                 const supplierPrices = typeof item.supplier_prices === 'string' 
                   ? JSON.parse(item.supplier_prices) 
                   : (item.supplier_prices || []);
-                const isReplacement = item.reference_change?.item_id === item.item_id;
+
+                const isReplacement = item.is_referenced_by === 1;
                 
                 return (
                   <TableRow 
                     key={item.inquiry_item_id}
                     onClick={() => {
                       if (editingQty !== item.inquiry_item_id) {
-                        // Pass the item with already parsed supplier_prices
                         onViewDetails({
                           ...item,
                           supplier_prices: supplierPrices
@@ -275,8 +299,8 @@ function InquiryItemsTable({
                         ? 'rgba(255, 152, 0, 0.1)'
                         : item.has_reference_change && item.reference_change
                           ? isReplacement 
-                            ? 'rgba(76, 175, 80, 0.1)'  // Light green for replacement items
-                            : 'rgba(244, 67, 54, 0.1)'  // Light red for old items
+                            ? 'rgba(76, 175, 80, 0.1)'
+                            : 'rgba(244, 67, 54, 0.1)'
                           : item.is_referenced_by
                             ? '#e8f5e9'
                             : item.promotion_id
@@ -287,8 +311,8 @@ function InquiryItemsTable({
                           ? 'rgba(255, 152, 0, 0.2)'
                           : item.has_reference_change && item.reference_change
                             ? isReplacement
-                              ? 'rgba(76, 175, 80, 0.2)'  // Darker green on hover
-                              : 'rgba(244, 67, 54, 0.2)'  // Darker red on hover
+                              ? 'rgba(76, 175, 80, 0.2)'
+                              : 'rgba(244, 67, 54, 0.2)'
                             : item.is_referenced_by
                               ? '#c8e6c9'
                               : item.promotion_id
@@ -314,48 +338,81 @@ function InquiryItemsTable({
                     <TableCell 
                       align="right" 
                       onClick={(e) => e.stopPropagation()}
+                      sx={{ minWidth: '150px' }}
                     >
                       {editingQty === item.inquiry_item_id ? (
-                        <TextField
-                          type="number"
-                          size="small"
-                          value={item.requested_qty || 0}
-                          onChange={(e) => handleQtyChange(item, e.target.value)}
-                          onBlur={() => handleQtyBlur(item)}
-                          onKeyPress={(e) => handleQtyKeyPress(e, item)}
-                          autoFocus
-                          sx={{ width: '80px' }}
-                        />
-                      ) : (
-                        <Tooltip title="Click to edit quantity">
-                          <Box 
-                            onClick={() => onEditQty(item.inquiry_item_id)}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <TextField
+                            type="number"
+                            size="small"
+                            value={editedQty ?? (item.requested_qty || 0)}
+                            onChange={(e) => handleQtyChange(item, e.target.value)}
+                            onKeyDown={(e) => handleQtyKeyPress(e, item)}
+                            autoFocus
                             sx={{ 
-                              cursor: 'text',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'flex-end',
-                              gap: 1,
-                              '&:hover': {
-                                '& .edit-icon': {
-                                  opacity: 1,
-                                },
-                                color: 'primary.main',
+                              width: '100px',
+                              '& .MuiOutlinedInput-root': {
+                                backgroundColor: 'white',
+                                '&.Mui-focused': {
+                                  '& .MuiOutlinedInput-notchedOutline': {
+                                    borderColor: 'primary.main',
+                                    borderWidth: 2
+                                  }
+                                }
                               }
                             }}
-                          >
-                            <span>{item.requested_qty || 0}</span>
-                            <EditIcon 
-                              className="edit-icon"
-                              sx={{ 
-                                fontSize: '0.9rem',
-                                opacity: 0,
-                                transition: 'opacity 0.2s',
-                                color: 'primary.main'
-                              }} 
-                            />
-                          </Box>
-                        </Tooltip>
+                            InputProps={{
+                              endAdornment: (
+                                <InputAdornment position="end">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleSaveQty(item)}
+                                    color="primary"
+                                  >
+                                    <SaveIcon fontSize="small" />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    onClick={handleCancelEdit}
+                                    color="error"
+                                  >
+                                    <CloseIcon fontSize="small" />
+                                  </IconButton>
+                                </InputAdornment>
+                              )
+                            }}
+                          />
+                        </Box>
+                      ) : (
+                        <Box 
+                          onClick={() => onEditQty(item.inquiry_item_id)}
+                          sx={{ 
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end',
+                            gap: 1,
+                            cursor: 'pointer',
+                            padding: '8px',
+                            borderRadius: 1,
+                            '&:hover': {
+                              backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                              '& .edit-icon': {
+                                opacity: 1,
+                              }
+                            }
+                          }}
+                        >
+                          <Typography>{item.requested_qty || 0}</Typography>
+                          <EditIcon 
+                            className="edit-icon"
+                            sx={{ 
+                              fontSize: '1rem',
+                              opacity: 0,
+                              transition: 'opacity 0.2s',
+                              color: 'primary.main'
+                            }} 
+                          />
+                        </Box>
                       )}
                     </TableCell>
                     <TableCell align="right">{item.qty_in_stock || 0}</TableCell>
