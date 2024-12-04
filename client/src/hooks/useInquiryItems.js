@@ -10,37 +10,38 @@ export const useInquiryItems = (inquiryId) => {
   const [inquiryStatus, setInquiryStatus] = useState('');
   const [inquiryDate, setInquiryDate] = useState('');
 
-  const processSupplierPrices = (prices) => {
-    if (!prices) return [];
+  const processSupplierResponses = (responses) => {
+    if (!responses) return [];
 
     try {
-      // Parse string prices if needed
-      let parsedPrices = typeof prices === 'string' ? JSON.parse(prices) : prices;
+      // Parse string responses if needed
+      let parsedResponses = typeof responses === 'string' ? JSON.parse(responses) : responses;
       
       // Ensure we have an array
-      if (!Array.isArray(parsedPrices)) {
+      if (!Array.isArray(parsedResponses)) {
         return [];
       }
 
-      // Filter and process each price
-      return parsedPrices
-        .filter(price => 
-          price && 
-          typeof price === 'object' && 
-          'supplier_name' in price && 
-          'price_quoted' in price
+      // Filter and process each response
+      return parsedResponses
+        .filter(response => 
+          response && 
+          typeof response === 'object' && 
+          'supplier_name' in response && 
+          'price_quoted' in response
         )
-        .map(price => ({
-          supplier_name: price.supplier_name || 'Unknown Supplier',
-          price_quoted: price.price_quoted || 0,
-          response_date: price.response_date ? new Date(price.response_date) : new Date(),
-          status: price.status || 'unknown',
-          is_promotion: Boolean(price.is_promotion),
-          promotion_name: price.promotion_name || '',
-          price_change: price.price_change || 0
+        .map(response => ({
+          supplier_id: response.supplier_id,
+          supplier_name: response.supplier_name || 'Unknown Supplier',
+          price_quoted: response.price_quoted || 0,
+          response_date: response.response_date ? new Date(response.response_date) : new Date(),
+          status: response.status || 'unknown',
+          is_promotion: Boolean(response.is_promotion),
+          promotion_name: response.promotion_name || '',
+          notes: response.notes || ''
         }));
     } catch (e) {
-      console.error('Error processing supplier prices:', e);
+      console.error('Error processing supplier responses:', e);
       return [];
     }
   };
@@ -140,8 +141,8 @@ export const useInquiryItems = (inquiryId) => {
           }
         }
 
-        // Process supplier prices using the dedicated function
-        const supplier_prices = processSupplierPrices(item.supplier_prices || item.supplier_responses);
+        // Process supplier responses using the dedicated function
+        const supplier_responses = processSupplierResponses(item.supplier_responses);
 
         // Determine if item has reference changes
         const has_reference_change = Boolean(
@@ -197,8 +198,8 @@ export const useInquiryItems = (inquiryId) => {
           promotion_price,
           promotion_start_date,
           promotion_end_date,
-          // Add supplier prices
-          supplier_prices
+          // Add supplier responses
+          supplier_responses
         };
       }).filter(Boolean); // Remove any null items
 

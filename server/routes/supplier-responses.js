@@ -124,7 +124,17 @@ function createRouter(db) {
                 'X-Has-More': responses.pagination.hasMore
             });
 
-            res.json(responses.data);
+            // Send the response data with stats
+            res.json({
+                data: responses.data,
+                stats: {
+                    totalResponses: responses.stats.totalResponses,
+                    totalItems: responses.stats.totalItems,
+                    totalSuppliers: responses.stats.totalSuppliers,
+                    respondedItems: responses.stats.respondedItems,
+                    missingResponses: responses.stats.missingResponses
+                }
+            });
         } catch (err) {
             debug.error('Error in supplier responses route:', err);
             next(err);

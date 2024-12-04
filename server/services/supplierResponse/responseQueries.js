@@ -33,47 +33,69 @@ class ResponseQueries {
                 }
 
                 try {
-                    const parsedRows = rows.map(row => {
-                        // Parse JSON arrays once
-                        const items = JSON.parse(row.items || '[]');
-                        const promotions = row.debugPromotions ? 
-                            row.debugPromotions.split(',').filter(Boolean) : 
-                            [];
+                    const transformedData = {};
+                    let globalStats = null;
 
-                        // Process items to include supplier response details
-                        const processedItems = items.map(item => ({
-                            ...item,
-                            supplier_name: row.supplier_name,
-                            response_date: item.response_date,
-                            is_promotion: item.item_type === 'promotion'
-                        }));
+                    rows.forEach(row => {
+                        const supplierId = row.supplier_id;
+                        const supplierName = row.supplier_name;
+                        let responses = [];
 
-                        return {
-                            date: row.date,
-                            supplierId: row.supplier_id,
-                            supplierName: row.supplier_name,
-                            itemCount: row.item_count,
-                            extraItemsCount: row.extra_items_count || 0,
-                            replacementsCount: row.replacements_count || 0,
-                            items: processedItems,
-                            debugPromotions: promotions
+                        try {
+                            responses = JSON.parse(row.responses || '[]');
+                        } catch (e) {
+                            debug.error('Error parsing responses JSON:', e);
+                            responses = [];
+                        }
+
+                        // Store global stats from first row
+                        if (!globalStats) {
+                            globalStats = {
+                                totalResponses: row.total_responses || 0,
+                                totalItems: row.total_items || 0,
+                                totalSuppliers: row.total_suppliers || 0,
+                                respondedItems: row.responded_items || 0,
+                                missingResponses: row.missing_responses || 0
+                            };
+                        }
+
+                        transformedData[supplierId] = {
+                            supplier_name: supplierName,
+                            responses: responses.map(response => ({
+                                supplier_response_id: response.supplier_response_id,
+                                supplier_id: supplierId,
+                                supplier_name: supplierName,
+                                item_id: response.item_id,
+                                price_quoted: parseFloat(response.price_quoted),
+                                response_date: response.response_date,
+                                is_promotion: Boolean(response.is_promotion),
+                                promotion_name: response.promotion_name || '',
+                                notes: response.notes || '',
+                                hebrew_description: response.hebrew_description || '',
+                                english_description: response.english_description || '',
+                                status: response.status || 'active'
+                            })),
+                            totalItems: row.item_count || 0,
+                            promotionItems: row.promotion_count || 0,
+                            averagePrice: row.average_price || 0,
+                            latestResponse: row.latest_response || row.response_date
                         };
                     });
 
                     debug.log('Successfully processed supplier responses:', {
                         inquiryId,
-                        responseCount: parsedRows.length,
-                        page,
-                        pageSize
+                        supplierCount: Object.keys(transformedData).length,
+                        stats: globalStats
                     });
 
                     resolve({
-                        data: parsedRows,
+                        data: transformedData,
                         pagination: {
                             page,
                             pageSize,
-                            hasMore: parsedRows.length === pageSize
-                        }
+                            hasMore: rows.length === pageSize
+                        },
+                        stats: globalStats
                     });
                 } catch (parseError) {
                     debug.error('Error parsing supplier responses:', parseError);
@@ -87,7 +109,7 @@ class ResponseQueries {
         return new Promise((resolve, reject) => {
             const sql = `INSERT INTO supplier_response (
                 inquiry_id, supplier_id, item_id, price_quoted, response_date, status
-            ) VALUES (?, ?, ?, ?, datetime('now'), 'pending')`;
+            ) VALUES (?, ?, ?, ?, datetime('now'), 'active')`;
             const params = [inquiryId, supplierId, itemId, price];
 
             this.db.run(sql, params, function(err) {

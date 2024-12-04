@@ -81,6 +81,11 @@ function InquiryDetail() {
     };
   }, [safeItems, inquiryDate]);
 
+  // Calculate total expected items (total unique items that should have responses)
+  const totalExpectedItems = React.useMemo(() => {
+    return safeItems.length;
+  }, [safeItems]);
+
   // Handle quantity updates
   const handleQtyUpdate = async (itemId, newQty) => {
     const success = await handleUpdateQuantity(itemId, newQty);
@@ -176,8 +181,8 @@ function InquiryDetail() {
 
         <Box sx={{ mb: 3 }}>
           <SupplierResponseList 
-            responses={safeItems.filter(item => item?.supplier_responses?.length > 0)}
-            onRefresh={fetchItems}
+            inquiryId={inquiryId}
+            totalExpectedItems={totalExpectedItems}
           />
         </Box>
 

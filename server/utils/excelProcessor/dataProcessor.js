@@ -361,7 +361,7 @@ function processSupplierResponse(filePath, columnMapping) {
                         }
                         break;
                         
-                    case 'price':
+                    case 'price_quoted':
                         processedRow.price = parseNumericValue(value, null);
                         break;
                         

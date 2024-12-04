@@ -43,9 +43,10 @@ function getInquiryItemsQuery() {
                         'response_date', sr.response_date,
                         'is_promotion', COALESCE(sr.is_promotion, 0),
                         'promotion_name', sr.promotion_name,
+                        'notes', sr.notes,
                         'status', sr.status
                     )
-                ) as supplier_prices
+                ) as supplier_responses
             FROM supplier_response sr
             JOIN supplier s ON sr.supplier_id = s.supplier_id
             WHERE sr.status != 'deleted'
@@ -79,7 +80,7 @@ function getInquiryItemsQuery() {
                 ELSE 0 
             END as is_referenced_by,
             rb.referencing_items,
-            COALESCE(vsr.supplier_prices, '[]') as supplier_prices
+            COALESCE(vsr.supplier_responses, '[]') as supplier_responses
         FROM inquiry_item ii
         JOIN item i ON ii.item_id = i.item_id
         LEFT JOIN ReferenceInfo ri ON ii.item_id = ri.original_item_id

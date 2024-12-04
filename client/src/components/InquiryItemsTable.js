@@ -7,92 +7,13 @@ import {
   TableHead,
   TableRow,
   Typography,
-  Box,
-  Button,
-  IconButton,
-  TextField,
-  Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Tooltip,
   Paper,
-  InputAdornment,
 } from '@mui/material';
-import {
-  Edit as EditIcon,
-  Visibility as VisibilityIcon,
-  Delete as DeleteIcon,
-  ArrowUpward as ArrowUpwardIcon,
-  ArrowDownward as ArrowDownwardIcon,
-  LocalOffer as LocalOfferIcon,
-  ContentCopy as ContentCopyIcon,
-  AttachMoney as AttachMoneyIcon,
-  Save as SaveIcon,
-  Close as CloseIcon,
-} from '@mui/icons-material';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
-import ReferenceChip from './InquiryItemsTable/ReferenceChip';
-
-function SortableTableCell({ field, children, align = 'left', currentSort, onSort }) {
-  const isCurrentField = currentSort.field === field;
-  
-  return (
-    <TableCell
-      align={align}
-      onClick={() => onSort(field)}
-      sx={{
-        cursor: 'pointer',
-        userSelect: 'none',
-        backgroundColor: '#f5f5f5',
-        fontWeight: 'bold',
-        '&:hover': {
-          backgroundColor: 'rgba(0, 0, 0, 0.08)',
-        },
-        position: 'relative',
-        paddingRight: isCurrentField ? '24px' : '16px',
-        '& .sort-icon': {
-          position: 'absolute',
-          right: '4px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-        },
-      }}
-    >
-      {children}
-      {isCurrentField && (
-        <span className="sort-icon">
-          {currentSort.direction === 'asc' ? (
-            <ArrowUpwardIcon fontSize="small" />
-          ) : (
-            <ArrowDownwardIcon fontSize="small" />
-          )}
-        </span>
-      )}
-    </TableCell>
-  );
-}
-
-function SupplierPriceChip({ supplierPrice }) {
-  if (!supplierPrice || !supplierPrice.supplier_name || !supplierPrice.price_quoted) {
-    return null;
-  }
-
-  return (
-    <Tooltip title={`${supplierPrice.supplier_name} - ${new Date(supplierPrice.response_date).toLocaleDateString()}`}>
-      <Chip
-        icon={<AttachMoneyIcon />}
-        label={`₪${supplierPrice.price_quoted}`}
-        color={supplierPrice.is_promotion ? "secondary" : "primary"}
-        size="small"
-        variant="outlined"
-        sx={{ margin: '2px' }}
-      />
-    </Tooltip>
-  );
-}
+import SortableTableCell from './InquiryItemsTable/SortableTableCell';
+import DeleteConfirmDialog from './InquiryItemsTable/DeleteConfirmDialog';
+import TableRowContent from './InquiryItemsTable/TableRowContent';
 
 function InquiryItemsTable({
   items,
@@ -116,13 +37,6 @@ function InquiryItemsTable({
   const handleQtyChange = (item, value) => {
     const newQty = parseInt(value) || 0;
     setEditedQty(newQty);
-  };
-
-  const handleQtyBlur = (item) => {
-    if (editedQty !== null) {
-      onUpdateQty(item.inquiry_item_id, editedQty);
-      setEditedQty(null);
-    }
   };
 
   const handleQtyKeyPress = (e, item) => {
@@ -182,14 +96,12 @@ function InquiryItemsTable({
   };
 
   const processSupplierPrices = (item) => {
-    // Parse and filter supplier prices
     let supplierPrices = [];
     try {
       supplierPrices = typeof item.supplier_prices === 'string' 
         ? JSON.parse(item.supplier_prices) 
         : (item.supplier_prices || []);
       
-      // Filter out null or invalid entries
       supplierPrices = supplierPrices.filter(price => 
         price && 
         typeof price === 'object' && 
@@ -203,130 +115,6 @@ function InquiryItemsTable({
     return supplierPrices;
   };
 
-  const handleViewDetails = (item) => {
-    if (!item) return;
-    
-    // Process supplier prices before passing to details view
-    const supplierPrices = processSupplierPrices(item);
-    
-    onViewDetails({
-      ...item,
-      supplier_prices: supplierPrices
-    });
-  };
-
-  const renderQuantityCell = (item) => {
-    if (editingQty === item.inquiry_item_id) {
-      return (
-        <Paper 
-          variant="outlined"
-          sx={{
-            p: 1.5,
-            backgroundColor: 'primary.lighter',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1,
-            minWidth: '180px',
-            boxShadow: 1
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <TextField
-            type="number"
-            value={editedQty ?? (item.requested_qty || 0)}
-            onChange={(e) => handleQtyChange(item, e.target.value)}
-            onKeyDown={(e) => handleQtyKeyPress(e, item)}
-            autoFocus
-            variant="outlined"
-            inputProps={{ min: "0" }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                fontSize: '1.25rem',
-                fontWeight: 'bold',
-                backgroundColor: 'white',
-                '& input': {
-                  textAlign: 'right',
-                  padding: '8px 12px'
-                },
-                '&.Mui-focused': {
-                  '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: 'primary.main',
-                    borderWidth: 2
-                  }
-                }
-              }
-            }}
-          />
-          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-            <Chip
-              icon={<SaveIcon />}
-              label="Save"
-              color="primary"
-              onClick={() => handleSaveQty(item)}
-              sx={{ 
-                fontWeight: 'bold',
-                '&:hover': {
-                  backgroundColor: 'primary.dark',
-                  boxShadow: 1
-                }
-              }}
-            />
-            <Chip
-              icon={<CloseIcon />}
-              label="Cancel"
-              color="error"
-              onClick={handleCancelEdit}
-              sx={{ 
-                fontWeight: 'bold',
-                '&:hover': {
-                  backgroundColor: 'error.dark',
-                  boxShadow: 1
-                }
-              }}
-            />
-          </Box>
-        </Paper>
-      );
-    }
-
-    return (
-      <Box 
-        onClick={() => onEditQty(item.inquiry_item_id)}
-        sx={{ 
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: 1,
-          padding: '8px 12px',
-          borderRadius: 1,
-          cursor: 'pointer',
-          minWidth: '100px',
-          transition: 'all 0.2s ease',
-          '&:hover': {
-            backgroundColor: 'action.hover',
-            '& .edit-icon': {
-              opacity: 1,
-              color: 'primary.main'
-            }
-          }
-        }}
-      >
-        <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-          {item.requested_qty || 0}
-        </Typography>
-        <EditIcon 
-          className="edit-icon"
-          sx={{ 
-            fontSize: '1.1rem',
-            opacity: 0,
-            transition: 'all 0.2s ease',
-            color: 'text.secondary'
-          }} 
-        />
-      </Box>
-    );
-  };
-
   // Sort items by Excel row index if no other sort is applied
   const sortedItems = [...items].sort((a, b) => {
     if (!sortConfig.field || sortConfig.field === 'excel_row_index') {
@@ -335,6 +123,14 @@ function InquiryItemsTable({
     return 0;
   });
 
+  // Create a unique key for each item
+  const getItemKey = (item) => {
+    const baseKey = item.inquiry_item_id || item.item_id;
+    const excelIndex = item.excel_row_index || '';
+    const originalIndex = item.original_row_index || '';
+    return `${baseKey}-${excelIndex}-${originalIndex}`;
+  };
+
   return (
     <Paper elevation={2} sx={{ margin: 2, padding: 2 }}>
       <TableContainer>
@@ -342,49 +138,22 @@ function InquiryItemsTable({
           <TableHead>
             <TableRow>
               <TableCell sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>#</TableCell>
-              <SortableTableCell
-                field="item_id"
-                currentSort={sortConfig}
-                onSort={onSort}
-              >
+              <SortableTableCell field="item_id" currentSort={sortConfig} onSort={onSort}>
                 Item ID
               </SortableTableCell>
-              <SortableTableCell
-                field="hebrew_description"
-                currentSort={sortConfig}
-                onSort={onSort}
-              >
+              <SortableTableCell field="hebrew_description" currentSort={sortConfig} onSort={onSort}>
                 Hebrew Description
               </SortableTableCell>
-              <SortableTableCell
-                field="english_description"
-                currentSort={sortConfig}
-                onSort={onSort}
-              >
+              <SortableTableCell field="english_description" currentSort={sortConfig} onSort={onSort}>
                 English Description
               </SortableTableCell>
-              <SortableTableCell
-                field="requested_qty"
-                align="right"
-                currentSort={sortConfig}
-                onSort={onSort}
-              >
+              <SortableTableCell field="requested_qty" align="right" currentSort={sortConfig} onSort={onSort}>
                 Requested Qty
               </SortableTableCell>
-              <SortableTableCell
-                field="qty_in_stock"
-                align="right"
-                currentSort={sortConfig}
-                onSort={onSort}
-              >
+              <SortableTableCell field="qty_in_stock" align="right" currentSort={sortConfig} onSort={onSort}>
                 Stock
               </SortableTableCell>
-              <SortableTableCell
-                field="retail_price"
-                align="right"
-                currentSort={sortConfig}
-                onSort={onSort}
-              >
+              <SortableTableCell field="retail_price" align="right" currentSort={sortConfig} onSort={onSort}>
                 Retail Price (ILS)
               </SortableTableCell>
               <TableCell align="right" sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
@@ -393,19 +162,10 @@ function InquiryItemsTable({
               <TableCell align="right" sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
                 Promotion Price
               </TableCell>
-              <SortableTableCell
-                field="import_markup"
-                align="right"
-                currentSort={sortConfig}
-                onSort={onSort}
-              >
+              <SortableTableCell field="import_markup" align="right" currentSort={sortConfig} onSort={onSort}>
                 Import Markup
               </SortableTableCell>
-              <SortableTableCell
-                field="hs_code"
-                currentSort={sortConfig}
-                onSort={onSort}
-              >
+              <SortableTableCell field="hs_code" currentSort={sortConfig} onSort={onSort}>
                 HS Code
               </SortableTableCell>
               <TableCell align="center" sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
@@ -426,179 +186,38 @@ function InquiryItemsTable({
                 </TableCell>
               </TableRow>
             ) : (
-              sortedItems.map((item, index) => {
-                // Parse and filter supplier prices
-                const supplierPrices = processSupplierPrices(item);
-                const isReplacement = item.is_referenced_by === 1;
-                
-                return (
-                  <TableRow 
-                    key={item.inquiry_item_id}
-                    onClick={() => {
-                      if (editingQty !== item.inquiry_item_id) {
-                        handleViewDetails(item);
-                      }
-                    }}
-                    sx={{ 
-                      backgroundColor: item.is_duplicate 
-                        ? 'rgba(255, 152, 0, 0.1)'
-                        : item.has_reference_change && item.reference_change
-                          ? isReplacement 
-                            ? 'rgba(76, 175, 80, 0.1)'
-                            : 'rgba(244, 67, 54, 0.1)'
-                          : item.is_referenced_by
-                            ? '#e8f5e9'
-                            : item.promotion_id
-                              ? 'rgba(156, 39, 176, 0.1)'
-                              : 'inherit',
-                      '&:hover': { 
-                        backgroundColor: item.is_duplicate
-                          ? 'rgba(255, 152, 0, 0.2)'
-                          : item.has_reference_change && item.reference_change
-                            ? isReplacement
-                              ? 'rgba(76, 175, 80, 0.2)'
-                              : 'rgba(244, 67, 54, 0.2)'
-                            : item.is_referenced_by
-                              ? '#c8e6c9'
-                              : item.promotion_id
-                                ? 'rgba(156, 39, 176, 0.2)'
-                                : 'rgba(0, 0, 0, 0.04)' 
-                      },
-                      cursor: editingQty === item.inquiry_item_id ? 'default' : 'pointer',
-                    }}
-                  >
-                    <TableCell>{(item.excel_row_index || index) + 1}</TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {item.item_id}
-                        {item.is_duplicate && (
-                          <Tooltip title={`Duplicate of row ${(item.original_row_index || 0) + 1}`}>
-                            <ContentCopyIcon color="warning" fontSize="small" />
-                          </Tooltip>
-                        )}
-                      </Box>
-                    </TableCell>
-                    <TableCell>{item.hebrew_description}</TableCell>
-                    <TableCell>{item.english_description}</TableCell>
-                    <TableCell 
-                      align="right" 
-                      onClick={(e) => e.stopPropagation()}
-                      sx={{ minWidth: '180px' }}
-                    >
-                      {renderQuantityCell(item)}
-                    </TableCell>
-                    <TableCell align="right">{item.qty_in_stock || 0}</TableCell>
-                    <TableCell align="right">₪{Number(item.retail_price).toFixed(2)}</TableCell>
-                    <TableCell align="right">
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 0.5 }}>
-                        {supplierPrices.map((price, idx) => (
-                          <SupplierPriceChip key={idx} supplierPrice={price} />
-                        ))}
-                      </Box>
-                    </TableCell>
-                    <TableCell align="right">
-                      {item.promotion_id && (
-                        <Tooltip title={`${item.promotion_name} (Valid: ${new Date(item.promotion_start_date).toLocaleDateString()} - ${new Date(item.promotion_end_date).toLocaleDateString()})`}>
-                          <Chip
-                            icon={<LocalOfferIcon />}
-                            label={`₪${item.promotion_price}`}
-                            color="secondary"
-                            size="small"
-                            variant="outlined"
-                          />
-                        </Tooltip>
-                      )}
-                    </TableCell>
-                    <TableCell align="right">{Number(item.import_markup).toFixed(2)}</TableCell>
-                    <TableCell>{item.hs_code}</TableCell>
-                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                      <ReferenceChip
-                        reference_change={item.reference_change}
-                        onDelete={() => handleDeleteClick(item, 'reference')}
-                        isReplacement={isReplacement}
-                      />
-                    </TableCell>
-                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
-                        <Button
-                          variant="contained"
-                          size="small"
-                          color="primary"
-                          onClick={() => handleViewDetails(item)}
-                          startIcon={<VisibilityIcon />}
-                          sx={{ 
-                            minWidth: '100px',
-                            padding: '4px 8px',
-                            '&:hover': { 
-                              backgroundColor: 'primary.dark',
-                              transform: 'scale(1.02)',
-                            },
-                            transition: 'all 0.2s',
-                          }}
-                        >
-                          View
-                        </Button>
-                        <IconButton 
-                          size="small" 
-                          onClick={() => onEditItem(item)}
-                          sx={{ '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.1)' } }}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton 
-                          size="small" 
-                          onClick={() => onDeleteItem(item)}
-                          sx={{ 
-                            '&:hover': { 
-                              backgroundColor: 'rgba(211, 47, 47, 0.1)',
-                              color: 'error.main',
-                            },
-                          }}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
+              sortedItems.map((item, index) => (
+                <TableRowContent
+                  key={getItemKey(item)}
+                  item={item}
+                  index={index}
+                  editingQty={editingQty}
+                  editedQty={editedQty}
+                  onEditQty={onEditQty}
+                  onQtyChange={handleQtyChange}
+                  onQtyKeyPress={handleQtyKeyPress}
+                  onSaveQty={handleSaveQty}
+                  onCancelEdit={handleCancelEdit}
+                  onViewDetails={onViewDetails}
+                  onEditItem={onEditItem}
+                  onDeleteItem={onDeleteItem}
+                  onDeleteReference={(item) => handleDeleteClick(item, 'reference')}
+                  processSupplierPrices={processSupplierPrices}
+                />
+              ))
             )}
           </TableBody>
         </Table>
       </TableContainer>
 
-      <Dialog
+      <DeleteConfirmDialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
-      >
-        <DialogTitle>
-          {deleteType === 'reference' 
-            ? 'Delete Reference Change' 
-            : 'Delete Supplier Response'}
-        </DialogTitle>
-        <DialogContent>
-          <Typography>
-            {deleteType === 'reference'
-              ? 'Are you sure you want to delete this reference change?'
-              : 'Are you sure you want to delete this supplier response?'}
-          </Typography>
-          {error && (
-            <Typography color="error" sx={{ mt: 2 }}>
-              {error}
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={handleDeleteConfirm} 
-            color="error" 
-            variant="contained"
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onConfirm={handleDeleteConfirm}
+        deleteType={deleteType}
+        error={error}
+        isDeleting={false}
+      />
     </Paper>
   );
 }

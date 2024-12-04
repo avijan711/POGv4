@@ -252,8 +252,25 @@ class InquiryModel extends BaseModel {
     }
 
     async deleteInquiry(inquiryId) {
-        const sql = 'DELETE FROM inquiry WHERE inquiry_id = ?';
-        return await this.executeRun(sql, [inquiryId]);
+        return await this.executeTransaction(async () => {
+            debug.log('Starting inquiry deletion transaction:', { inquiryId });
+
+            // First delete all supplier responses (which will cascade delete supplier_response_items)
+            const deleteResponsesSql = 'DELETE FROM supplier_response WHERE inquiry_id = ?';
+            await this.executeRun(deleteResponsesSql, [inquiryId]);
+            debug.log('Deleted supplier responses');
+
+            // Then delete the inquiry (which will cascade delete inquiry_items)
+            const deleteInquirySql = 'DELETE FROM inquiry WHERE inquiry_id = ?';
+            const result = await this.executeRun(deleteInquirySql, [inquiryId]);
+            
+            if (result.changes === 0) {
+                throw new Error('Inquiry not found');
+            }
+
+            debug.log('Inquiry deletion completed');
+            return result;
+        });
     }
 }
 
