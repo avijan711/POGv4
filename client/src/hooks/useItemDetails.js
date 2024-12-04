@@ -15,6 +15,43 @@ export const useItemDetails = (item, open, mode = 'view') => {
   const [error, setError] = useState(null);
   const [fullItemData, setFullItemData] = useState(null);
 
+  // Process supplier prices consistently
+  const processSupplierPrices = (prices) => {
+    if (!prices) return [];
+
+    try {
+      // Handle supplier prices whether they're a string or array
+      const parsedPrices = typeof prices === 'string'
+        ? JSON.parse(prices)
+        : Array.isArray(prices)
+          ? prices
+          : [];
+
+      // Filter out invalid entries and ensure required properties exist
+      return parsedPrices
+        .filter(price => 
+          price && 
+          typeof price === 'object' && 
+          price.supplier_name && 
+          typeof price.supplier_name === 'string' &&
+          'price_quoted' in price &&
+          typeof price.price_quoted === 'number'
+        )
+        .map(price => ({
+          supplier_name: price.supplier_name,
+          price_quoted: price.price_quoted,
+          response_date: price.response_date ? new Date(price.response_date) : new Date(),
+          status: price.status || 'unknown',
+          is_promotion: Boolean(price.is_promotion),
+          promotion_name: price.promotion_name || '',
+          price_change: price.price_change || 0
+        }));
+    } catch (e) {
+      console.error('Error processing supplier prices:', e);
+      return [];
+    }
+  };
+
   // Fetch complete item data when dialog opens
   useEffect(() => {
     const fetchFullItemData = async () => {
@@ -36,10 +73,13 @@ export const useItemDetails = (item, open, mode = 'view') => {
           axiosInstance.get(`/api/items/${item.item_id}/reference-changes`)
         ]);
 
+        // Process supplier prices immediately when setting full item data
+        const processedSupplierPrices = processSupplierPrices(supplierPricesResponse.data);
+
         setFullItemData({
           details: itemDetailsResponse.data,
           priceHistory: priceHistoryResponse.data,
-          supplierPrices: supplierPricesResponse.data,
+          supplierPrices: processedSupplierPrices,
           referenceChanges: referenceChangesResponse.data
         });
 
@@ -47,7 +87,6 @@ export const useItemDetails = (item, open, mode = 'view') => {
       } catch (err) {
         console.error('Error fetching item data:', err);
         setError(err.response?.data?.message || 'Error loading item data');
-        setFullItemData(null);
       } finally {
         setLoading(false);
       }
@@ -58,14 +97,21 @@ export const useItemDetails = (item, open, mode = 'view') => {
 
   // Process item data based on mode
   const itemData = useMemo(() => {
-    if (!open || !fullItemData) {
+    if (!open) {
       return null;
     }
 
-    dataDebug.logData('Processing item data', { fullItemData, mode });
-
     try {
-      const { details, priceHistory, supplierPrices, referenceChanges } = fullItemData;
+      // Use either fetched data or initial item data
+      const details = fullItemData?.details || item;
+      const priceHistory = fullItemData?.priceHistory || [];
+      
+      // Process supplier prices from either source
+      const supplierPrices = fullItemData?.supplierPrices || processSupplierPrices(item.supplier_prices);
+      
+      const referenceChanges = fullItemData?.referenceChanges || [];
+
+      dataDebug.logData('Processing item data', { details, mode });
 
       // Base item details
       const baseDetails = {
@@ -86,41 +132,38 @@ export const useItemDetails = (item, open, mode = 'view') => {
       };
 
       // Process price history
-      const processedPriceHistory = priceHistory.map(record => ({
-        date: new Date(record.date),
-        retailPrice: record.ils_retail_price,
-        qtyInStock: record.qty_in_stock,
-        soldThisYear: record.qty_sold_this_year,
-        soldLastYear: record.qty_sold_last_year
-      }));
-
-      // Process supplier prices - Keep snake_case to match API response
-      const processedSupplierPrices = supplierPrices.map(price => ({
-        supplier_name: price.supplier_name || 'Unknown Supplier',
-        price_quoted: price.price_quoted,
-        response_date: new Date(price.response_date),
-        status: price.status,
-        is_promotion: Boolean(price.is_promotion),
-        promotion_name: price.promotion_name,
-        price_change: price.price_change || 0
-      }));
+      const processedPriceHistory = (priceHistory || [])
+        .filter(record => record !== null)
+        .map(record => ({
+          date: new Date(record.date),
+          retailPrice: record.ils_retail_price,
+          qtyInStock: record.qty_in_stock,
+          soldThisYear: record.qty_sold_this_year,
+          soldLastYear: record.qty_sold_last_year
+        }));
 
       // Process reference changes - Keep snake_case to match API response
-      const processedReferenceChanges = referenceChanges.map(change => ({
-        original_item_id: change.original_item_id,
-        new_reference_id: change.new_reference_id,
-        supplier_name: change.supplier_name,
-        change_date: new Date(change.change_date),
-        notes: change.notes,
-        changed_by_user: Boolean(change.changed_by_user),
-        source: change.supplier_name ? 'supplier' : 'user'
-      }));
+      const processedReferenceChanges = (referenceChanges || [])
+        .filter(change => {
+          // Ensure change object exists and has required properties
+          if (!change || typeof change !== 'object') return false;
+          return true;
+        })
+        .map(change => ({
+          original_item_id: change.original_item_id,
+          new_reference_id: change.new_reference_id,
+          supplier_name: change.supplier_name || '',
+          change_date: change.change_date ? new Date(change.change_date) : new Date(),
+          notes: change.notes || '',
+          changed_by_user: Boolean(change.changed_by_user),
+          source: change.supplier_name ? 'supplier' : 'user'
+        }));
 
       // For edit mode, return form-ready data
       if (mode === 'edit') {
         return {
           ...baseDetails,
-          supplierPrices: processedSupplierPrices
+          supplierPrices
         };
       }
 
@@ -128,7 +171,7 @@ export const useItemDetails = (item, open, mode = 'view') => {
       return {
         itemDetails: baseDetails,
         priceHistory: processedPriceHistory,
-        supplierPrices: processedSupplierPrices,
+        supplierPrices,
         referenceChanges: processedReferenceChanges,
         hasReferenceChange: processedReferenceChanges.length > 0,
         isReferencedBy: details.is_referenced_by || false,
@@ -141,7 +184,7 @@ export const useItemDetails = (item, open, mode = 'view') => {
       setError('Error processing item data');
       return null;
     }
-  }, [fullItemData, open, mode]);
+  }, [fullItemData, open, mode, item]);
 
   // Compute loading state
   const isLoading = useMemo(() => {

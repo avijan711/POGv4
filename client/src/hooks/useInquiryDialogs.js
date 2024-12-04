@@ -16,6 +16,42 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
   const [error, setError] = useState('');
   const [editingQty, setEditingQty] = useState(null);
 
+  const processSupplierPrices = (prices) => {
+    if (!prices) return [];
+
+    try {
+      // Handle supplier prices whether they're a string or array
+      const parsedPrices = typeof prices === 'string'
+        ? JSON.parse(prices)
+        : Array.isArray(prices)
+          ? prices
+          : [];
+
+      // Filter and process each price
+      return parsedPrices
+        .filter(price => 
+          price && 
+          typeof price === 'object' && 
+          price.supplier_name && 
+          typeof price.supplier_name === 'string' &&
+          'price_quoted' in price &&
+          typeof price.price_quoted === 'number'
+        )
+        .map(price => ({
+          supplier_name: price.supplier_name,
+          price_quoted: price.price_quoted,
+          response_date: price.response_date ? new Date(price.response_date) : new Date(),
+          status: price.status || 'unknown',
+          is_promotion: Boolean(price.is_promotion),
+          promotion_name: price.promotion_name || '',
+          price_change: price.price_change || 0
+        }));
+    } catch (e) {
+      console.error('Error processing supplier prices:', e);
+      return [];
+    }
+  };
+
   const handleEditItem = (item) => {
     if (!item) return;
 
@@ -55,8 +91,23 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
   const handleViewItemDetails = async (item) => {
     if (!item) return;
 
-    setSelectedItemDetails(item);
-    setItemDetailsOpen(true);
+    try {
+      // Process supplier prices before setting in state
+      const processedItem = {
+        ...item,
+        supplier_prices: processSupplierPrices(item.supplier_prices)
+      };
+
+      // Log the processed item for debugging
+      console.log('Processed item details:', processedItem);
+      console.log('Processed supplier prices:', processedItem.supplier_prices);
+
+      setSelectedItemDetails(processedItem);
+      setItemDetailsOpen(true);
+    } catch (error) {
+      console.error('Error processing item details:', error);
+      setError('Failed to process item details. Please try again.');
+    }
   };
 
   const handleDeleteInquiry = async (navigate) => {

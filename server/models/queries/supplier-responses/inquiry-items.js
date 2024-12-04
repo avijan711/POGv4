@@ -30,6 +30,28 @@ function getInquiryItemsQuery() {
                 GROUP_CONCAT(original_item_id) as referencing_items
             FROM item_reference_change
             GROUP BY new_reference_id
+        ),
+        ValidSupplierResponses AS (
+            SELECT 
+                sr.inquiry_id,
+                sr.item_id,
+                json_group_array(
+                    json_object(
+                        'supplier_id', sr.supplier_id,
+                        'supplier_name', s.name,
+                        'price_quoted', sr.price_quoted,
+                        'response_date', sr.response_date,
+                        'is_promotion', COALESCE(sr.is_promotion, 0),
+                        'promotion_name', sr.promotion_name,
+                        'status', sr.status
+                    )
+                ) as supplier_prices
+            FROM supplier_response sr
+            JOIN supplier s ON sr.supplier_id = s.supplier_id
+            WHERE sr.status != 'deleted'
+                AND s.name IS NOT NULL
+                AND sr.price_quoted IS NOT NULL
+            GROUP BY sr.inquiry_id, sr.item_id
         )
         SELECT DISTINCT 
             ii.inquiry_item_id,
@@ -57,24 +79,7 @@ function getInquiryItemsQuery() {
                 ELSE 0 
             END as is_referenced_by,
             rb.referencing_items,
-            (
-                SELECT json_group_array(
-                    json_object(
-                        'supplier_id', sr.supplier_id,
-                        'supplier_name', s.name,
-                        'price_quoted', sr.price_quoted,
-                        'response_date', sr.response_date,
-                        'is_promotion', COALESCE(sr.is_promotion, 0),
-                        'promotion_name', sr.promotion_name
-                    )
-                )
-                FROM supplier_response sr
-                LEFT JOIN supplier s ON sr.supplier_id = s.supplier_id
-                WHERE sr.item_id = ii.item_id
-                AND sr.inquiry_id = ii.inquiry_id
-                AND sr.status != 'deleted'
-                ORDER BY sr.response_date DESC
-            ) as supplier_prices
+            COALESCE(vsr.supplier_prices, '[]') as supplier_prices
         FROM inquiry_item ii
         JOIN item i ON ii.item_id = i.item_id
         LEFT JOIN ReferenceInfo ri ON ii.item_id = ri.original_item_id
@@ -84,6 +89,8 @@ function getInquiryItemsQuery() {
             AND p.is_active = 1 
             AND (p.start_date IS NULL OR p.start_date <= datetime('now'))
             AND (p.end_date IS NULL OR p.end_date >= datetime('now'))
+        LEFT JOIN ValidSupplierResponses vsr ON ii.item_id = vsr.item_id 
+            AND ii.inquiry_id = vsr.inquiry_id
         WHERE ii.inquiry_id = ?
         ORDER BY ii.excel_row_index
     )`;

@@ -11,6 +11,7 @@ const createItemsRouter = require('./routes/items');
 const createInquiriesRouter = require('./routes/inquiries');
 const createPromotionsRouter = require('./routes/promotions');
 const createSuppliersRouter = require('./routes/suppliers');
+const createSupplierResponsesRouter = require('./routes/supplier-responses');
 
 const app = express();
 const port = process.env.PORT || 5002;
@@ -68,6 +69,7 @@ async function startServer() {
         }));
         app.use('/api/promotions', createPromotionsRouter(promotionModel));
         app.use('/api/suppliers', createSuppliersRouter(db));
+        app.use('/api/supplier-responses', createSupplierResponsesRouter(db));
 
         // Error handling middleware
         app.use((err, req, res, next) => {

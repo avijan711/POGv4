@@ -76,6 +76,10 @@ function SortableTableCell({ field, children, align = 'left', currentSort, onSor
 }
 
 function SupplierPriceChip({ supplierPrice }) {
+  if (!supplierPrice || !supplierPrice.supplier_name || !supplierPrice.price_quoted) {
+    return null;
+  }
+
   return (
     <Tooltip title={`${supplierPrice.supplier_name} - ${new Date(supplierPrice.response_date).toLocaleDateString()}`}>
       <Chip
@@ -175,6 +179,40 @@ function InquiryItemsTable({
       console.error('Error deleting:', err);
       setError(err.response?.data?.message || 'Failed to delete. Please try again.');
     }
+  };
+
+  const processSupplierPrices = (item) => {
+    // Parse and filter supplier prices
+    let supplierPrices = [];
+    try {
+      supplierPrices = typeof item.supplier_prices === 'string' 
+        ? JSON.parse(item.supplier_prices) 
+        : (item.supplier_prices || []);
+      
+      // Filter out null or invalid entries
+      supplierPrices = supplierPrices.filter(price => 
+        price && 
+        typeof price === 'object' && 
+        'supplier_name' in price && 
+        'price_quoted' in price
+      );
+    } catch (e) {
+      console.error('Error parsing supplier prices:', e);
+      supplierPrices = [];
+    }
+    return supplierPrices;
+  };
+
+  const handleViewDetails = (item) => {
+    if (!item) return;
+    
+    // Process supplier prices before passing to details view
+    const supplierPrices = processSupplierPrices(item);
+    
+    onViewDetails({
+      ...item,
+      supplier_prices: supplierPrices
+    });
   };
 
   const renderQuantityCell = (item) => {
@@ -389,10 +427,8 @@ function InquiryItemsTable({
               </TableRow>
             ) : (
               sortedItems.map((item, index) => {
-                const supplierPrices = typeof item.supplier_prices === 'string' 
-                  ? JSON.parse(item.supplier_prices) 
-                  : (item.supplier_prices || []);
-
+                // Parse and filter supplier prices
+                const supplierPrices = processSupplierPrices(item);
                 const isReplacement = item.is_referenced_by === 1;
                 
                 return (
@@ -400,10 +436,7 @@ function InquiryItemsTable({
                     key={item.inquiry_item_id}
                     onClick={() => {
                       if (editingQty !== item.inquiry_item_id) {
-                        onViewDetails({
-                          ...item,
-                          supplier_prices: supplierPrices
-                        });
+                        handleViewDetails(item);
                       }
                     }}
                     sx={{ 
@@ -491,7 +524,7 @@ function InquiryItemsTable({
                           variant="contained"
                           size="small"
                           color="primary"
-                          onClick={() => onViewDetails(item)}
+                          onClick={() => handleViewDetails(item)}
                           startIcon={<VisibilityIcon />}
                           sx={{ 
                             minWidth: '100px',

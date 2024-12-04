@@ -94,7 +94,14 @@ const getInquiryByIdQuery = () => `
             i.date as change_date,
             s.supplier_id,
             s.name as supplier_name,
-            sr.status as supplier_status
+            sr.status as supplier_status,
+            JSON_OBJECT(
+                'new_reference_id', ii.new_reference_id,
+                'change_date', i.date,
+                'notes', ii.reference_notes,
+                'supplier_name', s.name,
+                'source', CASE WHEN sr.supplier_id IS NOT NULL THEN 'supplier' ELSE 'user' END
+            ) as reference_change
         FROM inquiry_item ii
         JOIN inquiry i ON ii.inquiry_id = i.inquiry_id
         LEFT JOIN supplier_response sr ON ii.inquiry_id = sr.inquiry_id AND ii.item_id = sr.item_id
@@ -106,16 +113,23 @@ const getInquiryByIdQuery = () => `
         SELECT 
             sr.inquiry_id,
             sr.item_id,
-            s.name as supplier_name,
-            sr.price_quoted,
-            sr.status,
-            sr.response_date,
-            sr.is_promotion,
-            sr.promotion_name
+            json_group_array(
+                json_object(
+                    'supplier_name', s.name,
+                    'price_quoted', sr.price_quoted,
+                    'response_date', sr.response_date,
+                    'is_promotion', COALESCE(sr.is_promotion, 0),
+                    'promotion_name', sr.promotion_name,
+                    'status', sr.status
+                )
+            ) as responses
         FROM supplier_response sr
         JOIN supplier s ON sr.supplier_id = s.supplier_id
         WHERE sr.inquiry_id = ?
         AND sr.status != 'deleted'
+        AND s.name IS NOT NULL
+        AND sr.price_quoted IS NOT NULL
+        GROUP BY sr.inquiry_id, sr.item_id
     ),
     items_data AS (
         SELECT 
@@ -136,9 +150,7 @@ const getInquiryByIdQuery = () => `
             ii.reference_notes,
             ii.origin,
             i.image,
-            rc.change_date as reference_change_date,
-            rc.supplier_name as reference_supplier,
-            rc.supplier_status as reference_status,
+            rc.reference_change,
             CASE 
                 WHEN ii.new_reference_id IS NOT NULL AND ii.new_reference_id != ii.item_id THEN 1
                 ELSE 0
@@ -152,46 +164,12 @@ const getInquiryByIdQuery = () => `
                 ) THEN 1
                 ELSE 0
             END as is_referenced_by,
-            json_group_array(
-                CASE 
-                    WHEN sr.item_id IS NOT NULL THEN
-                        json_object(
-                            'supplier_name', sr.supplier_name,
-                            'price_quoted', sr.price_quoted,
-                            'response_date', sr.response_date,
-                            'is_promotion', COALESCE(sr.is_promotion, 0),
-                            'promotion_name', sr.promotion_name,
-                            'status', sr.status
-                        )
-                    ELSE NULL
-                END
-            ) as supplier_responses
+            COALESCE(sr.responses, '[]') as supplier_responses
         FROM inquiry_item ii
         LEFT JOIN item i ON ii.item_id = i.item_id
         LEFT JOIN reference_changes rc ON ii.item_id = rc.item_id
         LEFT JOIN supplier_responses sr ON ii.item_id = sr.item_id AND ii.inquiry_id = sr.inquiry_id
         WHERE ii.inquiry_id = ?
-        GROUP BY 
-            ii.inquiry_id,
-            ii.inquiry_item_id,
-            ii.item_id,
-            ii.original_item_id,
-            ii.hebrew_description,
-            ii.english_description,
-            ii.import_markup,
-            ii.hs_code,
-            ii.qty_in_stock,
-            ii.sold_this_year,
-            ii.sold_last_year,
-            ii.retail_price,
-            ii.requested_qty,
-            ii.new_reference_id,
-            ii.reference_notes,
-            ii.origin,
-            i.image,
-            rc.change_date,
-            rc.supplier_name,
-            rc.supplier_status
     )
     SELECT 
         json_object(
@@ -220,9 +198,7 @@ const getInquiryByIdQuery = () => `
                 'origin', itd.origin,
                 'has_reference_change', itd.has_reference_change,
                 'is_referenced_by', itd.is_referenced_by,
-                'reference_change_date', itd.reference_change_date,
-                'reference_supplier', itd.reference_supplier,
-                'reference_status', itd.reference_status,
+                'reference_change', json(itd.reference_change),
                 'supplier_responses', json(itd.supplier_responses)
             )
         ) as items

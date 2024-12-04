@@ -10,6 +10,41 @@ export const useInquiryItems = (inquiryId) => {
   const [inquiryStatus, setInquiryStatus] = useState('');
   const [inquiryDate, setInquiryDate] = useState('');
 
+  const processSupplierPrices = (prices) => {
+    if (!prices) return [];
+
+    try {
+      // Parse string prices if needed
+      let parsedPrices = typeof prices === 'string' ? JSON.parse(prices) : prices;
+      
+      // Ensure we have an array
+      if (!Array.isArray(parsedPrices)) {
+        return [];
+      }
+
+      // Filter and process each price
+      return parsedPrices
+        .filter(price => 
+          price && 
+          typeof price === 'object' && 
+          'supplier_name' in price && 
+          'price_quoted' in price
+        )
+        .map(price => ({
+          supplier_name: price.supplier_name || 'Unknown Supplier',
+          price_quoted: price.price_quoted || 0,
+          response_date: price.response_date ? new Date(price.response_date) : new Date(),
+          status: price.status || 'unknown',
+          is_promotion: Boolean(price.is_promotion),
+          promotion_name: price.promotion_name || '',
+          price_change: price.price_change || 0
+        }));
+    } catch (e) {
+      console.error('Error processing supplier prices:', e);
+      return [];
+    }
+  };
+
   const fetchItems = useCallback(async () => {
     // Don't fetch if no ID is provided
     if (!inquiryId) {
@@ -105,6 +140,9 @@ export const useInquiryItems = (inquiryId) => {
           }
         }
 
+        // Process supplier prices using the dedicated function
+        const supplier_prices = processSupplierPrices(item.supplier_prices || item.supplier_responses);
+
         // Determine if item has reference changes
         const has_reference_change = Boolean(
           item.new_reference_id || 
@@ -158,7 +196,9 @@ export const useInquiryItems = (inquiryId) => {
           promotion_name,
           promotion_price,
           promotion_start_date,
-          promotion_end_date
+          promotion_end_date,
+          // Add supplier prices
+          supplier_prices
         };
       }).filter(Boolean); // Remove any null items
 

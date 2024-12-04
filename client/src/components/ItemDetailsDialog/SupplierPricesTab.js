@@ -25,17 +25,22 @@ import {
 import { formatIlsPrice } from '../../utils/priceUtils';
 
 function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
+  // Ensure we have a valid array of supplier prices
+  const validSupplierPrices = useMemo(() => {
+    if (!Array.isArray(supplierPrices)) return [];
+
+    return supplierPrices.filter(price => 
+      price && 
+      typeof price === 'object' && 
+      price.supplier_name && 
+      typeof price.supplier_name === 'string' &&
+      'price_quoted' in price &&
+      typeof price.price_quoted === 'number'
+    );
+  }, [supplierPrices]);
+
   const sortedPrices = useMemo(() => {
-    // Filter out any null entries and ensure all required fields exist
-    return [...supplierPrices]
-      .filter(price => {
-        // More comprehensive null checks
-        if (!price) return false;
-        if (!price.price_quoted || typeof price.price_quoted !== 'number') return false;
-        // Handle missing supplier name gracefully
-        price.supplier_name = price.supplier_name || 'Unknown Supplier';
-        return true;
-      })
+    return validSupplierPrices
       .sort((a, b) => {
         // Active prices first
         if (a.status === 'active' && b.status !== 'active') return -1;
@@ -43,7 +48,7 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
         // Then by date
         return new Date(b.response_date) - new Date(a.response_date);
       });
-  }, [supplierPrices]);
+  }, [validSupplierPrices]);
 
   const priceAnalysis = useMemo(() => {
     const activePrices = sortedPrices.filter(p => p.status === 'active');
@@ -169,7 +174,7 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
 
                   return (
                     <TableRow 
-                      key={index}
+                      key={`${price.supplier_name}-${index}`}
                       sx={price.is_promotion ? { bgcolor: 'warning.lighter' } : undefined}
                     >
                       <TableCell>
@@ -199,7 +204,7 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
                         />
                       </TableCell>
                       <TableCell>
-                        {getPriceChangeDisplay(price.change)}
+                        {getPriceChangeDisplay(price.price_change)}
                       </TableCell>
                       <TableCell>
                         {price.response_date ? new Date(price.response_date).toLocaleDateString() : 'N/A'}

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -123,6 +123,35 @@ function ItemDetailsDialog({ open, onClose, item, onItemClick, loading = false }
     setTabValue(newValue);
   }, [tabValue, setTabValue]);
 
+  // Process supplier prices
+  const processedSupplierPrices = useMemo(() => {
+    if (!itemData?.supplierPrices) return [];
+
+    const prices = Array.isArray(itemData.supplierPrices) 
+      ? itemData.supplierPrices 
+      : typeof itemData.supplierPrices === 'string'
+        ? JSON.parse(itemData.supplierPrices)
+        : [];
+
+    return prices
+      .filter(price => 
+        price && 
+        typeof price === 'object' && 
+        'supplier_name' in price && 
+        'price_quoted' in price &&
+        typeof price.price_quoted === 'number'
+      )
+      .map(price => ({
+        supplier_name: price.supplier_name || 'Unknown Supplier',
+        price_quoted: price.price_quoted || 0,
+        response_date: price.response_date ? new Date(price.response_date) : new Date(),
+        status: price.status || 'unknown',
+        is_promotion: Boolean(price.is_promotion),
+        promotion_name: price.promotion_name || '',
+        price_change: price.price_change || 0
+      }));
+  }, [itemData?.supplierPrices]);
+
   // Don't render anything if dialog is closed
   if (!open) {
     perfDebug.timeEnd('ItemDetailsDialog render');
@@ -139,13 +168,13 @@ function ItemDetailsDialog({ open, onClose, item, onItemClick, loading = false }
     return <ErrorDialog open={open} error={error} onClose={onClose} />;
   }
 
+  // Get data from itemData, with safe defaults
   const {
-    itemDetails,
-    priceHistory,
-    supplierPrices,
-    referenceChanges,
-    hasReferenceChange,
-    isReferencedBy
+    itemDetails = {},
+    priceHistory = [],
+    referenceChanges = [],
+    hasReferenceChange = false,
+    isReferencedBy = false
   } = itemData;
 
   perfDebug.timeEnd('ItemDetailsDialog render');
@@ -226,7 +255,7 @@ function ItemDetailsDialog({ open, onClose, item, onItemClick, loading = false }
 
             <Chip
               icon={<InfoIcon />}
-              label={`Last Updated: ${new Date(itemDetails.lastUpdated).toLocaleDateString()}`}
+              label={`Last Updated: ${new Date(itemDetails.lastUpdated || Date.now()).toLocaleDateString()}`}
               variant="outlined"
               size="small"
             />
@@ -256,14 +285,14 @@ function ItemDetailsDialog({ open, onClose, item, onItemClick, loading = false }
             label="Supplier Prices" 
             id="item-tab-2" 
             aria-controls="item-tabpanel-2"
-            icon={supplierPrices.length ? <Chip size="small" label={supplierPrices.length} /> : null}
+            icon={processedSupplierPrices?.length ? <Chip size="small" label={processedSupplierPrices.length} /> : null}
             iconPosition="end"
           />
           <Tab 
             label="Reference Changes" 
             id="item-tab-3" 
             aria-controls="item-tabpanel-3"
-            icon={referenceChanges.length ? (
+            icon={referenceChanges?.length ? (
               <Chip 
                 size="small" 
                 label={referenceChanges.length} 
@@ -294,7 +323,7 @@ function ItemDetailsDialog({ open, onClose, item, onItemClick, loading = false }
 
         <TabPanel value={tabValue} index={2}>
           <SupplierPricesTab 
-            supplierPrices={supplierPrices}
+            supplierPrices={processedSupplierPrices}
             itemDetails={itemDetails}
           />
         </TabPanel>
