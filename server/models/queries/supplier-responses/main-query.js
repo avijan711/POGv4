@@ -49,18 +49,31 @@ function getMainQuery() {
         WHERE ii.inquiry_id = ?
     ),
     all_responses AS (
-        SELECT DISTINCT item_id
+        SELECT DISTINCT item_id, supplier_id
         FROM supplier_response
         WHERE inquiry_id = ?
             AND status != 'deleted'
             AND price_quoted IS NOT NULL
     ),
-    missing_items AS (
+    supplier_missing_items AS (
         SELECT 
-            ii.*
-        FROM inquiry_items ii
-        LEFT JOIN all_responses ar ON ii.item_id = ar.item_id
+            s.supplier_id,
+            s.name as supplier_name,
+            json_group_array(
+                json_object(
+                    'item_id', ii.item_id,
+                    'hebrew_description', ii.hebrew_description,
+                    'english_description', ii.english_description,
+                    'requested_qty', CAST(ii.requested_qty AS INTEGER),
+                    'retail_price', CAST(ii.retail_price AS REAL),
+                    'origin', COALESCE(ii.origin, '')
+                )
+            ) as missing_items
+        FROM supplier s
+        CROSS JOIN inquiry_items ii
+        LEFT JOIN all_responses ar ON ii.item_id = ar.item_id AND ar.supplier_id = s.supplier_id
         WHERE ar.item_id IS NULL
+        GROUP BY s.supplier_id, s.name
     ),
     response_stats AS (
         SELECT 
@@ -93,36 +106,23 @@ function getMainQuery() {
                     'english_description', english_description,
                     'status', status
                 )
-            ) as responses
+            ) as responses,
+            COALESCE((
+                SELECT missing_items 
+                FROM supplier_missing_items smi 
+                WHERE smi.supplier_id = supplier_responses.supplier_id
+            ), '[]') as missing_items
         FROM supplier_responses
         WHERE item_id IS NOT NULL
         GROUP BY supplier_id, supplier_name, date(response_date), inquiry_id
-    ),
-    missing_items_array AS (
-        SELECT json_group_array(
-            json_object(
-                'item_id', m.item_id,
-                'hebrew_description', m.hebrew_description,
-                'english_description', m.english_description,
-                'requested_qty', CAST(m.requested_qty AS INTEGER),
-                'retail_price', CAST(m.retail_price AS REAL),
-                'origin', COALESCE(m.origin, '')
-            )
-        ) as missing_items_json
-        FROM (
-            SELECT DISTINCT *
-            FROM missing_items
-            ORDER BY item_id
-        ) m
     )
     SELECT 
         rs.*,
         (SELECT COUNT(*) FROM inquiry_items) as total_items,
         rst.total_suppliers,
         rst.responded_items,
-        (SELECT COUNT(*) FROM missing_items) as missing_responses,
-        (SELECT COUNT(*) FROM supplier_responses) as total_responses,
-        COALESCE((SELECT missing_items_json FROM missing_items_array), '[]') as missing_items
+        (SELECT COUNT(*) FROM inquiry_items) - rst.responded_items as missing_responses,
+        (SELECT COUNT(*) FROM supplier_responses) as total_responses
     FROM response_summary rs
     CROSS JOIN response_stats rst
     ORDER BY rs.response_date DESC`;

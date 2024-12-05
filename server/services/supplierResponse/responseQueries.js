@@ -58,14 +58,13 @@ class ResponseQueries {
             const rows = await this.db.allAsync(query, queryParams);
             const transformedData = {};
             
-            // Initialize default stats even when there are no rows
+            // Initialize default stats
             let globalStats = {
                 totalResponses: 0,
                 totalItems: 0,
                 totalSuppliers: 0,
                 respondedItems: 0,
-                missingResponses: 0,
-                missingItems: []
+                missingResponses: 0
             };
 
             rows.forEach(row => {
@@ -81,16 +80,14 @@ class ResponseQueries {
                     responses = [];
                 }
 
-                // Parse missing items from the first row
-                if (row.missing_items) {
-                    try {
-                        debug.log('Raw missing_items:', row.missing_items);
-                        missingItems = JSON.parse(row.missing_items);
-                        debug.log('Parsed missing items:', missingItems);
-                    } catch (e) {
-                        debug.error('Error parsing missing items JSON:', e);
-                        missingItems = [];
-                    }
+                // Parse missing items for this supplier
+                try {
+                    debug.log(`Raw missing_items for supplier ${supplierName}:`, row.missing_items);
+                    missingItems = JSON.parse(row.missing_items || '[]');
+                    debug.log(`Parsed missing items for supplier ${supplierName}:`, missingItems);
+                } catch (e) {
+                    debug.error(`Error parsing missing items JSON for supplier ${supplierName}:`, e);
+                    missingItems = [];
                 }
 
                 // Update global stats from first row
@@ -100,10 +97,8 @@ class ResponseQueries {
                         totalItems: row.total_items || 0,
                         totalSuppliers: row.total_suppliers || 0,
                         respondedItems: row.responded_items || 0,
-                        missingResponses: row.missing_responses || 0,
-                        missingItems: missingItems
+                        missingResponses: row.missing_responses || 0
                     };
-                    debug.log('Global stats:', globalStats);
                 }
 
                 transformedData[supplierId] = {
@@ -125,15 +120,15 @@ class ResponseQueries {
                     totalItems: row.item_count || 0,
                     promotionItems: row.promotion_count || 0,
                     averagePrice: row.average_price || 0,
-                    latestResponse: row.latest_response || row.response_date
+                    latestResponse: row.latest_response || row.response_date,
+                    missingItems: missingItems
                 };
             });
 
             debug.log('Successfully processed supplier responses:', {
                 inquiryId,
                 supplierCount: Object.keys(transformedData).length,
-                stats: globalStats,
-                missingItemsCount: globalStats?.missingItems?.length || 0
+                stats: globalStats
             });
 
             return {
@@ -151,6 +146,7 @@ class ResponseQueries {
         }
     }
 
+    // Rest of the methods remain unchanged...
     async insertSupplierResponse(inquiryId, supplierId, itemId, price) {
         const sql = `INSERT INTO supplier_response (
             inquiry_id, supplier_id, item_id, price_quoted, response_date, status

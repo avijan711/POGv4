@@ -37,8 +37,7 @@ import {
 } from '@mui/icons-material';
 import { useSupplierResponses } from '../hooks/useSupplierResponses';
 
-function MissingItemsDialog({ open, onClose, items = [] }) {
-  console.log('Missing items in dialog:', items);
+function MissingItemsDialog({ open, onClose, items = [], supplierName = '' }) {
   return (
     <Dialog 
       open={open} 
@@ -49,7 +48,7 @@ function MissingItemsDialog({ open, onClose, items = [] }) {
       <DialogTitle>
         <Box display="flex" alignItems="center" gap={1}>
           <WarningIcon color="warning" />
-          <Typography>Missing Items ({items.length})</Typography>
+          <Typography>Missing Items for {supplierName} ({items.length})</Typography>
         </Box>
       </DialogTitle>
       <DialogContent>
@@ -99,6 +98,7 @@ function MissingItemsDialog({ open, onClose, items = [] }) {
 
 function SupplierRow({ supplierId, supplierData, totalExpectedItems, onDelete, onDeleteItem, onShowMissing }) {
   const [open, setOpen] = React.useState(false);
+  const missingItemsCount = supplierData.missingItems?.length || 0;
 
   return (
     <>
@@ -131,7 +131,7 @@ function SupplierRow({ supplierId, supplierData, totalExpectedItems, onDelete, o
         <TableCell align="right">₪{Number(supplierData.averagePrice || 0).toFixed(2)}</TableCell>
         <TableCell align="right">{new Date(supplierData.latestResponse || new Date()).toLocaleDateString()}</TableCell>
         <TableCell align="right">
-          {(supplierData.totalItems || 0) >= totalExpectedItems ? (
+          {supplierData.totalItems === totalExpectedItems && missingItemsCount === 0 ? (
             <Chip
               icon={<CheckCircleIcon />}
               label="Complete"
@@ -141,10 +141,10 @@ function SupplierRow({ supplierId, supplierData, totalExpectedItems, onDelete, o
           ) : (
             <Chip
               icon={<InfoIcon />}
-              label={`${totalExpectedItems - (supplierData.totalItems || 0)} Missing`}
+              label={`${totalExpectedItems - supplierData.totalItems} Missing`}
               size="small"
               color="warning"
-              onClick={onShowMissing}
+              onClick={() => onShowMissing(supplierData)}
               sx={{ cursor: 'pointer' }}
             />
           )}
@@ -246,6 +246,7 @@ function SupplierResponseList({ inquiryId }) {
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = React.useState(false);
   const [supplierToDelete, setSupplierToDelete] = React.useState(null);
   const [missingItemsDialogOpen, setMissingItemsDialogOpen] = React.useState(false);
+  const [selectedSupplier, setSelectedSupplier] = React.useState(null);
 
   useEffect(() => {
     if (inquiryId) {
@@ -270,8 +271,8 @@ function SupplierResponseList({ inquiryId }) {
     }
   };
 
-  const handleShowMissingItems = () => {
-    console.log('Opening missing items dialog with items:', stats.missingItems);
+  const handleShowMissingItems = (supplier) => {
+    setSelectedSupplier(supplier);
     setMissingItemsDialogOpen(true);
   };
 
@@ -305,7 +306,6 @@ function SupplierResponseList({ inquiryId }) {
   const respondedItems = stats.respondedItems || 0;
   const missingResponses = stats.missingResponses || 0;
   const responseRate = totalItems ? Math.round((respondedItems / totalItems) * 100) : 0;
-  const missingItems = stats.missingItems || [];
 
   return (
     <Box>
@@ -344,16 +344,7 @@ function SupplierResponseList({ inquiryId }) {
               </Box>
             </Grid>
             <Grid item xs={12} md={3}>
-              <Box 
-                sx={{ 
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                  '&:hover': {
-                    opacity: 0.8
-                  }
-                }}
-                onClick={handleShowMissingItems}
-              >
+              <Box sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" color="error">
                   {missingResponses}
                 </Typography>
@@ -457,8 +448,12 @@ function SupplierResponseList({ inquiryId }) {
       {/* Missing Items Dialog */}
       <MissingItemsDialog
         open={missingItemsDialogOpen}
-        onClose={() => setMissingItemsDialogOpen(false)}
-        items={missingItems}
+        onClose={() => {
+          setMissingItemsDialogOpen(false);
+          setSelectedSupplier(null);
+        }}
+        items={selectedSupplier?.missingItems || []}
+        supplierName={selectedSupplier?.supplier_name || ''}
       />
     </Box>
   );
