@@ -9,13 +9,24 @@ class ResponseProcessing {
 
     cleanItemCode(itemCode) {
         if (!itemCode) return itemCode;
+        
         // Convert to string to handle numeric item codes from Excel
-        const itemCodeStr = String(itemCode);
-        const cleaned = itemCodeStr.replace(/^['']/, '').trim();
-        if (cleaned !== itemCodeStr) {
-            debug.log(`Cleaned item code: '${itemCodeStr}' -> '${cleaned}'`);
+        let cleanedCode = String(itemCode);
+        
+        // Remove leading/trailing quotes and whitespace
+        cleanedCode = cleanedCode.replace(/^['']/, '').trim();
+        
+        // Remove all dots and spaces
+        cleanedCode = cleanedCode.replace(/[.\s]/g, '');
+        
+        // Remove 4 leading zeros if present
+        cleanedCode = cleanedCode.replace(/^0{4}/, '');
+        
+        if (cleanedCode !== String(itemCode)) {
+            debug.log(`Cleaned item code: '${itemCode}' -> '${cleanedCode}'`);
         }
-        return cleaned;
+        
+        return cleanedCode;
     }
 
     validateData(data) {
@@ -42,6 +53,8 @@ class ResponseProcessing {
     }
 
     async processItems(validData, inquiryId) {
+        const validItems = [];
+
         for (const item of validData) {
             debug.log('Processing item:', item);
 
@@ -76,7 +89,13 @@ class ResponseProcessing {
             if (item.new_reference_id) {
                 await this.processReferenceItem(item, inquiryId);
             }
+
+            // Add to valid items list only if all processing succeeded
+            validItems.push(item);
         }
+
+        debug.log(`Processed ${validItems.length} valid items out of ${validData.length} total items`);
+        return validItems;
     }
 
     async processReferenceItem(item, inquiryId) {
@@ -101,27 +120,35 @@ class ResponseProcessing {
         }
     }
 
-    async processResponses(validData, inquiryId, supplierId) {
-        for (const item of validData) {
+    async processResponses(validItems, inquiryId, supplierId) {
+        for (const item of validItems) {
             debug.log('Creating supplier response for item:', item);
 
-            // Insert supplier response record with price_quoted
-            const responseId = await this.responseQueries.insertSupplierResponse(
-                inquiryId,
-                supplierId,
-                item.item_id,
-                item.price_quoted  // Use price_quoted here
-            );
+            try {
+                // Insert supplier response record with price_quoted
+                const responseId = await this.responseQueries.insertSupplierResponse(
+                    inquiryId,
+                    supplierId,
+                    item.item_id,
+                    item.price_quoted  // Use price_quoted here
+                );
 
-            // Insert supplier response item with price_quoted
-            await this.responseQueries.insertSupplierResponseItem(responseId, {
-                ...item,
-                price: item.price_quoted  // Set price to price_quoted
-            });
+                // Insert supplier response item with price_quoted
+                await this.responseQueries.insertSupplierResponseItem(responseId, {
+                    ...item,
+                    price: item.price_quoted  // Set price to price_quoted
+                });
 
-            // Handle reference changes if needed
-            if (item.new_reference_id) {
-                await this.processReferenceChange(item, supplierId, inquiryId);
+                // Handle reference changes if needed
+                if (item.new_reference_id) {
+                    await this.processReferenceChange(item, supplierId, inquiryId);
+                }
+            } catch (error) {
+                debug.error('Error processing response for item:', {
+                    itemId: item.item_id,
+                    error: error.message
+                });
+                throw error;
             }
         }
     }
@@ -175,11 +202,15 @@ class ResponseProcessing {
                 // Begin transaction
                 await this.responseQueries.beginTransaction();
 
-                // Process items first
-                await this.processItems(validData, inquiryId);
+                // Process items first and get list of valid items
+                const validItems = await this.processItems(validData, inquiryId);
 
-                // Then process responses and reference changes
-                await this.processResponses(validData, inquiryId, supplierId);
+                if (validItems.length === 0) {
+                    throw new Error('No valid items found in the supplier response');
+                }
+
+                // Then process responses and reference changes only for valid items
+                await this.processResponses(validItems, inquiryId, supplierId);
 
                 // Clean up any self-references
                 await this.responseQueries.cleanupSelfReferences(inquiryId);
@@ -192,12 +223,14 @@ class ResponseProcessing {
                 await this.responseQueries.commitTransaction();
 
                 debug.log('Successfully processed supplier response:', {
-                    itemCount: validData.length
+                    validItemCount: validItems.length,
+                    totalItemCount: validData.length
                 });
 
                 return {
                     success: true,
-                    itemCount: validData.length
+                    processedItems: validItems.length,
+                    totalItems: validData.length
                 };
 
             } catch (error) {

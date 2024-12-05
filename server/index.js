@@ -101,7 +101,11 @@ async function startServer() {
                 creator: createPromotionsRouter, 
                 deps: { db, promotionModel }
             },
-            { path: '/api/settings', creator: createSettingsRouter },
+            { 
+                path: '/api/settings', 
+                creator: createSettingsRouter,
+                deps: { db }  // Added db dependency for settings route
+            },
             { path: '/api/suppliers', creator: createSuppliersRouter },
             { 
                 path: '/api/inquiries', 
@@ -111,7 +115,7 @@ async function startServer() {
             { 
                 path: '/api/supplier-responses', 
                 creator: createSupplierResponsesRouter,
-                deps: { db }  // Explicitly set deps with db
+                deps: { db }
             }
         ];
 

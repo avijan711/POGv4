@@ -4,7 +4,7 @@ const SettingsModel = require('../models/settings');
 const fs = require('fs');
 const path = require('path');
 
-function createRouter(db) {
+function createRouter({ db }) {
     const router = express.Router();
     const settingsModel = new SettingsModel(db);
 
@@ -58,18 +58,18 @@ function createRouter(db) {
             const clearDbPath = path.join(__dirname, '..', 'migrations', 'clear_database.sql');
             const clearDbSql = fs.readFileSync(clearDbPath, 'utf8');
 
-            // Execute the SQL script directly
-            await new Promise((resolve, reject) => {
-                db.exec(clearDbSql, (err) => {
-                    if (err) {
-                        debug.error('Error executing clear_database.sql:', err);
-                        reject(err);
-                    } else {
-                        debug.log('Successfully executed clear_database.sql');
-                        resolve();
-                    }
-                });
-            });
+            // Step 1: Execute DELETE operations in a transaction
+            await db.runAsync('BEGIN TRANSACTION');
+            await db.execAsync(clearDbSql);
+            await db.runAsync('COMMIT');
+
+            // Step 2: Run VACUUM separately (outside transaction)
+            await db.execAsync('VACUUM');
+
+            // Step 3: Re-enable foreign keys
+            await db.runAsync('PRAGMA foreign_keys = ON');
+
+            debug.log('Successfully reset database');
 
             res.json({ 
                 success: true, 
@@ -77,23 +77,17 @@ function createRouter(db) {
                 details: 'Database cleared and vacuumed successfully'
             });
         } catch (error) {
-            // Rollback on error
-            await new Promise((resolve, reject) => {
-                db.run('ROLLBACK', (err) => {
-                    if (err) reject(err);
-                    else resolve();
-                });
-            });
-
-            // Re-enable foreign key constraints even on error
-            await new Promise((resolve, reject) => {
-                db.run('PRAGMA foreign_keys = ON', (err) => {
-                    if (err) reject(err);
-                    else resolve();
-                });
-            });
-
             debug.error('Error resetting app:', error);
+            
+            try {
+                // Attempt to rollback if we're in a transaction
+                await db.runAsync('ROLLBACK');
+                // Always ensure foreign keys are re-enabled
+                await db.runAsync('PRAGMA foreign_keys = ON');
+            } catch (rollbackError) {
+                debug.error('Error during rollback:', rollbackError);
+            }
+
             res.status(500).json({ 
                 success: false, 
                 message: 'Error resetting application', 
