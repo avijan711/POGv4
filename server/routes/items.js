@@ -1,9 +1,11 @@
 const express = require('express');
 const imageUpload = require('../middleware/imageUpload');
 const debug = require('../utils/debug');
+const Item = require('../models/item');
 
-function createItemsRouter(itemModel) {
+function createItemsRouter({ db }) {
     const router = express.Router();
+    const itemModel = new Item(db);
 
     // Get all items
     router.get('/', async (req, res) => {

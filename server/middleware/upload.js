@@ -113,52 +113,6 @@ const handleUploadError = (err, req, res, next) => {
     next();
 };
 
-// Basic upload middleware for single file
-const handleBasicUpload = [
-    multer(uploadConfig).single('file'),
-    handleUploadError
-];
-
-// Enhanced upload middleware with validation
-const handleUpload = [
-    multer(uploadConfig).single('file'),
-    handleUploadError,
-    function validateExcelFile(req, res, next) {
-        try {
-            if (!req.file) {
-                throw new Error('No file uploaded');
-            }
-
-            // Set the full file path in req.file
-            req.file.fullPath = path.join(__dirname, '..', 'uploads', req.file.filename);
-
-            // Log file details
-            debug.log('File upload details:', {
-                originalname: req.file.originalname,
-                filename: req.file.filename,
-                fullPath: req.file.fullPath,
-                mimetype: req.file.mimetype,
-                size: req.file.size
-            });
-
-            // Verify file exists
-            if (!fs.existsSync(req.file.fullPath)) {
-                throw new Error('File not found after upload');
-            }
-
-            next();
-        } catch (error) {
-            debug.error('File validation error:', error);
-            cleanupFile(req.file?.fullPath);
-            res.status(400).json({
-                error: 'File validation failed',
-                message: error.message,
-                suggestion: 'Please ensure you are uploading a valid Excel file'
-            });
-        }
-    }
-];
-
 // Cleanup uploaded file
 function cleanupFile(filePath) {
     if (filePath && fs.existsSync(filePath)) {
@@ -171,10 +125,54 @@ function cleanupFile(filePath) {
     }
 }
 
+// Enhanced upload middleware with validation
+function validateExcelFile(req, res, next) {
+    try {
+        if (!req.file) {
+            throw new Error('No file uploaded');
+        }
+
+        // Set the full file path in req.file
+        req.file.fullPath = path.join(__dirname, '..', 'uploads', req.file.filename);
+
+        // Log file details
+        debug.log('File upload details:', {
+            originalname: req.file.originalname,
+            filename: req.file.filename,
+            fullPath: req.file.fullPath,
+            mimetype: req.file.mimetype,
+            size: req.file.size
+        });
+
+        // Verify file exists
+        if (!fs.existsSync(req.file.fullPath)) {
+            throw new Error('File not found after upload');
+        }
+
+        next();
+    } catch (error) {
+        debug.error('File validation error:', error);
+        cleanupFile(req.file?.fullPath);
+        res.status(400).json({
+            error: 'File validation failed',
+            message: error.message,
+            suggestion: 'Please ensure you are uploading a valid Excel file'
+        });
+    }
+}
+
+// Create multer instance
+const upload = multer(uploadConfig);
+
+// Export middleware functions
 module.exports = {
-    handleUpload,
-    handleBasicUpload,
-    validateExcelFile: handleUpload[2],
+    handleUpload: [
+        upload.single('file'),
+        handleUploadError,
+        validateExcelFile
+    ],
+    handleUploadError,
+    validateExcelFile,
     cleanupFile,
     uploadConfig,
     VALID_EXCEL_MIMETYPES

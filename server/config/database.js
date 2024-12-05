@@ -1,6 +1,7 @@
 const sqlite3 = require('sqlite3');
 const path = require('path');
 const fs = require('fs');
+const debug = require('../utils/debug');
 
 // Create verbose sqlite3 database instance
 const verbose = sqlite3.verbose();
@@ -23,29 +24,68 @@ const setPragma = (pragma, value) => {
     });
 };
 
+// Helper function to promisify database methods
+function promisifyDb(db) {
+    // Promisify get and all methods using arrow functions to preserve context
+    db.allAsync = (sql, params = []) => new Promise((resolve, reject) => {
+        db.all(sql, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+        });
+    });
+
+    db.getAsync = (sql, params = []) => new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+        });
+    });
+
+    db.execAsync = (sql) => new Promise((resolve, reject) => {
+        db.exec(sql, (err) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+    
+    // Custom promisification for run to preserve this context
+    db.runAsync = (sql, params = []) => new Promise((resolve, reject) => {
+        db.run(sql, params, function(err) {
+            if (err) reject(err);
+            else resolve({ lastID: this.lastID, changes: this.changes });
+        });
+    });
+    
+    // Add serialize method that returns a Promise
+    db.serializeAsync = () => new Promise((resolve) => {
+        db.serialize(() => resolve());
+    });
+
+    return db;
+}
+
 async function initializeDatabase() {
     return new Promise((resolve, reject) => {
         const dbPath = path.join(__dirname, '..', 'inventory.db');
         const schemaPath = path.join(__dirname, '..', 'schema.sql');
 
-        // Create database connection
-        db = new verbose.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, async (err) => {
+        // Create database connection with verbose mode
+        const Database = verbose.Database;
+        db = new Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, async (err) => {
             if (err) {
                 console.error('Error connecting to database:', err);
                 reject(err);
                 return;
             }
 
+            // Promisify database methods
+            db = promisifyDb(db);
+
             console.log('Connected to SQLite database');
             
             try {
                 // First, ensure we're not in a transaction
-                await new Promise((resolve, reject) => {
-                    db.get("PRAGMA query_only = 0;", (err) => {
-                        if (err) reject(err);
-                        else resolve();
-                    });
-                });
+                await db.getAsync("PRAGMA query_only = 0;");
 
                 // Set critical PRAGMA settings first
                 await setPragma('journal_mode', 'WAL');
@@ -61,28 +101,17 @@ async function initializeDatabase() {
 
                 // Check JSON1 extension
                 try {
-                    await new Promise((resolve, reject) => {
-                        db.get("SELECT json_group_array(1) as test", [], function(err) {
-                            if (err && err.message.includes('no such function')) {
-                                console.error('JSON1 extension not available. Some features may not work.');
-                            }
-                            resolve();
-                        });
-                    });
+                    await db.getAsync("SELECT json_group_array(1) as test");
                 } catch (e) {
+                    if (e.message.includes('no such function')) {
+                        console.error('JSON1 extension not available. Some features may not work.');
+                    }
                     console.error('Error checking JSON1 extension:', e);
                 }
 
                 // Check if database needs initialization
-                const needsInit = await new Promise((resolve) => {
-                    db.get('SELECT COUNT(*) as count FROM sqlite_master WHERE type="table" AND name="item"', [], (err, row) => {
-                        if (err || !row || row.count === 0) {
-                            resolve(true);
-                        } else {
-                            resolve(false);
-                        }
-                    });
-                });
+                const row = await db.getAsync('SELECT COUNT(*) as count FROM sqlite_master WHERE type="table" AND name="item"');
+                const needsInit = !row || row.count === 0;
 
                 if (needsInit) {
                     console.log('Database needs initialization, creating tables...');
@@ -118,7 +147,7 @@ async function initializeDatabase() {
                     });
 
                     // Begin transaction for schema creation
-                    await runStatement('BEGIN IMMEDIATE TRANSACTION;');
+                    await db.runAsync('BEGIN IMMEDIATE TRANSACTION;');
 
                     try {
                         console.log('Executing schema statements...');
@@ -127,23 +156,23 @@ async function initializeDatabase() {
                             if (!statement) continue;
                             
                             try {
-                                await runStatement(statement);
+                                await db.runAsync(statement);
                             } catch (err) {
                                 if (err.code !== 'SQLITE_ERROR' || !err.message.includes('already exists')) {
                                     console.error(`Error executing statement ${i + 1}:`, err);
                                     console.error('Statement:', statement);
-                                    await runStatement('ROLLBACK;');
+                                    await db.runAsync('ROLLBACK;');
                                     reject(err);
                                     return;
                                 }
                             }
                         }
 
-                        await runStatement('COMMIT;');
+                        await db.runAsync('COMMIT;');
                         console.log('Database schema initialized successfully');
                     } catch (error) {
                         console.error('Error during database initialization:', error);
-                        await runStatement('ROLLBACK;');
+                        await db.runAsync('ROLLBACK;');
                         reject(error);
                     }
                 } else {
@@ -177,33 +206,6 @@ async function initializeDatabase() {
         });
     });
 }
-
-// Utility function to run SQL statements with proper error handling and retries
-const runStatement = (sql, params = []) => {
-    return new Promise((resolve, reject) => {
-        const tryRun = (retries = 5) => {  // Increased retries to 5
-            db.run(sql, params, (err) => {
-                if (err) {
-                    console.error('SQL Error:', err.message);
-                    console.error('SQL Statement:', sql);
-                    console.error('Parameters:', params);
-                    
-                    if (err.code === 'SQLITE_BUSY' && retries > 0) {
-                        // If database is busy, wait and retry with exponential backoff
-                        const delay = Math.min(1000 * Math.pow(2, 5 - retries), 8000);  // Max 8 second delay
-                        console.log(`Database busy, retrying in ${delay}ms... (${retries} retries left)`);
-                        setTimeout(() => tryRun(retries - 1), delay);
-                    } else {
-                        reject(err);
-                    }
-                    return;
-                }
-                resolve();
-            });
-        };
-        tryRun();
-    });
-};
 
 // Export a function to get the database instance
 function getDatabase() {

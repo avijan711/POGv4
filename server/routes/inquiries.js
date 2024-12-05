@@ -83,12 +83,15 @@ function createRouter({ db, inquiryModel, inquiryItemModel }) {
                     suggestion: 'Please ensure the column mapping is valid JSON'
                 });
             }
+
+            // Get Excel columns first
+            const columns = await ExcelProcessor.getColumns(req.file.path);
             
-            // Validate the mapping using snake_case field names
-            ExcelProcessor.validateMapping(parsedMapping, ['item_id', 'hebrew_description', 'requested_qty']);
+            // Validate the mapping against actual Excel columns
+            ExcelProcessor.validateMapping(parsedMapping, columns);
             
-            // Process the Excel file using the processInquiry method, passing the model instance
-            const items = await ExcelProcessor.processInquiry(req.file.path, parsedMapping, inquiryModel);
+            // Process the Excel file
+            const items = await ExcelProcessor.readExcelFile(req.file.path);
             
             debug.log('Processed items:', {
                 count: items.length,
@@ -98,7 +101,13 @@ function createRouter({ db, inquiryModel, inquiryItemModel }) {
             // Create the inquiry
             const inquiry = await inquiryModel.createInquiry({
                 inquiryNumber,
-                items
+                items: items.map(item => {
+                    const mappedItem = {};
+                    for (const [field, excelColumn] of Object.entries(parsedMapping)) {
+                        mappedItem[field] = item[excelColumn];
+                    }
+                    return mappedItem;
+                })
             });
 
             // Clean up the uploaded file after processing
@@ -114,11 +123,11 @@ function createRouter({ db, inquiryModel, inquiryItemModel }) {
             cleanupFile(req.file?.path);
             
             // Send appropriate error response
-            if (err.message.includes('Missing required column mappings')) {
+            if (err.message.includes('Invalid column mappings')) {
                 return res.status(400).json({
                     error: 'Invalid column mapping',
                     details: err.message,
-                    suggestion: 'Please ensure all required columns are mapped'
+                    suggestion: 'Please ensure all mapped columns exist in the Excel file'
                 });
             }
             

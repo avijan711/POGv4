@@ -107,18 +107,30 @@ class InquiryModel extends BaseModel {
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `;
 
+                // Ensure numeric fields are non-negative
+                const ensureNonNegative = (value, defaultValue = 0) => {
+                    if (value === null || value === undefined) return defaultValue;
+                    const num = typeof value === 'number' ? value : Number(value);
+                    return !isNaN(num) ? Math.max(0, num) : defaultValue;
+                };
+
+                const requestedQty = ensureNonNegative(item.requested_qty);
+                const qtyInStock = ensureNonNegative(item.qty_in_stock);
+                const soldThisYear = ensureNonNegative(item.sold_this_year);
+                const soldLastYear = ensureNonNegative(item.sold_last_year);
+
                 await this.executeRun(inquiryItemSql, [
                     inquiryId,
                     item.item_id,
-                    item.requested_qty,
+                    requestedQty,
                     item.hebrew_description,
                     item.english_description || null,
                     item.hs_code || null,
                     item.import_markup || 1.30,
-                    item.qty_in_stock || 0,
+                    qtyInStock,
                     item.retail_price || null,
-                    item.sold_this_year || 0,
-                    item.sold_last_year || 0,
+                    soldThisYear,
+                    soldLastYear,
                     item.original_item_id || item.item_id,
                     item.new_reference_id || null,
                     item.reference_notes || null,

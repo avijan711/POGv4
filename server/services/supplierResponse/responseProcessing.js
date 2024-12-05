@@ -3,16 +3,17 @@ const ExcelProcessor = require('../../utils/excelProcessor');
 
 class ResponseProcessing {
     constructor(db, itemUpdates, responseQueries) {
-        this.db = db;
         this.itemUpdates = itemUpdates;
         this.responseQueries = responseQueries;
     }
 
     cleanItemCode(itemCode) {
         if (!itemCode) return itemCode;
-        const cleaned = itemCode.replace(/^['']/, '').trim();
-        if (cleaned !== itemCode) {
-            debug.log(`Cleaned item code: '${itemCode}' -> '${cleaned}'`);
+        // Convert to string to handle numeric item codes from Excel
+        const itemCodeStr = String(itemCode);
+        const cleaned = itemCodeStr.replace(/^['']/, '').trim();
+        if (cleaned !== itemCodeStr) {
+            debug.log(`Cleaned item code: '${itemCodeStr}' -> '${cleaned}'`);
         }
         return cleaned;
     }
@@ -30,7 +31,7 @@ class ResponseProcessing {
 
             return {
                 item_id: cleanedItemId,
-                price: item.price,
+                price_quoted: item.price_quoted || 0,  // Use price_quoted and default to 0
                 notes: item.notes,
                 hs_code: item.hs_code,
                 english_description: item.english_description,
@@ -104,16 +105,19 @@ class ResponseProcessing {
         for (const item of validData) {
             debug.log('Creating supplier response for item:', item);
 
-            // Insert supplier response record
+            // Insert supplier response record with price_quoted
             const responseId = await this.responseQueries.insertSupplierResponse(
                 inquiryId,
                 supplierId,
                 item.item_id,
-                item.price
+                item.price_quoted  // Use price_quoted here
             );
 
-            // Insert supplier response item
-            await this.responseQueries.insertSupplierResponseItem(responseId, item);
+            // Insert supplier response item with price_quoted
+            await this.responseQueries.insertSupplierResponseItem(responseId, {
+                ...item,
+                price: item.price_quoted  // Set price to price_quoted
+            });
 
             // Handle reference changes if needed
             if (item.new_reference_id) {
@@ -156,7 +160,7 @@ class ResponseProcessing {
         try {
             // Process the uploaded file
             const data = await ExcelProcessor.processResponse(file.path, columnMapping, {
-                requiredFields: ['item_id']
+                requiredFields: ['item_id', 'price_quoted']  // Ensure price_quoted is required
             });
 
             debug.log('Processed Excel data:', {
@@ -167,15 +171,10 @@ class ResponseProcessing {
             // Validate and clean the data
             const validData = this.validateData(data);
 
-            // Begin transaction
-            await new Promise((resolve, reject) => {
-                this.db.run('BEGIN TRANSACTION', err => {
-                    if (err) reject(err);
-                    else resolve();
-                });
-            });
-
             try {
+                // Begin transaction
+                await this.responseQueries.beginTransaction();
+
                 // Process items first
                 await this.processItems(validData, inquiryId);
 
@@ -190,12 +189,7 @@ class ResponseProcessing {
                 await this.responseQueries.updateResponseStatus(inquiryId, supplierId);
 
                 // Commit transaction
-                await new Promise((resolve, reject) => {
-                    this.db.run('COMMIT', err => {
-                        if (err) reject(err);
-                        else resolve();
-                    });
-                });
+                await this.responseQueries.commitTransaction();
 
                 debug.log('Successfully processed supplier response:', {
                     itemCount: validData.length
@@ -209,9 +203,7 @@ class ResponseProcessing {
             } catch (error) {
                 // Rollback transaction on error
                 debug.error('Error during processing, rolling back:', error);
-                await new Promise((resolve) => {
-                    this.db.run('ROLLBACK', () => resolve());
-                });
+                await this.responseQueries.rollbackTransaction();
                 throw error;
             }
 

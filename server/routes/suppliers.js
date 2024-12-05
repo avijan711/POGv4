@@ -1,8 +1,10 @@
 const express = require('express');
 const cors = require('cors');
+const SupplierModel = require('../models/supplier');
 
-function createRouter(db) {
+function createRouter({ db }) {
     const router = express.Router();
+    const supplierModel = new SupplierModel(db);
 
     // Enable CORS
     router.use(cors({
@@ -13,132 +15,94 @@ function createRouter(db) {
     }));
 
     // Get all suppliers
-    router.get('/', (req, res) => {
-        console.log('Fetching suppliers');
-        db.all('SELECT supplier_id, name, contact_person, email, phone FROM supplier ORDER BY name', [], (err, rows) => {
-            if (err) {
-                console.error('Error fetching suppliers:', err);
-                res.status(500).json({ error: 'Failed to fetch suppliers' });
-                return;
-            }
-            console.log('Found suppliers:', rows);
-            res.json(rows || []);
-        });
+    router.get('/', async (req, res) => {
+        try {
+            console.log('Fetching suppliers');
+            const suppliers = await supplierModel.getAllSuppliers();
+            console.log('Found suppliers:', suppliers);
+            res.json(suppliers || []);
+        } catch (err) {
+            console.error('Error fetching suppliers:', err);
+            res.status(500).json({ error: 'Failed to fetch suppliers' });
+        }
     });
 
     // Create new supplier
-    router.post('/', (req, res) => {
-        const { name, contactPerson, email, phone } = req.body;
-        
-        if (!name) {
-            return res.status(400).json({ error: 'Supplier name is required' });
-        }
-
-        db.run(
-            'INSERT INTO supplier (name, contact_person, email, phone) VALUES (?, ?, ?, ?)',
-            [name, contactPerson || null, email || null, phone || null],
-            function(err) {
-                if (err) {
-                    console.error('Error creating supplier:', err);
-                    res.status(500).json({ error: 'Failed to create supplier' });
-                    return;
-                }
-                
-                // Return the created supplier with its ID
-                db.get(
-                    'SELECT supplier_id, name, contact_person, email, phone FROM supplier WHERE supplier_id = ?',
-                    [this.lastID],
-                    (err, row) => {
-                        if (err) {
-                            console.error('Error fetching created supplier:', err);
-                            res.status(500).json({ error: 'Supplier created but failed to fetch details' });
-                            return;
-                        }
-                        res.status(201).json(row);
-                    }
-                );
+    router.post('/', async (req, res) => {
+        try {
+            const { name, contactPerson, email, phone } = req.body;
+            
+            if (!name) {
+                return res.status(400).json({ error: 'Supplier name is required' });
             }
-        );
+
+            const supplier = await supplierModel.createSupplier({
+                name,
+                contactPerson,
+                email,
+                phone
+            });
+            
+            res.status(201).json(supplier);
+        } catch (err) {
+            console.error('Error creating supplier:', err);
+            res.status(500).json({ error: 'Failed to create supplier' });
+        }
     });
 
     // Get supplier by ID
-    router.get('/:id', (req, res) => {
-        const supplierId = req.params.id;
-        
-        db.get(
-            'SELECT supplier_id, name, contact_person, email, phone FROM supplier WHERE supplier_id = ?',
-            [supplierId],
-            (err, row) => {
-                if (err) {
-                    console.error('Error fetching supplier:', err);
-                    res.status(500).json({ error: 'Failed to fetch supplier' });
-                    return;
-                }
-                if (!row) {
-                    res.status(404).json({ error: 'Supplier not found' });
-                    return;
-                }
-                res.json(row);
+    router.get('/:id', async (req, res) => {
+        try {
+            const supplier = await supplierModel.getSupplierById(req.params.id);
+            if (!supplier) {
+                return res.status(404).json({ error: 'Supplier not found' });
             }
-        );
+            res.json(supplier);
+        } catch (err) {
+            console.error('Error fetching supplier:', err);
+            res.status(500).json({ error: 'Failed to fetch supplier' });
+        }
     });
 
     // Update supplier
-    router.put('/:id', (req, res) => {
-        const supplierId = req.params.id;
-        const { name, contactPerson, email, phone } = req.body;
-        
-        if (!name) {
-            return res.status(400).json({ error: 'Supplier name is required' });
-        }
-
-        db.run(
-            'UPDATE supplier SET name = ?, contact_person = ?, email = ?, phone = ? WHERE supplier_id = ?',
-            [name, contactPerson || null, email || null, phone || null, supplierId],
-            function(err) {
-                if (err) {
-                    console.error('Error updating supplier:', err);
-                    res.status(500).json({ error: 'Failed to update supplier' });
-                    return;
-                }
-                if (this.changes === 0) {
-                    res.status(404).json({ error: 'Supplier not found' });
-                    return;
-                }
-                
-                // Return the updated supplier
-                db.get(
-                    'SELECT supplier_id, name, contact_person, email, phone FROM supplier WHERE supplier_id = ?',
-                    [supplierId],
-                    (err, row) => {
-                        if (err) {
-                            console.error('Error fetching updated supplier:', err);
-                            res.status(500).json({ error: 'Supplier updated but failed to fetch details' });
-                            return;
-                        }
-                        res.json(row);
-                    }
-                );
+    router.put('/:id', async (req, res) => {
+        try {
+            const { name, contactPerson, email, phone } = req.body;
+            
+            if (!name) {
+                return res.status(400).json({ error: 'Supplier name is required' });
             }
-        );
+
+            const supplier = await supplierModel.updateSupplier(req.params.id, {
+                name,
+                contactPerson,
+                email,
+                phone
+            });
+
+            if (!supplier) {
+                return res.status(404).json({ error: 'Supplier not found' });
+            }
+            
+            res.json(supplier);
+        } catch (err) {
+            console.error('Error updating supplier:', err);
+            res.status(500).json({ error: 'Failed to update supplier' });
+        }
     });
 
     // Delete supplier
-    router.delete('/:id', (req, res) => {
-        const supplierId = req.params.id;
-        
-        db.run('DELETE FROM supplier WHERE supplier_id = ?', [supplierId], function(err) {
-            if (err) {
-                console.error('Error deleting supplier:', err);
-                res.status(500).json({ error: 'Failed to delete supplier' });
-                return;
-            }
-            if (this.changes === 0) {
-                res.status(404).json({ error: 'Supplier not found' });
-                return;
+    router.delete('/:id', async (req, res) => {
+        try {
+            const result = await supplierModel.deleteSupplier(req.params.id);
+            if (!result.deleted) {
+                return res.status(404).json({ error: 'Supplier not found' });
             }
             res.json({ message: 'Supplier deleted successfully' });
-        });
+        } catch (err) {
+            console.error('Error deleting supplier:', err);
+            res.status(500).json({ error: 'Failed to delete supplier' });
+        }
     });
 
     return router;

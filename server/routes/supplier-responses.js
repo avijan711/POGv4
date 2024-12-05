@@ -15,35 +15,65 @@ const ExcelProcessor = require('../utils/excelProcessor/index');
 const fs = require('fs');
 const path = require('path');
 
-function createRouter(db) {
+function createRouter({ db }) {
+    if (!db) {
+        throw new Error('Database instance is required');
+    }
+
     const router = express.Router();
     const supplierResponseService = new SupplierResponseService(db);
     const upload = multer(uploadConfig);
 
-    // Convert request body keys to snake_case
-    const convertToSnakeCase = (req, res, next) => {
-        if (req.body.columnMapping) {
-            try {
-                const mapping = typeof req.body.columnMapping === 'string' 
-                    ? JSON.parse(req.body.columnMapping) 
-                    : req.body.columnMapping;
+    // Get supplier responses for an inquiry with pagination
+    router.get('/inquiry/:inquiry_id', validateInquiryId, async (req, res, next) => {
+        try {
+            // Validate and sanitize pagination parameters
+            const page = Math.max(1, parseInt(req.query.page) || 1);
+            const pageSize = Math.min(100, Math.max(10, parseInt(req.query.pageSize) || 50));
+            
+            debug.log('Fetching supplier responses:', {
+                inquiry_id: req.params.inquiry_id,
+                page,
+                pageSize
+            });
 
-                // Convert any camelCase or PascalCase keys to snake_case
-                const convertedMapping = {};
-                Object.entries(mapping).forEach(([key, value]) => {
-                    const snakeKey = key
-                        .replace(/([A-Z])/g, '_$1')
-                        .toLowerCase()
-                        .replace(/^_/, '');
-                    convertedMapping[snakeKey] = value;
-                });
-                req.body.column_mapping = JSON.stringify(convertedMapping);
-            } catch (error) {
-                debug.error('Error converting column mapping:', error);
-            }
+            const responses = await supplierResponseService.getSupplierResponses(
+                req.params.inquiry_id,
+                page,
+                pageSize
+            );
+
+            // Log the response data for debugging
+            debug.log('Response data:', {
+                supplierCount: Object.keys(responses.data || {}).length,
+                stats: responses.stats,
+                missingItemsCount: responses.stats?.missingItems?.length || 0
+            });
+
+            // Add pagination metadata to response headers
+            res.set({
+                'X-Page': responses.pagination.page,
+                'X-Page-Size': responses.pagination.pageSize,
+                'X-Has-More': responses.pagination.hasMore
+            });
+
+            // Send the response data with stats
+            res.json({
+                data: responses.data,
+                stats: {
+                    totalResponses: responses.stats.totalResponses,
+                    totalItems: responses.stats.totalItems,
+                    totalSuppliers: responses.stats.totalSuppliers,
+                    respondedItems: responses.stats.respondedItems,
+                    missingResponses: responses.stats.missingResponses,
+                    missingItems: responses.stats.missingItems || []
+                }
+            });
+        } catch (err) {
+            debug.error('Error in supplier responses route:', err);
+            next(err);
         }
-        next();
-    };
+    });
 
     // Get columns from Excel file
     router.post('/columns', upload.single('file'), async (req, res) => {
@@ -98,49 +128,6 @@ function createRouter(db) {
         }
     });
 
-    // Get supplier responses for an inquiry with pagination
-    router.get('/inquiry/:inquiry_id', validateInquiryId, async (req, res, next) => {
-        try {
-            // Validate and sanitize pagination parameters
-            const page = Math.max(1, parseInt(req.query.page) || 1);
-            const pageSize = Math.min(100, Math.max(10, parseInt(req.query.pageSize) || 50));
-            
-            debug.log('Fetching supplier responses:', {
-                inquiry_id: req.params.inquiry_id,
-                page,
-                pageSize
-            });
-
-            const responses = await supplierResponseService.getSupplierResponses(
-                req.params.inquiry_id,
-                page,
-                pageSize
-            );
-
-            // Add pagination metadata to response headers
-            res.set({
-                'X-Page': responses.pagination.page,
-                'X-Page-Size': responses.pagination.pageSize,
-                'X-Has-More': responses.pagination.hasMore
-            });
-
-            // Send the response data with stats
-            res.json({
-                data: responses.data,
-                stats: {
-                    totalResponses: responses.stats.totalResponses,
-                    totalItems: responses.stats.totalItems,
-                    totalSuppliers: responses.stats.totalSuppliers,
-                    respondedItems: responses.stats.respondedItems,
-                    missingResponses: responses.stats.missingResponses
-                }
-            });
-        } catch (err) {
-            debug.error('Error in supplier responses route:', err);
-            next(err);
-        }
-    });
-
     // Delete a specific supplier response
     router.delete('/:response_id', validateResponseId, async (req, res, next) => {
         try {
@@ -177,7 +164,6 @@ function createRouter(db) {
     // Handle supplier response upload
     router.post('/upload', 
         upload.single('file'),
-        convertToSnakeCase,
         validateUpload,
         async (req, res, next) => {
             try {

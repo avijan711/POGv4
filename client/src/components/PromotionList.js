@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Box,
     Button,
@@ -10,223 +10,193 @@ import {
     TableHead,
     TableRow,
     Typography,
+    IconButton,
     Chip,
-    Alert,
-    Snackbar,
-    CircularProgress
 } from '@mui/material';
-import { format } from 'date-fns';
-import { usePromotionManagement } from '../hooks/usePromotionManagement';
-import { PromotionUploadDialog, PromotionDetailsDialog } from './PromotionDialogs';
-import PromotionColumnMappingDialog from './PromotionColumnMappingDialog';
+import {
+    Add as AddIcon,
+    Delete as DeleteIcon,
+    Visibility as VisibilityIcon,
+} from '@mui/icons-material';
+import axios from 'axios';
+import { API_BASE_URL } from '../config';
+import PromotionUploadDialog from './PromotionUploadDialog';
+import PromotionItemsDialog from './PromotionItemsDialog';
 
 function PromotionList() {
-    const {
-        promotions,
-        suppliers,
-        loading,
-        loadingSuppliers,
-        error,
-        uploadProgress,
-        processingStatus,
-        setError,
-        handleUpload,
-        handleUpdatePromotion,
-        getPromotionDetails
-    } = usePromotionManagement();
-
+    const [promotions, setPromotions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-    const [columnMappingOpen, setColumnMappingOpen] = useState(false);
-    const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-    const [promotionDetails, setPromotionDetails] = useState(null);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [loadingDetails, setLoadingDetails] = useState(false);
-    const [columns, setColumns] = useState([]);
-    const [uploadFile, setUploadFile] = useState(null);
-    const [promotionMetadata, setPromotionMetadata] = useState(null);
+    const [selectedPromotion, setSelectedPromotion] = useState(null);
+    const [itemsDialogOpen, setItemsDialogOpen] = useState(false);
 
-    const handleFileUpload = (file, detectedColumns, metadata) => {
-        setUploadFile(file);
-        setColumns(detectedColumns || []);
-        setPromotionMetadata(metadata);
-        setColumnMappingOpen(true);
+    useEffect(() => {
+        fetchPromotions();
+    }, []);
+
+    const fetchPromotions = async () => {
+        try {
+            setLoading(true);
+            const response = await axios.get(`${API_BASE_URL}/api/promotions`);
+            setPromotions(response.data || []);
+            setError(null);
+        } catch (err) {
+            console.error('Error fetching promotions:', err);
+            setError('Failed to load promotions');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDelete = async (promotionId) => {
+        if (!window.confirm('Are you sure you want to delete this promotion?')) {
+            return;
+        }
+
+        try {
+            await axios.delete(`${API_BASE_URL}/api/promotions/${promotionId}`);
+            await fetchPromotions();
+        } catch (err) {
+            console.error('Error deleting promotion:', err);
+            setError('Failed to delete promotion');
+        }
+    };
+
+    const handleUploadComplete = () => {
         setUploadDialogOpen(false);
+        fetchPromotions();
     };
 
-    const handleColumnMappingConfirm = async (columnMapping) => {
-        const formData = new FormData();
-        formData.append('excelFile', uploadFile);
-        formData.append('itemIdColumn', columnMapping.itemId);
-        formData.append('priceColumn', columnMapping.price);
-        
-        // Add promotion metadata
-        if (promotionMetadata) {
-            formData.append('name', promotionMetadata.name);
-            formData.append('supplierId', promotionMetadata.supplierId);
-            formData.append('startDate', promotionMetadata.startDate);
-            formData.append('endDate', promotionMetadata.endDate);
-        }
-
-        const success = await handleUpload(formData);
-        if (success) {
-            setColumnMappingOpen(false);
-            setUploadFile(null);
-            setColumns([]);
-            setPromotionMetadata(null);
-        }
-    };
-
-    const handleViewDetails = async (groupId, page = 1) => {
-        setLoadingDetails(true);
-        const details = await getPromotionDetails(groupId, page);
-        if (details) {
-            setPromotionDetails(details);
-            setCurrentPage(page);
-            setDetailsDialogOpen(true);
-        }
-        setLoadingDetails(false);
-    };
-
-    const handlePageChange = (event, page) => {
-        if (promotionDetails) {
-            handleViewDetails(promotionDetails.PromotionGroupID, page);
-        }
-    };
-
-    const handleCloseDetailsDialog = () => {
-        setDetailsDialogOpen(false);
-        setPromotionDetails(null);
-        setCurrentPage(1);
-    };
-
-    const renderContent = () => {
-        if (loading && !uploadDialogOpen && !columnMappingOpen) {
-            return (
-                <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
-                    <CircularProgress />
-                </Box>
-            );
-        }
-
-        if (!Array.isArray(promotions) || promotions.length === 0) {
-            return (
-                <TableRow>
-                    <TableCell colSpan={7} align="center">
-                        No promotions found
-                    </TableCell>
-                </TableRow>
-            );
-        }
-
-        return promotions.map((promotion) => (
-            <TableRow key={promotion.PromotionGroupID}>
-                <TableCell>{promotion.Name}</TableCell>
-                <TableCell>
-                    <Chip 
-                        label={promotion.SupplierName} 
-                        color="primary" 
-                        variant="outlined" 
-                        size="small"
-                    />
-                </TableCell>
-                <TableCell>{format(new Date(promotion.StartDate), 'dd/MM/yyyy')}</TableCell>
-                <TableCell>{format(new Date(promotion.EndDate), 'dd/MM/yyyy')}</TableCell>
-                <TableCell>{promotion.ItemCount}</TableCell>
-                <TableCell>{promotion.IsActive ? 'Active' : 'Inactive'}</TableCell>
-                <TableCell>
-                    <Button
-                        size="small"
-                        onClick={() => handleViewDetails(promotion.PromotionGroupID)}
-                        disabled={loading}
-                    >
-                        View Details
-                    </Button>
-                    <Button
-                        size="small"
-                        color={promotion.IsActive ? 'error' : 'primary'}
-                        onClick={() => handleUpdatePromotion(promotion.PromotionGroupID, !promotion.IsActive)}
-                        disabled={loading}
-                    >
-                        {promotion.IsActive ? 'Deactivate' : 'Activate'}
-                    </Button>
-                </TableCell>
-            </TableRow>
-        ));
+    const handleViewItems = (promotion) => {
+        setSelectedPromotion(promotion);
+        setItemsDialogOpen(true);
     };
 
     return (
-        <Box>
-            <Snackbar 
-                open={!!error} 
-                autoHideDuration={6000} 
-                onClose={() => setError(null)}
-                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-            >
-                <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
-                    {error}
-                </Alert>
-            </Snackbar>
-
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h6">Promotions</Typography>
+        <Box sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h5">Promotions</Typography>
                 <Button
                     variant="contained"
                     color="primary"
+                    startIcon={<AddIcon />}
                     onClick={() => setUploadDialogOpen(true)}
-                    disabled={loading}
                 >
                     Upload New Promotion
                 </Button>
             </Box>
 
-            <TableContainer component={Paper}>
-                <Table>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell>Name</TableCell>
-                            <TableCell>Supplier</TableCell>
-                            <TableCell>Start Date</TableCell>
-                            <TableCell>End Date</TableCell>
-                            <TableCell>Items</TableCell>
-                            <TableCell>Status</TableCell>
-                            <TableCell>Actions</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {renderContent()}
-                    </TableBody>
-                </Table>
-            </TableContainer>
+            {loading ? (
+                <Typography>Loading promotions...</Typography>
+            ) : error ? (
+                <Box>
+                    <Typography color="error">{error}</Typography>
+                    <Button 
+                        sx={{ mt: 2 }}
+                        variant="outlined" 
+                        onClick={fetchPromotions}
+                    >
+                        Retry
+                    </Button>
+                </Box>
+            ) : (
+                <TableContainer component={Paper}>
+                    <Table>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell>Name</TableCell>
+                                <TableCell>Supplier</TableCell>
+                                <TableCell>Start Date</TableCell>
+                                <TableCell>End Date</TableCell>
+                                <TableCell align="right">Items</TableCell>
+                                <TableCell align="right">Status</TableCell>
+                                <TableCell align="right">Actions</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {promotions.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={7} align="center">
+                                        <Typography color="textSecondary">
+                                            No promotions found
+                                        </Typography>
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                promotions.map((promotion) => (
+                                    <TableRow key={promotion.promotion_id}>
+                                        <TableCell>{promotion.name}</TableCell>
+                                        <TableCell>{promotion.supplier_name}</TableCell>
+                                        <TableCell>
+                                            {new Date(promotion.start_date).toLocaleDateString()}
+                                        </TableCell>
+                                        <TableCell>
+                                            {new Date(promotion.end_date).toLocaleDateString()}
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            <Chip
+                                                label={`${promotion.item_count} items`}
+                                                size="small"
+                                                color="primary"
+                                                variant="outlined"
+                                            />
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            <Chip
+                                                label={isPromotionActive(promotion) ? 'Active' : 'Inactive'}
+                                                size="small"
+                                                color={isPromotionActive(promotion) ? 'success' : 'default'}
+                                            />
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => handleViewItems(promotion)}
+                                                title="View Items"
+                                            >
+                                                <VisibilityIcon />
+                                            </IconButton>
+                                            <IconButton
+                                                size="small"
+                                                color="error"
+                                                onClick={() => handleDelete(promotion.promotion_id)}
+                                                title="Delete Promotion"
+                                            >
+                                                <DeleteIcon />
+                                            </IconButton>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            )}
 
             <PromotionUploadDialog
                 open={uploadDialogOpen}
                 onClose={() => setUploadDialogOpen(false)}
-                onUpload={handleFileUpload}
-                suppliers={suppliers || []}
-                loading={loading}
-                loadingSuppliers={loadingSuppliers}
-                uploadProgress={uploadProgress}
-                processingStatus={processingStatus}
-                setError={setError}
+                onComplete={handleUploadComplete}
             />
 
-            <PromotionColumnMappingDialog
-                open={columnMappingOpen}
-                onClose={() => setColumnMappingOpen(false)}
-                excelColumns={columns}
-                onConfirm={handleColumnMappingConfirm}
-            />
-
-            <PromotionDetailsDialog
-                open={detailsDialogOpen}
-                onClose={handleCloseDetailsDialog}
-                promotionDetails={promotionDetails}
-                loading={loadingDetails}
-                currentPage={currentPage}
-                onPageChange={handlePageChange}
+            <PromotionItemsDialog
+                open={itemsDialogOpen}
+                onClose={() => {
+                    setItemsDialogOpen(false);
+                    setSelectedPromotion(null);
+                }}
+                promotion={selectedPromotion}
             />
         </Box>
     );
+}
+
+function isPromotionActive(promotion) {
+    const now = new Date();
+    const startDate = new Date(promotion.start_date);
+    const endDate = new Date(promotion.end_date);
+    return now >= startDate && now <= endDate;
 }
 
 export default PromotionList;

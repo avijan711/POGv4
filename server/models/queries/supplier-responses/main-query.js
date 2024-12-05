@@ -36,10 +36,31 @@ function getMainQuery() {
             AND sr.status != 'deleted'
             AND sr.price_quoted IS NOT NULL
     ),
-    inquiry_stats AS (
-        SELECT COUNT(*) as total_items
-        FROM inquiry_item
+    inquiry_items AS (
+        SELECT 
+            ii.item_id,
+            ii.requested_qty,
+            ii.retail_price,
+            i.hebrew_description,
+            i.english_description,
+            i.origin
+        FROM inquiry_item ii
+        LEFT JOIN item i ON ii.item_id = i.item_id
+        WHERE ii.inquiry_id = ?
+    ),
+    all_responses AS (
+        SELECT DISTINCT item_id
+        FROM supplier_response
         WHERE inquiry_id = ?
+            AND status != 'deleted'
+            AND price_quoted IS NOT NULL
+    ),
+    missing_items AS (
+        SELECT 
+            ii.*
+        FROM inquiry_items ii
+        LEFT JOIN all_responses ar ON ii.item_id = ar.item_id
+        WHERE ar.item_id IS NULL
     ),
     response_stats AS (
         SELECT 
@@ -76,16 +97,33 @@ function getMainQuery() {
         FROM supplier_responses
         WHERE item_id IS NOT NULL
         GROUP BY supplier_id, supplier_name, date(response_date), inquiry_id
+    ),
+    missing_items_array AS (
+        SELECT json_group_array(
+            json_object(
+                'item_id', m.item_id,
+                'hebrew_description', m.hebrew_description,
+                'english_description', m.english_description,
+                'requested_qty', CAST(m.requested_qty AS INTEGER),
+                'retail_price', CAST(m.retail_price AS REAL),
+                'origin', COALESCE(m.origin, '')
+            )
+        ) as missing_items_json
+        FROM (
+            SELECT DISTINCT *
+            FROM missing_items
+            ORDER BY item_id
+        ) m
     )
     SELECT 
         rs.*,
-        ist.total_items,
+        (SELECT COUNT(*) FROM inquiry_items) as total_items,
         rst.total_suppliers,
         rst.responded_items,
-        ist.total_items - rst.responded_items as missing_responses,
-        (SELECT COUNT(*) FROM supplier_responses) as total_responses
+        (SELECT COUNT(*) FROM missing_items) as missing_responses,
+        (SELECT COUNT(*) FROM supplier_responses) as total_responses,
+        COALESCE((SELECT missing_items_json FROM missing_items_array), '[]') as missing_items
     FROM response_summary rs
-    CROSS JOIN inquiry_stats ist
     CROSS JOIN response_stats rst
     ORDER BY rs.response_date DESC`;
 }
@@ -96,7 +134,8 @@ function getSupplierResponsesQuery() {
         params: (inquiryId, page = 1, pageSize = 50) => {
             return [
                 inquiryId,  // For supplier_responses CTE
-                inquiryId   // For inquiry_stats CTE
+                inquiryId,  // For inquiry_items CTE
+                inquiryId   // For all_responses CTE
             ];
         }
     };

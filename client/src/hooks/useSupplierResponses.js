@@ -12,7 +12,7 @@ export const useSupplierResponses = (inquiryId) => {
         totalSuppliers: 0,
         respondedItems: 0,
         missingResponses: 0,
-        responsesBySupplier: {}
+        missingItems: []
     });
 
     // Use a ref to track if we're already fetching
@@ -41,33 +41,59 @@ export const useSupplierResponses = (inquiryId) => {
             const supplierData = responseData.data || {};
             const serverStats = responseData.stats || {};
 
+            // Parse missing items if it's a string
+            let missingItems = [];
+            if (serverStats.missingItems) {
+                try {
+                    if (typeof serverStats.missingItems === 'string') {
+                        console.log('Missing items is a string:', serverStats.missingItems);
+                        missingItems = JSON.parse(serverStats.missingItems);
+                    } else {
+                        console.log('Missing items is not a string:', serverStats.missingItems);
+                        missingItems = serverStats.missingItems;
+                    }
+                    console.log('Parsed missing items:', missingItems);
+                } catch (e) {
+                    console.error('Error parsing missing items:', e);
+                    missingItems = [];
+                }
+            } else {
+                console.log('No missing items in server stats:', serverStats);
+            }
+
             console.log('Processed data:', {
                 supplierData,
-                serverStats
+                serverStats,
+                missingItems
             });
 
             // Set responses
             setResponses(supplierData);
 
             // Set stats
-            setStats(prev => ({
-                ...prev,
-                totalResponses: serverStats.totalResponses || 0,
-                totalItems: serverStats.totalItems || 0,
-                totalSuppliers: serverStats.totalSuppliers || 0,
-                respondedItems: serverStats.respondedItems || 0,
-                missingResponses: serverStats.missingResponses || 0,
-                responsesBySupplier: Object.fromEntries(
-                    Object.entries(supplierData).map(([id, data]) => [
-                        id,
-                        {
-                            totalItems: data.totalItems || 0,
-                            promotionItems: data.promotionItems || 0,
-                            averagePrice: data.averagePrice || 0
-                        }
-                    ])
-                )
-            }));
+            setStats(prev => {
+                const newStats = {
+                    ...prev,
+                    totalResponses: serverStats.totalResponses || 0,
+                    totalItems: serverStats.totalItems || 0,
+                    totalSuppliers: serverStats.totalSuppliers || 0,
+                    respondedItems: serverStats.respondedItems || 0,
+                    missingResponses: serverStats.missingResponses || 0,
+                    missingItems: missingItems,
+                    responsesBySupplier: Object.fromEntries(
+                        Object.entries(supplierData).map(([id, data]) => [
+                            id,
+                            {
+                                totalItems: data.totalItems || 0,
+                                promotionItems: data.promotionItems || 0,
+                                averagePrice: data.averagePrice || 0
+                            }
+                        ])
+                    )
+                };
+                console.log('Setting new stats:', newStats);
+                return newStats;
+            });
         } catch (err) {
             console.error('Error fetching supplier responses:', err);
             setError('Failed to load supplier responses');

@@ -37,7 +37,67 @@ import {
 } from '@mui/icons-material';
 import { useSupplierResponses } from '../hooks/useSupplierResponses';
 
-function SupplierRow({ supplierId, supplierData, totalExpectedItems, onDelete, onDeleteItem }) {
+function MissingItemsDialog({ open, onClose, items = [] }) {
+  console.log('Missing items in dialog:', items);
+  return (
+    <Dialog 
+      open={open} 
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+    >
+      <DialogTitle>
+        <Box display="flex" alignItems="center" gap={1}>
+          <WarningIcon color="warning" />
+          <Typography>Missing Items ({items.length})</Typography>
+        </Box>
+      </DialogTitle>
+      <DialogContent>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Item ID</TableCell>
+                <TableCell>Description</TableCell>
+                <TableCell align="right">Requested Qty</TableCell>
+                <TableCell align="right">Retail Price</TableCell>
+                <TableCell>Origin</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {items.map((item) => (
+                <TableRow key={item.item_id}>
+                  <TableCell>{item.item_id}</TableCell>
+                  <TableCell>
+                    <Typography>{item.hebrew_description}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {item.english_description}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right">{item.requested_qty}</TableCell>
+                  <TableCell align="right">₪{Number(item.retail_price).toFixed(2)}</TableCell>
+                  <TableCell>{item.origin || '-'}</TableCell>
+                </TableRow>
+              ))}
+              {items.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} align="center">
+                    <Typography color="text.secondary">No missing items found</Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function SupplierRow({ supplierId, supplierData, totalExpectedItems, onDelete, onDeleteItem, onShowMissing }) {
   const [open, setOpen] = React.useState(false);
 
   return (
@@ -84,6 +144,8 @@ function SupplierRow({ supplierId, supplierData, totalExpectedItems, onDelete, o
               label={`${totalExpectedItems - (supplierData.totalItems || 0)} Missing`}
               size="small"
               color="warning"
+              onClick={onShowMissing}
+              sx={{ cursor: 'pointer' }}
             />
           )}
         </TableCell>
@@ -183,6 +245,7 @@ function SupplierResponseList({ inquiryId }) {
   const [itemToDelete, setItemToDelete] = React.useState(null);
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = React.useState(false);
   const [supplierToDelete, setSupplierToDelete] = React.useState(null);
+  const [missingItemsDialogOpen, setMissingItemsDialogOpen] = React.useState(false);
 
   useEffect(() => {
     if (inquiryId) {
@@ -205,6 +268,11 @@ function SupplierResponseList({ inquiryId }) {
       setBulkDeleteDialogOpen(false);
       setSupplierToDelete(null);
     }
+  };
+
+  const handleShowMissingItems = () => {
+    console.log('Opening missing items dialog with items:', stats.missingItems);
+    setMissingItemsDialogOpen(true);
   };
 
   if (loading) {
@@ -237,6 +305,7 @@ function SupplierResponseList({ inquiryId }) {
   const respondedItems = stats.respondedItems || 0;
   const missingResponses = stats.missingResponses || 0;
   const responseRate = totalItems ? Math.round((respondedItems / totalItems) * 100) : 0;
+  const missingItems = stats.missingItems || [];
 
   return (
     <Box>
@@ -275,7 +344,16 @@ function SupplierResponseList({ inquiryId }) {
               </Box>
             </Grid>
             <Grid item xs={12} md={3}>
-              <Box sx={{ textAlign: 'center' }}>
+              <Box 
+                sx={{ 
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  '&:hover': {
+                    opacity: 0.8
+                  }
+                }}
+                onClick={handleShowMissingItems}
+              >
                 <Typography variant="h4" color="error">
                   {missingResponses}
                 </Typography>
@@ -336,6 +414,7 @@ function SupplierResponseList({ inquiryId }) {
                   setItemToDelete(item);
                   setDeleteDialogOpen(true);
                 }}
+                onShowMissing={handleShowMissingItems}
               />
             ))}
           </TableBody>
@@ -374,6 +453,13 @@ function SupplierResponseList({ inquiryId }) {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Missing Items Dialog */}
+      <MissingItemsDialog
+        open={missingItemsDialogOpen}
+        onClose={() => setMissingItemsDialogOpen(false)}
+        items={missingItems}
+      />
     </Box>
   );
 }

@@ -72,8 +72,10 @@ function validateUpload(req, res, next) {
         });
 
         // Check required fields using database field names
-        if (!columnMapping.item_id) {
-            const error = new Error('Item ID column mapping is required');
+        const requiredFields = ['item_id', 'price_quoted'];
+        const missingFields = requiredFields.filter(field => !columnMapping[field]);
+        if (missingFields.length > 0) {
+            const error = new Error(`Missing required column mappings: ${missingFields.join(', ')}`);
             error.name = 'ValidationError';
             throw error;
         }
@@ -91,6 +93,12 @@ function validateUpload(req, res, next) {
             error.name = 'ValidationError';
             throw error;
         }
+
+        // Store the validated mapping back in the request
+        req.validatedMapping = {
+            ...columnMapping,
+            price: columnMapping.price_quoted // Ensure price field is mapped for internal use
+        };
 
         next();
     } catch (error) {

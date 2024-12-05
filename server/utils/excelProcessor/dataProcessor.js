@@ -362,7 +362,10 @@ function processSupplierResponse(filePath, columnMapping) {
                         break;
                         
                     case 'price_quoted':
-                        processedRow.price = parseNumericValue(value, null);
+                        // Parse price and ensure it's a non-negative number or 0
+                        const priceValue = parseNumericValue(value, 0);
+                        processedRow.price = priceValue;
+                        processedRow.price_quoted = priceValue;  // Set both price and price_quoted
                         break;
                         
                     case 'new_reference_id':

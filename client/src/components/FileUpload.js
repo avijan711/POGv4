@@ -175,7 +175,10 @@ function FileUpload() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('inquiryNumber', inquiryNumber);
-    formData.append('columnMapping', JSON.stringify(columnMapping));
+    
+    // Properly stringify the column mapping
+    const mappingString = JSON.stringify(columnMapping);
+    formData.append('columnMapping', mappingString);
 
     try {
       console.log('Initiating file upload:', {
@@ -184,7 +187,7 @@ function FileUpload() {
         fileSize: file.size,
         fileType: file.type,
         inquiryNumber,
-        columnMapping
+        columnMapping: mappingString // Log the actual string being sent
       });
       
       const response = await axios.post(`${API_BASE_URL}/api/inquiries/upload`, formData, {

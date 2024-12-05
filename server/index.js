@@ -1,93 +1,141 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const debug = require('./utils/debug');
+const fs = require('fs');
 const { initializeDatabase, getDatabase } = require('./config/database');
-const ItemModel = require('./models/item');
+
+// Import models
+const PromotionModel = require('./models/promotion');
 const InquiryModel = require('./models/inquiry');
 const InquiryItemModel = require('./models/inquiry/item');
-const PromotionModel = require('./models/promotion');
+const OrderModel = require('./models/order');
+
+// Import route creators
 const createItemsRouter = require('./routes/items');
-const createInquiriesRouter = require('./routes/inquiries');
+const createOrdersRouter = require('./routes/orders');
 const createPromotionsRouter = require('./routes/promotions');
+const createSettingsRouter = require('./routes/settings');
 const createSuppliersRouter = require('./routes/suppliers');
+const createInquiriesRouter = require('./routes/inquiries');
 const createSupplierResponsesRouter = require('./routes/supplier-responses');
 
+// Create Express app
 const app = express();
-const port = process.env.PORT || 5002;
 
-// Configure CORS with credentials
-app.use(cors({
-  origin: 'http://localhost:3000', // React app's origin
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Content-Disposition'],
-  exposedHeaders: ['Content-Disposition']
-}));
+// CORS configuration
+const corsOptions = {
+    origin: 'http://localhost:3000',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve uploaded files with proper MIME types
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
-  setHeaders: (res, filePath) => {
-    // Set appropriate content type for images
-    if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
-      res.setHeader('Content-Type', 'image/jpeg');
-    } else if (filePath.endsWith('.png')) {
-      res.setHeader('Content-Type', 'image/png');
-    } else if (filePath.endsWith('.gif')) {
-      res.setHeader('Content-Type', 'image/gif');
-    }
-    // Add cache control headers
-    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
-  }
-}));
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
 
+// Initialize database and start server
 async function startServer() {
     try {
         // Initialize database
-        console.log('Initializing database...');
         await initializeDatabase();
         const db = getDatabase();
-        console.log('Database initialized successfully');
 
-        // Create model instances with database connection
-        const itemModel = new ItemModel(db);
+        // Initialize models
         const inquiryModel = new InquiryModel(db);
         const inquiryItemModel = new InquiryItemModel(db);
         const promotionModel = new PromotionModel(db);
+        const orderModel = new OrderModel(db);
+        await promotionModel.initialize();
 
-        // Create and mount routes
-        app.use('/api/items', createItemsRouter(itemModel));
-        app.use('/api/inquiries', createInquiriesRouter({ 
-            db,
-            inquiryModel,
-            inquiryItemModel,
-            promotionModel
-        }));
-        app.use('/api/promotions', createPromotionsRouter(promotionModel));
-        app.use('/api/suppliers', createSuppliersRouter(db));
-        app.use('/api/supplier-responses', createSupplierResponsesRouter(db));
+        // Mount routes with proper error handling
+        function mountRoute(path, createRouter, options = {}) {
+            try {
+                // Create router with appropriate dependencies
+                const router = options.deps ? 
+                    createRouter(options.deps) : 
+                    createRouter({ db });
+
+                // Validate router
+                if (!router || typeof router.use !== 'function') {
+                    throw new Error(`Invalid router returned for ${path}`);
+                }
+
+                // Apply CORS to each route
+                router.use(cors(corsOptions));
+
+                // Mount router
+                app.use(path, router);
+                console.log(`Mounted route: ${path}`);
+            } catch (err) {
+                console.error(`Failed to mount route ${path}:`, err);
+                throw err;
+            }
+        }
+
+        // Mount each route
+        const routes = [
+            { path: '/api/items', creator: createItemsRouter },
+            { 
+                path: '/api/orders', 
+                creator: createOrdersRouter, 
+                deps: orderModel 
+            },
+            { 
+                path: '/api/promotions', 
+                creator: createPromotionsRouter, 
+                deps: { db, promotionModel }
+            },
+            { path: '/api/settings', creator: createSettingsRouter },
+            { path: '/api/suppliers', creator: createSuppliersRouter },
+            { 
+                path: '/api/inquiries', 
+                creator: createInquiriesRouter,
+                deps: { db, inquiryModel, inquiryItemModel }
+            },
+            { 
+                path: '/api/supplier-responses', 
+                creator: createSupplierResponsesRouter,
+                deps: { db }  // Explicitly set deps with db
+            }
+        ];
+
+        // Mount routes in sequence
+        for (const route of routes) {
+            mountRoute(route.path, route.creator, route.deps ? { deps: route.deps } : undefined);
+        }
 
         // Error handling middleware
         app.use((err, req, res, next) => {
-            console.error('Error:', err);
+            console.error('Global error handler:', err);
             res.status(500).json({
                 error: 'Internal Server Error',
-                details: err.message,
-                suggestion: 'Please try again or contact support if the issue persists'
+                message: err.message
             });
         });
 
         // Start server
+        const port = process.env.PORT || 5002;
         app.listen(port, () => {
-            console.log(`Server is running on port ${port}`);
-            console.log(`API endpoint: http://localhost:${port}/api`);
+            console.log(`Server running on port ${port}`);
         });
-    } catch (error) {
-        console.error('Failed to start server:', error);
+    } catch (err) {
+        console.error('Failed to start server:', err);
         process.exit(1);
     }
 }
@@ -96,11 +144,7 @@ async function startServer() {
 process.on('SIGINT', () => {
     const db = getDatabase();
     if (db) {
-        db.close((err) => {
-            if (err) {
-                console.error('Error closing database:', err);
-                process.exit(1);
-            }
+        db.close(() => {
             console.log('Database connection closed');
             process.exit(0);
         });

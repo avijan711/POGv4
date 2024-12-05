@@ -14,6 +14,20 @@ import {
   Grid,
 } from '@mui/material';
 
+const SUPPLIER_RESPONSE_REQUIRED_FIELDS = [
+  { field: 'item_id', label: 'Item ID', description: 'Unique identifier for each item', hebrewLabels: ['קוד פריט', 'מספר פריט'] },
+  { field: 'price_quoted', label: 'Price', description: 'Price quoted by supplier', hebrewLabels: ['מחיר', 'מחירון'] }
+];
+
+const SUPPLIER_RESPONSE_OPTIONAL_FIELDS = [
+  { field: 'hebrew_description', label: 'Hebrew Description', description: 'Item description in Hebrew', hebrewLabels: ['שם פריט'] },
+  { field: 'english_description', label: 'English Description', description: 'Item description in English' },
+  { field: 'hs_code', label: 'HS Code', description: 'Harmonized System code', hebrewLabels: ['קוד יצרן'] },
+  { field: 'new_reference_id', label: 'New Reference ID', description: 'ID of the replacement item' },
+  { field: 'notes', label: 'Notes', description: 'Additional notes', hebrewLabels: ['הערות'] },
+  { field: 'origin', label: 'Origin', description: 'Item origin or source', hebrewLabels: ['מקור', 'ארץ מקור'] }
+];
+
 const INVENTORY_REQUIRED_FIELDS = [
   { field: 'item_id', label: 'Item ID', description: 'Unique identifier for each item', hebrewLabels: ['קוד פריט', 'מספר פריט'] },
   { field: 'hebrew_description', label: 'Hebrew Description', description: 'Item description in Hebrew', hebrewLabels: ['שם פריט'] },
@@ -31,20 +45,6 @@ const INVENTORY_OPTIONAL_FIELDS = [
   { field: 'new_reference_id', label: 'New Reference ID', description: 'ID of the replacement item' },
   { field: 'reference_notes', label: 'Reference Notes', description: 'Additional reference information' },
   { field: 'notes', label: 'Notes', description: 'General notes about the item', hebrewLabels: ['הערות'] },
-  { field: 'origin', label: 'Origin', description: 'Item origin or source', hebrewLabels: ['מקור', 'ארץ מקור'] }
-];
-
-const SUPPLIER_RESPONSE_REQUIRED_FIELDS = [
-  { field: 'item_id', label: 'Item ID', description: 'Unique identifier for each item', hebrewLabels: ['קוד פריט', 'מספר פריט'] },
-  { field: 'price_quoted', label: 'Price Quoted', description: 'Price quoted by supplier', hebrewLabels: ['מחיר'] }
-];
-
-const SUPPLIER_RESPONSE_OPTIONAL_FIELDS = [
-  { field: 'hebrew_description', label: 'Hebrew Description', description: 'Item description in Hebrew', hebrewLabels: ['שם פריט'] },
-  { field: 'english_description', label: 'English Description', description: 'Item description in English' },
-  { field: 'hs_code', label: 'HS Code', description: 'Harmonized System code', hebrewLabels: ['קוד יצרן'] },
-  { field: 'new_reference_id', label: 'New Reference ID', description: 'ID of the replacement item' },
-  { field: 'notes', label: 'Notes', description: 'Additional notes', hebrewLabels: ['הערות'] },
   { field: 'origin', label: 'Origin', description: 'Item origin or source', hebrewLabels: ['מקור', 'ארץ מקור'] }
 ];
 

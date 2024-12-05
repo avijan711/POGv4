@@ -19,18 +19,15 @@ class BaseModel {
         debug.time(`Query ${queryId}`);
         debug.logQuery(`Query ${queryId}`, query, params);
 
-        return new Promise((resolve, reject) => {
-            this.db.all(query, params, (err, rows) => {
-                if (err) {
-                    debug.error(`Query ${queryId} error:`, err);
-                    reject(err);
-                    return;
-                }
-                debug.log(`Query ${queryId} result`, rows);
-                debug.timeEnd(`Query ${queryId}`);
-                resolve(rows || []);
-            });
-        });
+        try {
+            const rows = await this.db.allAsync(query, params);
+            debug.log(`Query ${queryId} result`, rows);
+            debug.timeEnd(`Query ${queryId}`);
+            return rows || [];
+        } catch (err) {
+            debug.error(`Query ${queryId} error:`, err);
+            throw err;
+        }
     }
 
     /**
@@ -44,19 +41,15 @@ class BaseModel {
         debug.time(`Single Query ${queryId}`);
         debug.logQuery(`Single Query ${queryId}`, query, params);
 
-        return new Promise((resolve, reject) => {
-            this.db.all(query, params, (err, rows) => {
-                if (err) {
-                    debug.error(`Single Query ${queryId} error:`, err);
-                    reject(err);
-                    return;
-                }
-                const row = rows && rows.length > 0 ? rows[0] : null;
-                debug.log(`Single Query ${queryId} result`, row);
-                debug.timeEnd(`Single Query ${queryId}`);
-                resolve(row);
-            });
-        });
+        try {
+            const row = await this.db.getAsync(query, params);
+            debug.log(`Single Query ${queryId} result`, row);
+            debug.timeEnd(`Single Query ${queryId}`);
+            return row;
+        } catch (err) {
+            debug.error(`Single Query ${queryId} error:`, err);
+            throw err;
+        }
     }
 
     /**
@@ -70,22 +63,15 @@ class BaseModel {
         debug.time(`Run ${queryId}`);
         debug.logQuery(`Run ${queryId}`, query, params);
 
-        return new Promise((resolve, reject) => {
-            this.db.run(query, params, function(err) {
-                if (err) {
-                    debug.error(`Run ${queryId} error:`, err);
-                    reject(err);
-                    return;
-                }
-                const result = {
-                    lastID: this.lastID,
-                    changes: this.changes
-                };
-                debug.log(`Run ${queryId} result`, result);
-                debug.timeEnd(`Run ${queryId}`);
-                resolve(result);
-            });
-        });
+        try {
+            const result = await this.db.runAsync(query, params);
+            debug.log(`Run ${queryId} result`, result);
+            debug.timeEnd(`Run ${queryId}`);
+            return result;
+        } catch (err) {
+            debug.error(`Run ${queryId} error:`, err);
+            throw err;
+        }
     }
 
     /**
@@ -98,33 +84,18 @@ class BaseModel {
         debug.time(`Transaction ${transactionId}`);
         debug.log(`Starting transaction ${transactionId}`);
 
-        return new Promise((resolve, reject) => {
-            this.db.serialize(() => {
-                this.db.run('BEGIN TRANSACTION');
-                
-                Promise.resolve()
-                    .then(() => transactionCallback())
-                    .then((result) => {
-                        this.db.run('COMMIT', (err) => {
-                            if (err) {
-                                debug.error(`Transaction ${transactionId} commit error:`, err);
-                                this.db.run('ROLLBACK');
-                                reject(err);
-                                return;
-                            }
-                            debug.log(`Transaction ${transactionId} committed successfully`);
-                            debug.timeEnd(`Transaction ${transactionId}`);
-                            resolve(result);
-                        });
-                    })
-                    .catch((error) => {
-                        debug.error(`Transaction ${transactionId} error:`, error);
-                        this.db.run('ROLLBACK', () => {
-                            reject(error);
-                        });
-                    });
-            });
-        });
+        try {
+            await this.db.runAsync('BEGIN TRANSACTION');
+            const result = await transactionCallback();
+            await this.db.runAsync('COMMIT');
+            debug.log(`Transaction ${transactionId} committed successfully`);
+            debug.timeEnd(`Transaction ${transactionId}`);
+            return result;
+        } catch (error) {
+            debug.error(`Transaction ${transactionId} error:`, error);
+            await this.db.runAsync('ROLLBACK');
+            throw error;
+        }
     }
 
     /**
