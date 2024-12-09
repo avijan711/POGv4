@@ -7,11 +7,11 @@ export const useSupplierResponses = (inquiryId) => {
     const [error, setError] = useState(null);
     const [responses, setResponses] = useState({});
     const [stats, setStats] = useState({
-        totalResponses: 0,
-        totalItems: 0,
-        totalSuppliers: 0,
-        respondedItems: 0,
-        missingResponses: 0
+        total_responses: 0,
+        total_items: 0,
+        total_suppliers: 0,
+        responded_items: 0,
+        missing_responses: 0
     });
 
     // Use a ref to track if we're already fetching
@@ -42,26 +42,40 @@ export const useSupplierResponses = (inquiryId) => {
 
             // Process supplier data to ensure missing items are properly parsed
             const processedSupplierData = Object.entries(supplierData).reduce((acc, [supplierId, data]) => {
-                let missingItems = [];
+                let missing_items = [];
                 try {
-                    if (typeof data.missingItems === 'string') {
-                        console.log(`Missing items for supplier ${supplierId} is a string:`, data.missingItems);
-                        missingItems = JSON.parse(data.missingItems);
-                    } else if (Array.isArray(data.missingItems)) {
-                        console.log(`Missing items for supplier ${supplierId} is an array:`, data.missingItems);
-                        missingItems = data.missingItems;
+                    if (typeof data.missing_items === 'string') {
+                        console.log(`Missing items for supplier ${supplierId} is a string:`, data.missing_items);
+                        missing_items = JSON.parse(data.missing_items);
+                    } else if (Array.isArray(data.missing_items)) {
+                        console.log(`Missing items for supplier ${supplierId} is an array:`, data.missing_items);
+                        missing_items = data.missing_items;
                     }
                     // Filter out any null values
-                    missingItems = missingItems.filter(Boolean);
-                    console.log(`Processed missing items for supplier ${supplierId}:`, missingItems);
+                    missing_items = missing_items.filter(Boolean);
+                    console.log(`Processed missing items for supplier ${supplierId}:`, missing_items);
                 } catch (e) {
                     console.error(`Error parsing missing items for supplier ${supplierId}:`, e);
-                    missingItems = [];
+                    missing_items = [];
                 }
+
+                // Ensure responses are sorted by date (most recent first)
+                const sortedResponses = Array.isArray(data.responses) 
+                    ? [...data.responses].sort((a, b) => {
+                        return new Date(b.response_date) - new Date(a.response_date);
+                    })
+                    : [];
+
+                // Get the latest response date from sorted responses
+                const latest_response = sortedResponses.length > 0 
+                    ? sortedResponses[0].response_date 
+                    : data.latest_response;
 
                 acc[supplierId] = {
                     ...data,
-                    missingItems
+                    responses: sortedResponses,
+                    missing_items,
+                    latest_response
                 };
                 return acc;
             }, {});
@@ -75,19 +89,19 @@ export const useSupplierResponses = (inquiryId) => {
             setStats(prev => {
                 const newStats = {
                     ...prev,
-                    totalResponses: serverStats.totalResponses || 0,
-                    totalItems: serverStats.totalItems || 0,
-                    totalSuppliers: serverStats.totalSuppliers || 0,
-                    respondedItems: serverStats.respondedItems || 0,
-                    missingResponses: serverStats.missingResponses || 0,
-                    responsesBySupplier: Object.fromEntries(
+                    total_responses: serverStats.totalResponses || 0,
+                    total_items: serverStats.totalItems || 0,
+                    total_suppliers: serverStats.totalSuppliers || 0,
+                    responded_items: serverStats.respondedItems || 0,
+                    missing_responses: serverStats.missingResponses || 0,
+                    responses_by_supplier: Object.fromEntries(
                         Object.entries(processedSupplierData).map(([id, data]) => [
                             id,
                             {
-                                totalItems: data.totalItems || 0,
-                                promotionItems: data.promotionItems || 0,
-                                averagePrice: data.averagePrice || 0,
-                                missingItemsCount: data.missingItems?.length || 0
+                                total_items: data.total_items || 0,
+                                promotion_items: data.promotion_items || 0,
+                                average_price: data.average_price || 0,
+                                missing_items_count: data.missing_items?.length || 0
                             }
                         ])
                     )

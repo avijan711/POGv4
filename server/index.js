@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const debug = require('./utils/debug');
 const path = require('path');
+const fs = require('fs');
 const { initializeDatabase, DatabaseAccessLayer } = require('./config/database');
 
 // Import route creators
@@ -16,6 +17,64 @@ const createPriceRoutes = require('./routes/prices');
 // Import models
 const PromotionModel = require('./models/promotion');
 
+async function runMigrations(dal) {
+    debug.log('Running migrations...');
+    const migrations = [
+        'add_price_history_tables.sql',
+        'add_item_notes.sql',
+        'add_currency_settings.sql',
+        'add_supplier_price_indexes.sql'
+    ];
+
+    for (const migration of migrations) {
+        const migrationPath = path.join(__dirname, 'migrations', migration);
+        if (fs.existsSync(migrationPath)) {
+            const sql = fs.readFileSync(migrationPath, 'utf8');
+            try {
+                // Split the SQL into individual statements, preserving CREATE TRIGGER statements
+                const statements = [];
+                let currentStatement = '';
+                let inTrigger = false;
+
+                sql.split(';').forEach(statement => {
+                    statement = statement.trim();
+                    if (!statement) return;
+
+                    if (statement.toUpperCase().includes('CREATE TRIGGER') || inTrigger) {
+                        inTrigger = true;
+                        currentStatement += statement + ';';
+                        if (statement.toUpperCase().includes('END')) {
+                            statements.push(currentStatement);
+                            currentStatement = '';
+                            inTrigger = false;
+                        }
+                    } else {
+                        statements.push(statement + ';');
+                    }
+                });
+
+                // Execute each statement
+                for (const statement of statements) {
+                    if (statement.trim()) {
+                        try {
+                            await dal.run(statement);
+                        } catch (err) {
+                            // Ignore "already exists" errors
+                            if (!err.message.includes('already exists')) {
+                                throw err;
+                            }
+                        }
+                    }
+                }
+                debug.log(`Migration ${migration} completed successfully`);
+            } catch (err) {
+                debug.error(`Error running migration ${migration}:`, err);
+                // Continue with other migrations
+            }
+        }
+    }
+}
+
 async function startServer() {
     try {
         const app = express();
@@ -29,27 +88,7 @@ async function startServer() {
         const promotionModel = new PromotionModel(dal);
 
         // Run migrations
-        debug.log('Running migrations...');
-        const fs = require('fs');
-        const migrations = [
-            'add_price_history_tables.sql',
-            'add_item_notes.sql',
-            'add_currency_settings.sql'
-        ];
-
-        for (const migration of migrations) {
-            const migrationPath = path.join(__dirname, 'migrations', migration);
-            if (fs.existsSync(migrationPath)) {
-                const sql = fs.readFileSync(migrationPath, 'utf8');
-                try {
-                    await dal.executeQuery(sql);
-                    debug.log(`Migration ${migration} completed successfully`);
-                } catch (err) {
-                    debug.error(`Error running migration ${migration}:`, err);
-                    // Continue with other migrations
-                }
-            }
-        }
+        await runMigrations(dal);
 
         // Middleware
         app.use(cors({

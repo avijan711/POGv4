@@ -35,8 +35,8 @@ export function SupplierRow({
     const [open, setOpen] = React.useState(false);
     
     const missingItemsData = React.useMemo(() => {
-        return parseMissingItems(supplierData.missingItems, supplierId);
-    }, [supplierData.missingItems, supplierId]);
+        return parseMissingItems(supplierData.missing_items, supplierId);
+    }, [supplierData.missing_items, supplierId]);
 
     const missingItemsCount = supplierData.missing_count || missingItemsData.count;
 
@@ -62,7 +62,7 @@ export function SupplierRow({
                 </TableCell>
                 <TableCell align="right">
                     <Chip
-                        label={`${supplierData.item_count || 0} Items`}
+                        label={`${supplierData.total_items || 0} Items`}
                         size="small"
                         color="primary"
                         variant="outlined"
@@ -88,7 +88,7 @@ export function SupplierRow({
                             color="warning"
                             onClick={() => onShowMissing({
                                 ...supplierData,
-                                missingItems: missingItemsData.items
+                                missing_items: missingItemsData.items
                             })}
                             sx={{ cursor: 'pointer' }}
                         />

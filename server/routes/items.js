@@ -10,8 +10,9 @@ const fs = require('fs');
 
 function createItemsRouter({ db }) {
     const router = express.Router();
-    const itemModel = new Item(db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db));
-    const supplierPricesService = new SupplierPricesService(db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db));
+    const dal = db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db);
+    const itemModel = new Item(dal);
+    const supplierPricesService = new SupplierPricesService(dal);
 
     // Get supplier prices for item
     router.get('/:id/supplier-prices', async (req, res) => {
@@ -206,22 +207,6 @@ function createItemsRouter({ db }) {
             debug.error('Error deleting file:', err);
             res.status(500).json({
                 error: 'Failed to delete file',
-                details: err.message,
-                suggestion: 'Please try again or contact support if the issue persists'
-            });
-        }
-    });
-
-    // Get item supplier prices
-    router.get('/:id/supplier-prices', async (req, res) => {
-        try {
-            debug.log('Fetching supplier prices for item:', req.params.id);
-            const prices = await itemModel.getSupplierPrices(req.params.id);
-            res.json(prices);
-        } catch (err) {
-            debug.error('Error fetching supplier prices:', err);
-            res.status(500).json({
-                error: 'Failed to fetch supplier prices',
                 details: err.message,
                 suggestion: 'Please try again or contact support if the issue persists'
             });

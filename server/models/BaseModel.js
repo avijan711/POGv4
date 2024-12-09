@@ -15,7 +15,12 @@ class BaseModel {
      * @returns {Promise} - Resolves with query results
      */
     async executeQuery(query, params = []) {
-        return await this.db.query(query, params);
+        try {
+            return await this.db.query(query, params);
+        } catch (err) {
+            debug.error('Error executing query:', err);
+            throw err;
+        }
     }
 
     /**
@@ -25,7 +30,12 @@ class BaseModel {
      * @returns {Promise} - Resolves with a single row
      */
     async executeQuerySingle(query, params = []) {
-        return await this.db.querySingle(query, params);
+        try {
+            return await this.db.querySingle(query, params);
+        } catch (err) {
+            debug.error('Error executing single query:', err);
+            throw err;
+        }
     }
 
     /**
@@ -35,7 +45,12 @@ class BaseModel {
      * @returns {Promise} - Resolves with the result
      */
     async executeRun(query, params = []) {
-        return await this.db.run(query, params);
+        try {
+            return await this.db.run(query, params);
+        } catch (err) {
+            debug.error('Error executing run:', err);
+            throw err;
+        }
     }
 
     /**
@@ -44,7 +59,15 @@ class BaseModel {
      * @returns {Promise} - Resolves when transaction is complete
      */
     async executeTransaction(transactionCallback) {
-        return await this.db.executeTransaction(transactionCallback);
+        try {
+            const result = await this.db.executeTransaction(async () => {
+                return await transactionCallback();
+            });
+            return result;
+        } catch (err) {
+            debug.error('Error executing transaction:', err);
+            throw err;
+        }
     }
 
     /**

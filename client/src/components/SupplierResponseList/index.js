@@ -80,12 +80,16 @@ export function SupplierResponseList({ inquiryId }) {
         if (!supplierToDelete) return;
 
         try {
-            const validation = validateSupplierForDeletion(supplierToDelete);
-            if (!validation.isValid) {
-                throw new Error(validation.error);
+            // Get the latest response date from the supplier's responses
+            const latestResponse = supplierToDelete.responses?.length > 0 
+                ? supplierToDelete.responses[0].response_date 
+                : supplierToDelete.latest_response;
+
+            if (!latestResponse) {
+                throw new Error('No response date found for this supplier');
             }
 
-            const date = formatDate(new Date(supplierToDelete.latest_response));
+            const date = formatDate(new Date(latestResponse));
             const supplierId = parseInt(supplierToDelete.supplier_id, 10);
 
             if (isNaN(supplierId)) {
@@ -283,7 +287,7 @@ export function SupplierResponseList({ inquiryId }) {
                 onConfirm={handleBulkDelete}
                 title="Delete All Responses"
                 message={`Are you sure you want to delete all responses from ${supplierToDelete?.supplier_name}? 
-                        This will remove ${supplierToDelete?.item_count} responses and cannot be undone.`}
+                        This will remove ${supplierToDelete?.total_items} responses and cannot be undone.`}
             />
 
             {/* Missing Items Dialog */}
@@ -293,7 +297,7 @@ export function SupplierResponseList({ inquiryId }) {
                     setMissingItemsDialogOpen(false);
                     setSelectedSupplier(null);
                 }}
-                items={selectedSupplier?.missingItems || []}
+                items={selectedSupplier?.missing_items || []}
                 supplierName={selectedSupplier?.supplier_name || ''}
             />
 

@@ -15,10 +15,10 @@ import {
     Chip,
     Stack,
     TextField,
-    MenuItem,
     FormControl,
     InputLabel,
     Select,
+    MenuItem,
     CircularProgress,
 } from '@mui/material';
 import {
@@ -28,6 +28,7 @@ import {
     History as HistoryIcon,
     FilterList as FilterListIcon,
     Settings as SettingsIcon,
+    ContentCopy as ContentCopyIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { useSettings } from '../../hooks/useSettings';
@@ -36,8 +37,8 @@ import ExchangeRateDialog from './ExchangeRateDialog';
 function formatPrice(price, currency = 'ILS') {
     if (price === null || price === undefined) return '-';
     return currency === 'EUR' 
-        ? `€${price.toFixed(2)}`
-        : `₪${price.toFixed(2)}`;
+        ? `€${Number(price).toFixed(2)}`
+        : `₪${Number(price).toFixed(2)}`;
 }
 
 function formatDate(date) {
@@ -47,7 +48,7 @@ function formatDate(date) {
 
 function formatDiscount(discount) {
     if (discount === null || discount === undefined) return '-';
-    return `${discount.toFixed(1)}%`;
+    return `${Number(discount).toFixed(1)}%`;
 }
 
 export default function SupplierPricingTile({ 
@@ -64,15 +65,30 @@ export default function SupplierPricingTile({
     const { settings } = useSettings();
     const eurIlsRate = parseFloat(settings.eur_ils_rate?.value || '3.75');
 
+    const handleCopyItemId = async () => {
+        try {
+            await navigator.clipboard.writeText(item.item_id);
+        } catch (err) {
+            console.error('Failed to copy:', err);
+        }
+    };
+
     const bestPrice = supplierPrices[0]; // Already sorted by discount on server
 
     return (
         <Paper sx={{ p: 2, height: '100%' }}>
             {/* Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="h6" component="div">
-                    Supplier Pricing
-                </Typography>
+                <Stack direction="row" spacing={1} alignItems="center">
+                    <Typography variant="h6" component="div">
+                        {item.item_id}
+                    </Typography>
+                    <Tooltip title="Copy Item ID">
+                        <IconButton size="small" onClick={handleCopyItemId}>
+                            <ContentCopyIcon fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
+                </Stack>
                 <Stack direction="row" spacing={1}>
                     {/* Exchange Rate Button */}
                     <Tooltip title="Update Exchange Rate">

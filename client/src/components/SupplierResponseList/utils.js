@@ -67,12 +67,25 @@ export const formatPrice = (price) => {
 /**
  * Get the latest response date from supplier data
  * @param {Object} supplierData - The supplier data object
- * @returns {Date} The latest response date
+ * @returns {Date|null} The latest response date or null if not found
  */
 export const getLatestResponseDate = (supplierData) => {
-    return supplierData.latest_response ? 
-        new Date(supplierData.latest_response) : 
-        new Date();
+    if (!supplierData) return null;
+
+    // Try to get date from responses array first
+    if (Array.isArray(supplierData.responses) && supplierData.responses.length > 0) {
+        const latestResponse = supplierData.responses[0].response_date;
+        if (latestResponse) {
+            return new Date(latestResponse);
+        }
+    }
+
+    // Fall back to latest_response field
+    if (supplierData.latest_response) {
+        return new Date(supplierData.latest_response);
+    }
+
+    return null;
 };
 
 /**
@@ -98,8 +111,10 @@ export const validateSupplierForDeletion = (supplierData) => {
         return { isValid: false, error: 'Invalid supplier ID' };
     }
 
-    if (!supplierData.latest_response) {
-        return { isValid: false, error: 'No response date found' };
+    // Check for response date in multiple places
+    const latestResponse = getLatestResponseDate(supplierData);
+    if (!latestResponse) {
+        return { isValid: false, error: 'No response date found for this supplier' };
     }
 
     return { isValid: true, error: null };

@@ -6,38 +6,46 @@ WITH exchange_rate AS (
     FROM settings
     WHERE key = 'eur_ils_rate'
 ),
+latest_supplier_responses AS (
+    SELECT 
+        sr.item_id,
+        sr.supplier_id,
+        sr.price_quoted,
+        sr.response_date,
+        sr.is_promotion,
+        sr.promotion_name,
+        ROW_NUMBER() OVER (PARTITION BY sr.item_id, sr.supplier_id ORDER BY sr.response_date DESC) as rn
+    FROM supplier_response sr
+    WHERE sr.status = 'active'
+),
 latest_prices AS (
     SELECT 
-        spl.item_id,
-        spl.supplier_id,
+        sr.item_id,
+        sr.supplier_id,
         s.name as supplier_name,
-        spl.current_price as price_eur,
-        spl.is_promotion,
-        CASE 
-            WHEN spl.is_promotion = 1 THEN p.name
-            ELSE NULL
-        END as promotion_name,
-        spl.last_updated as date,
+        sr.price_quoted as price_eur,
+        sr.is_promotion,
+        sr.promotion_name,
+        sr.response_date as date,
         i.import_markup,
         i.retail_price as retail_price_ils,
         er.eur_ils_rate,
         -- Calculate cost in ILS
-        ROUND(spl.current_price * i.import_markup * er.eur_ils_rate, 2) as cost_ils,
+        ROUND(sr.price_quoted * i.import_markup * er.eur_ils_rate, 2) as cost_ils,
         -- Calculate discount percentage
         CASE 
             WHEN i.retail_price > 0 THEN
                 ROUND(
-                    ((i.retail_price - (spl.current_price * i.import_markup * er.eur_ils_rate)) / i.retail_price) * 100,
+                    ((i.retail_price - (sr.price_quoted * i.import_markup * er.eur_ils_rate)) / i.retail_price) * 100,
                     1
                 )
             ELSE NULL
         END as discount_percentage
-    FROM supplier_price_list spl
-    JOIN supplier s ON spl.supplier_id = s.supplier_id
-    JOIN item i ON spl.item_id = i.item_id
+    FROM latest_supplier_responses sr
+    JOIN supplier s ON sr.supplier_id = s.supplier_id
+    JOIN item i ON sr.item_id = i.item_id
     CROSS JOIN exchange_rate er
-    LEFT JOIN promotion p ON spl.promotion_id = p.promotion_id
-    WHERE spl.item_id = ?
+    WHERE sr.rn = 1
 ),
 price_history AS (
     SELECT 
@@ -74,6 +82,7 @@ price_history AS (
 SELECT *
 FROM (
     SELECT * FROM latest_prices
+    WHERE item_id = ?
     UNION ALL
     SELECT * FROM price_history
 ) combined_prices
@@ -85,19 +94,23 @@ LIMIT ? OFFSET ?;
 `;
 
 const getSupplierPricesCountQuery = `
-WITH exchange_rate AS (
-    SELECT CAST(value AS DECIMAL(10,2)) as eur_ils_rate
-    FROM settings
-    WHERE key = 'eur_ils_rate'
+WITH latest_supplier_responses AS (
+    SELECT 
+        sr.item_id,
+        sr.supplier_id,
+        sr.response_date as date,
+        ROW_NUMBER() OVER (PARTITION BY sr.item_id, sr.supplier_id ORDER BY sr.response_date DESC) as rn
+    FROM supplier_response sr
+    WHERE sr.status = 'active'
 ),
 all_prices AS (
     -- Current prices
     SELECT 
-        spl.item_id,
-        spl.supplier_id,
-        spl.last_updated as date
-    FROM supplier_price_list spl
-    WHERE spl.item_id = ?
+        sr.item_id,
+        sr.supplier_id,
+        sr.date
+    FROM latest_supplier_responses sr
+    WHERE sr.rn = 1 AND sr.item_id = ?
 
     UNION ALL
 

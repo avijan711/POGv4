@@ -2,107 +2,98 @@ const BaseModel = require('./BaseModel');
 const debug = require('../utils/debug');
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 class SettingsModel extends BaseModel {
-    constructor(db) {
-        super(db);
+    constructor(dal) {
+        super(dal);
     }
 
-    async get(key) {
-        const sql = 'SELECT SettingValue FROM Settings WHERE SettingKey = ?';
-        const row = await this.executeQuerySingle(sql, [key]);
-        return row ? row.SettingValue : null;
+    async getAllSettings() {
+        const sql = 'SELECT * FROM settings';
+        return await this.executeQuery(sql);
     }
 
-    async getAll() {
-        const sql = 'SELECT SettingKey, SettingValue FROM Settings';
-        const rows = await this.executeQuery(sql);
-        const settings = {};
-        rows.forEach(row => {
-            settings[row.SettingKey] = row.SettingValue;
-        });
-        return settings;
+    async getSetting(key) {
+        const sql = 'SELECT * FROM settings WHERE key = ?';
+        return await this.executeQuerySingle(sql, [key]);
     }
 
-    async set(key, value) {
+    async updateSetting(key, value, description = null) {
         const sql = `
-            INSERT INTO Settings (SettingKey, SettingValue, LastUpdated)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(SettingKey) DO UPDATE SET 
-                SettingValue = excluded.SettingValue,
-                LastUpdated = CURRENT_TIMESTAMP
+            INSERT INTO settings (key, value, description)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                description = COALESCE(excluded.description, settings.description),
+                updated_at = CURRENT_TIMESTAMP
         `;
-        await this.executeRun(sql, [key, value]);
-        return true;
+        await this.executeRun(sql, [key, value.toString(), description]);
+        return await this.getSetting(key);
     }
 
     async resetDatabase() {
-        // Define the delete statements directly to avoid parsing issues
-        const deleteStatements = [
-            'DELETE FROM promotion_item',
-            'DELETE FROM order_item',
-            'DELETE FROM supplier_response_item',
-            'DELETE FROM promotion',
-            'DELETE FROM "order"',
-            'DELETE FROM supplier_response',
-            'DELETE FROM price_history',
-            'DELETE FROM inquiry_item',
-            'DELETE FROM inquiry',
-            'DELETE FROM item_files',
-            'DELETE FROM item_reference_change',
-            'DELETE FROM supplier',
-            'DELETE FROM item'
-        ];
-
         try {
-            // Step 1: Disable foreign keys (outside transaction)
-            debug.log('Disabling foreign keys');
-            await this.executeRun('PRAGMA foreign_keys = OFF');
+            debug.log('Starting database reset...');
+
+            // Get paths
+            const resetScriptPath = path.join(__dirname, '..', 'reset_db.sql');
+            const dbPath = path.join(__dirname, '..', 'inventory.db');
+
+            // Ensure the reset script exists
+            if (!fs.existsSync(resetScriptPath)) {
+                debug.error('Reset script not found:', resetScriptPath);
+                throw new Error('Reset script not found');
+            }
+
+            // Execute the reset script using sqlite3
+            const command = `sqlite3 "${dbPath}" ".read ${resetScriptPath}"`;
+            debug.log('Executing command:', command);
 
             try {
-                // Step 2: Execute DELETE operations in a transaction
-                debug.log('Starting delete operations');
-                await this.executeTransaction(async () => {
-                    for (const stmt of deleteStatements) {
-                        debug.log('Executing:', stmt);
-                        await this.executeRun(stmt);
-                    }
-                });
-
-                // Step 3: Run VACUUM separately (must be outside transaction)
-                debug.log('Running VACUUM');
-                try {
-                    await this.executeRun('VACUUM');
-                } catch (vacuumError) {
-                    debug.error('Error during VACUUM:', vacuumError);
-                    // Continue even if VACUUM fails, as the data is already cleared
+                const { stdout, stderr } = await execPromise(command);
+                
+                if (stderr) {
+                    debug.error('SQLite error output:', stderr);
+                    throw new Error('Error executing reset script: ' + stderr);
                 }
 
-                // Step 4: Re-enable foreign keys
-                debug.log('Re-enabling foreign keys');
-                await this.executeRun('PRAGMA foreign_keys = ON');
+                if (stdout) {
+                    debug.log('SQLite output:', stdout);
+                }
+            } catch (err) {
+                debug.error('Error executing sqlite3 command:', err);
+                throw new Error('Failed to execute sqlite3 command: ' + err.message);
+            }
 
-                return {
-                    success: true,
+            // Verify database state
+            try {
+                const settings = await this.getAllSettings();
+                debug.log('Settings after reset:', settings);
+                
+                if (!settings || settings.length === 0) {
+                    throw new Error('Settings table is empty after reset');
+                }
+
+                // Execute VACUUM separately
+                debug.log('Executing VACUUM...');
+                await this.executeRun('VACUUM;');
+                debug.log('VACUUM completed successfully');
+
+                debug.log('Database reset completed successfully');
+                return { 
+                    success: true, 
                     message: 'Database reset successfully',
-                    details: `Cleared ${deleteStatements.length} tables`
+                    details: 'All data has been cleared while preserving settings'
                 };
-            } catch (error) {
-                // Re-enable foreign keys if transaction fails
-                debug.error('Error during reset, re-enabling foreign keys');
-                await this.executeRun('PRAGMA foreign_keys = ON');
-                throw error;
+            } catch (err) {
+                debug.error('Error verifying database state:', err);
+                throw new Error('Database verification failed after reset: ' + err.message);
             }
         } catch (error) {
-            debug.error('Error resetting database:', error);
-
-            // Final attempt to re-enable foreign keys
-            try {
-                await this.executeRun('PRAGMA foreign_keys = ON');
-            } catch (pragmaError) {
-                debug.error('Error re-enabling foreign keys:', pragmaError);
-            }
-
+            debug.error('Error during database reset:', error);
             throw error;
         }
     }

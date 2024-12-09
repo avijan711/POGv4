@@ -1,16 +1,16 @@
 const express = require('express');
 const debug = require('../utils/debug');
+const SettingsModel = require('../models/settings');
 const { DatabaseAccessLayer } = require('../config/database');
 
 function createSettingsRouter({ db }) {
     const router = express.Router();
-    const dal = db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db);
+    const settingsModel = new SettingsModel(db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db));
 
     // Get all settings
     router.get('/', async (req, res) => {
         try {
-            const sql = 'SELECT * FROM settings';
-            const settings = await dal.executeQuery(sql);
+            const settings = await settingsModel.getAllSettings();
             
             // Convert to key-value object
             const settingsObject = settings.reduce((acc, setting) => {
@@ -36,8 +36,7 @@ function createSettingsRouter({ db }) {
     // Get specific setting
     router.get('/:key', async (req, res) => {
         try {
-            const sql = 'SELECT * FROM settings WHERE key = ?';
-            const [setting] = await dal.executeQuery(sql, [req.params.key]);
+            const setting = await settingsModel.getSetting(req.params.key);
 
             if (!setting) {
                 return res.status(404).json({
@@ -87,21 +86,7 @@ function createSettingsRouter({ db }) {
                 }
             }
 
-            const sql = `
-                INSERT INTO settings (key, value, description)
-                VALUES (?, ?, ?)
-                ON CONFLICT(key) DO UPDATE SET
-                    value = excluded.value,
-                    description = COALESCE(excluded.description, settings.description)
-            `;
-
-            await dal.executeRun(sql, [req.params.key, value.toString(), description]);
-
-            // Get updated setting
-            const [setting] = await dal.executeQuery(
-                'SELECT * FROM settings WHERE key = ?',
-                [req.params.key]
-            );
+            const setting = await settingsModel.updateSetting(req.params.key, value, description);
 
             res.json({
                 message: 'Setting updated successfully',
@@ -117,6 +102,41 @@ function createSettingsRouter({ db }) {
                 error: 'Failed to update setting',
                 details: err.message,
                 suggestion: 'Please try again or contact support if the issue persists'
+            });
+        }
+    });
+
+    // Reset database
+    router.post('/reset', async (req, res) => {
+        try {
+            debug.log('Starting database reset...');
+            const result = await settingsModel.resetDatabase();
+            
+            if (result.success) {
+                debug.log('Database reset completed successfully');
+                res.json({
+                    success: true,
+                    message: 'Database reset successfully',
+                    details: 'All data has been cleared and tables have been reinitialized'
+                });
+            } else {
+                throw new Error('Database reset failed');
+            }
+        } catch (err) {
+            debug.error('Error resetting database:', err);
+            
+            // Determine if this is a known error type
+            const isTransactionError = err.name === 'TransactionError';
+            const isDatabaseError = err.name === 'DatabaseError';
+            
+            res.status(500).json({
+                error: 'Failed to reset database',
+                details: err.message,
+                type: isTransactionError ? 'TRANSACTION_ERROR' : 
+                      isDatabaseError ? 'DATABASE_ERROR' : 'UNKNOWN_ERROR',
+                suggestion: isTransactionError ? 'Database transaction failed, please try again' :
+                           isDatabaseError ? 'Database operation failed, please check the logs' :
+                           'Please try again or contact support if the issue persists'
             });
         }
     });

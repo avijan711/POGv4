@@ -158,6 +158,60 @@ function createRouter({ db }) {
         }
     });
 
+    // Update inquiry item quantity
+    router.put('/inquiry-items/:inquiryItemId/quantity', async (req, res) => {
+        try {
+            const { inquiryItemId } = req.params;
+            const { requested_qty } = req.body;
+
+            if (requested_qty === undefined) {
+                return res.status(400).json({
+                    error: 'Missing required field',
+                    details: 'Quantity is required',
+                    suggestion: 'Please provide a quantity value'
+                });
+            }
+
+            await inquiryItemModel.updateQuantity(inquiryItemId, requested_qty);
+            res.status(200).json({ message: 'Quantity updated successfully' });
+        } catch (err) {
+            debug.error('Error updating quantity:', err);
+            if (err.message.includes('not found')) {
+                res.status(404).json({
+                    error: 'Item not found',
+                    details: err.message
+                });
+            } else {
+                res.status(500).json({
+                    error: 'Failed to update quantity',
+                    details: err.message
+                });
+            }
+        }
+    });
+
+    // Delete inquiry item
+    router.delete('/inquiry-items/:inquiryItemId', async (req, res) => {
+        try {
+            const { inquiryItemId } = req.params;
+            await inquiryItemModel.deleteItem(inquiryItemId);
+            res.status(204).send();
+        } catch (err) {
+            debug.error('Error deleting inquiry item:', err);
+            if (err.message.includes('not found')) {
+                res.status(404).json({
+                    error: 'Item not found',
+                    details: err.message
+                });
+            } else {
+                res.status(500).json({
+                    error: 'Failed to delete item',
+                    details: err.message
+                });
+            }
+        }
+    });
+
     // Get Excel columns for mapping
     router.post('/columns', handleUpload, async (req, res, next) => {
         try {

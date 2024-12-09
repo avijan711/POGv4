@@ -33,6 +33,7 @@ class DatabaseAccessLayer {
             throw new DatabaseError('Database instance is required', 'INITIALIZATION_ERROR');
         }
         this.db = db;
+        this.inTransaction = false;
     }
 
     // Core database operations
@@ -40,12 +41,14 @@ class DatabaseAccessLayer {
         try {
             const queryId = Math.random().toString(36).substring(7);
             debug.time(`Query ${queryId}`);
-            debug.logQuery(`Query ${queryId}`, sql, params);
+            debug.log(`SQL Query ${queryId}:`, { sql, params });
 
             const rows = await this.db.allAsync(sql, params);
             debug.timeEnd(`Query ${queryId}`);
+            debug.log(`Query ${queryId} returned ${rows?.length || 0} rows`);
             return rows || [];
         } catch (err) {
+            debug.error('Query execution failed:', err);
             throw new DatabaseError('Query execution failed', 'QUERY_ERROR', { sql, params, originalError: err });
         }
     }
@@ -54,12 +57,14 @@ class DatabaseAccessLayer {
         try {
             const queryId = Math.random().toString(36).substring(7);
             debug.time(`Single Query ${queryId}`);
-            debug.logQuery(`Single Query ${queryId}`, sql, params);
+            debug.log(`SQL Single Query ${queryId}:`, { sql, params });
 
             const row = await this.db.getAsync(sql, params);
             debug.timeEnd(`Query ${queryId}`);
+            debug.log(`Query ${queryId} returned row:`, row);
             return row;
         } catch (err) {
+            debug.error('Single query execution failed:', err);
             throw new DatabaseError('Single query execution failed', 'QUERY_ERROR', { sql, params, originalError: err });
         }
     }
@@ -68,12 +73,14 @@ class DatabaseAccessLayer {
         try {
             const queryId = Math.random().toString(36).substring(7);
             debug.time(`Run ${queryId}`);
-            debug.logQuery(`Run ${queryId}`, sql, params);
+            debug.log(`SQL Run ${queryId}:`, { sql, params });
 
             const result = await this.db.runAsync(sql, params);
             debug.timeEnd(`Run ${queryId}`);
+            debug.log(`Run ${queryId} affected ${result?.changes || 0} rows`);
             return result;
         } catch (err) {
+            debug.error('Run operation failed:', err);
             throw new DatabaseError('Run operation failed', 'RUN_ERROR', { sql, params, originalError: err });
         }
     }
@@ -84,9 +91,18 @@ class DatabaseAccessLayer {
         debug.time(`Transaction ${transactionId}`);
         debug.log(`Starting transaction ${transactionId}`);
 
+        if (this.inTransaction) {
+            debug.error(`Transaction ${transactionId} error: Already in transaction`);
+            throw new TransactionError('Cannot start a transaction within a transaction');
+        }
+
         try {
+            this.inTransaction = true;
             await this.run('BEGIN IMMEDIATE TRANSACTION');
+            debug.log(`Transaction ${transactionId} begun`);
+
             const result = await callback();
+            
             await this.run('COMMIT');
             debug.log(`Transaction ${transactionId} committed successfully`);
             debug.timeEnd(`Transaction ${transactionId}`);
@@ -108,24 +124,11 @@ class DatabaseAccessLayer {
                 transactionId,
                 originalError: error
             });
+        } finally {
+            this.inTransaction = false;
         }
     }
 }
-
-// Helper function to run PRAGMA settings
-const setPragma = (db, pragma, value) => {
-    return new Promise((resolve, reject) => {
-        const pragmaStatement = `PRAGMA ${pragma} = ${value};`;
-        db.run(pragmaStatement, (err) => {
-            if (err) {
-                console.error(`Error setting ${pragma}:`, err);
-                reject(err);
-            } else {
-                resolve();
-            }
-        });
-    });
-};
 
 // Helper function to promisify database methods
 function promisifyDb(db) {
@@ -172,118 +175,77 @@ async function initializeDatabase() {
         const Database = verbose.Database;
         db = new Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, async (err) => {
             if (err) {
-                console.error('Error connecting to database:', err);
+                debug.error('Error connecting to database:', err);
                 reject(err);
                 return;
             }
 
             db = promisifyDb(db);
-            console.log('Connected to SQLite database');
+            debug.log('Connected to SQLite database');
             
             try {
                 await db.getAsync("PRAGMA query_only = 0;");
-                await setPragma(db, 'journal_mode', 'WAL');
-                await setPragma(db, 'synchronous', 'NORMAL');
-                await setPragma(db, 'busy_timeout', '30000');
-                await setPragma(db, 'foreign_keys', 'ON');
-                await setPragma(db, 'cache_size', '-4000');
-                await setPragma(db, 'temp_store', 'MEMORY');
-                await setPragma(db, 'locking_mode', 'NORMAL');
-                await setPragma(db, 'mmap_size', '268435456');
+                await db.runAsync("PRAGMA journal_mode = WAL;");
+                await db.runAsync("PRAGMA synchronous = NORMAL;");
+                await db.runAsync("PRAGMA busy_timeout = 30000;");
+                await db.runAsync("PRAGMA foreign_keys = ON;");
+                await db.runAsync("PRAGMA cache_size = -4000;");
+                await db.runAsync("PRAGMA temp_store = MEMORY;");
+                await db.runAsync("PRAGMA locking_mode = NORMAL;");
+                await db.runAsync("PRAGMA mmap_size = 268435456;");
 
                 try {
                     await db.getAsync("SELECT json_group_array(1) as test");
                 } catch (e) {
                     if (e.message.includes('no such function')) {
-                        console.error('JSON1 extension not available. Some features may not work.');
+                        debug.error('JSON1 extension not available. Some features may not work.');
                     }
-                    console.error('Error checking JSON1 extension:', e);
+                    debug.error('Error checking JSON1 extension:', e);
                 }
 
                 const row = await db.getAsync('SELECT COUNT(*) as count FROM sqlite_master WHERE type="table" AND name="item"');
                 const needsInit = !row || row.count === 0;
 
                 if (needsInit) {
-                    console.log('Database needs initialization, creating tables...');
+                    debug.log('Database needs initialization, creating tables...');
                     const schema = fs.readFileSync(schemaPath, 'utf8');
                     const cleanSchema = schema
                         .split('\n')
                         .filter(line => !line.trim().toLowerCase().startsWith('drop'))
                         .join('\n');
                     
-                    const statements = [];
-                    let currentStatement = '';
-                    let inTrigger = false;
-
-                    cleanSchema.split(';').forEach(statement => {
-                        statement = statement.trim();
-                        if (!statement) return;
-
-                        if (statement.toUpperCase().includes('CREATE TRIGGER') || inTrigger) {
-                            inTrigger = true;
-                            currentStatement += statement + ';';
-                            if (statement.toUpperCase().includes('END')) {
-                                statements.push(currentStatement);
-                                currentStatement = '';
-                                inTrigger = false;
-                            }
-                        } else {
-                            statements.push(statement + ';');
-                        }
-                    });
-
-                    await db.runAsync('BEGIN IMMEDIATE TRANSACTION;');
-
                     try {
-                        console.log('Executing schema statements...');
-                        for (let i = 0; i < statements.length; i++) {
-                            const statement = statements[i].trim();
-                            if (!statement) continue;
-                            
-                            try {
-                                await db.runAsync(statement);
-                            } catch (err) {
-                                if (err.code !== 'SQLITE_ERROR' || !err.message.includes('already exists')) {
-                                    console.error(`Error executing statement ${i + 1}:`, err);
-                                    console.error('Statement:', statement);
-                                    await db.runAsync('ROLLBACK;');
-                                    reject(err);
-                                    return;
-                                }
-                            }
-                        }
-
-                        await db.runAsync('COMMIT;');
-                        console.log('Database schema initialized successfully');
+                        await db.execAsync(cleanSchema);
+                        debug.log('Database schema initialized successfully');
                     } catch (error) {
-                        console.error('Error during database initialization:', error);
-                        await db.runAsync('ROLLBACK;');
+                        debug.error('Error during database initialization:', error);
                         reject(error);
+                        return;
                     }
                 } else {
-                    console.log('Database already initialized, skipping schema creation');
+                    debug.log('Database already initialized, skipping schema creation');
                 }
 
                 // Create DAL instance
                 const dal = new DatabaseAccessLayer(db);
                 resolve(dal);
             } catch (error) {
-                console.error('Error initializing database:', error);
+                debug.error('Error initializing database:', error);
                 reject(error);
             }
         });
 
         db.on('error', (err) => {
-            console.error('Database error:', err);
+            debug.error('Database error:', err);
         });
 
         process.on('SIGINT', () => {
             if (db) {
                 db.close((err) => {
                     if (err) {
-                        console.error('Error closing database:', err);
+                        debug.error('Error closing database:', err);
                     } else {
-                        console.log('Database connection closed');
+                        debug.log('Database connection closed');
                     }
                     process.exit(0);
                 });

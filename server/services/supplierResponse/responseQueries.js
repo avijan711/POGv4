@@ -109,11 +109,11 @@ class ResponseQueries {
                         english_description: response.english_description || '',
                         status: response.status || 'active'
                     })),
-                    totalItems: row.item_count || 0,
-                    promotionItems: row.promotion_count || 0,
-                    averagePrice: row.average_price || 0,
-                    latestResponse: row.latest_response || row.response_date,
-                    missingItems: missingItems
+                    total_items: row.item_count || 0,
+                    promotion_items: row.promotion_count || 0,
+                    average_price: row.average_price || 0,
+                    latest_response: row.latest_response || row.response_date,
+                    missing_items: missingItems
                 };
             });
 
@@ -311,8 +311,6 @@ class ResponseQueries {
             throw err;
         }
     }
-
-    // Other methods remain unchanged...
 }
 
 module.exports = ResponseQueries;
