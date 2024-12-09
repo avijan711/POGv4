@@ -28,10 +28,33 @@ async function startServer() {
         // Initialize models with DAL
         const promotionModel = new PromotionModel(dal);
 
+        // Run migrations
+        debug.log('Running migrations...');
+        const fs = require('fs');
+        const migrations = [
+            'add_price_history_tables.sql',
+            'add_item_notes.sql',
+            'add_currency_settings.sql'
+        ];
+
+        for (const migration of migrations) {
+            const migrationPath = path.join(__dirname, 'migrations', migration);
+            if (fs.existsSync(migrationPath)) {
+                const sql = fs.readFileSync(migrationPath, 'utf8');
+                try {
+                    await dal.executeQuery(sql);
+                    debug.log(`Migration ${migration} completed successfully`);
+                } catch (err) {
+                    debug.error(`Error running migration ${migration}:`, err);
+                    // Continue with other migrations
+                }
+            }
+        }
+
         // Middleware
         app.use(cors({
             origin: 'http://localhost:3000',
-            methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
             allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
             credentials: true,
             optionsSuccessStatus: 200,
@@ -44,7 +67,6 @@ async function startServer() {
         app.use('/uploads/item-files', express.static(path.join(__dirname, 'uploads', 'item-files')));
 
         // Ensure upload directories exist
-        const fs = require('fs');
         const uploadsDir = path.join(__dirname, 'uploads');
         const itemFilesDir = path.join(__dirname, 'uploads', 'item-files');
         if (!fs.existsSync(uploadsDir)) {

@@ -3,6 +3,7 @@ const imageUpload = require('../middleware/imageUpload');
 const itemFileUpload = require('../middleware/itemFileUpload');
 const debug = require('../utils/debug');
 const Item = require('../models/item');
+const SupplierPricesService = require('../services/supplierPricesService');
 const { DatabaseAccessLayer } = require('../config/database');
 const path = require('path');
 const fs = require('fs');
@@ -10,6 +11,55 @@ const fs = require('fs');
 function createItemsRouter({ db }) {
     const router = express.Router();
     const itemModel = new Item(db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db));
+    const supplierPricesService = new SupplierPricesService(db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db));
+
+    // Get supplier prices for item
+    router.get('/:id/supplier-prices', async (req, res) => {
+        try {
+            const { limit, offset, fromDate, supplierId } = req.query;
+            debug.log('Fetching supplier prices for item:', req.params.id, {
+                limit,
+                offset,
+                fromDate,
+                supplierId
+            });
+
+            const result = await supplierPricesService.getSupplierPrices(
+                req.params.id,
+                {
+                    limit: parseInt(limit) || 10,
+                    offset: parseInt(offset) || 0,
+                    fromDate: fromDate || null,
+                    supplierId: supplierId ? parseInt(supplierId) : null
+                }
+            );
+
+            res.json(result);
+        } catch (err) {
+            debug.error('Error fetching supplier prices:', err);
+            res.status(500).json({
+                error: 'Failed to fetch supplier prices',
+                details: err.message,
+                suggestion: 'Please try again or contact support if the issue persists'
+            });
+        }
+    });
+
+    // Get suppliers for item
+    router.get('/:id/suppliers', async (req, res) => {
+        try {
+            debug.log('Fetching suppliers for item:', req.params.id);
+            const suppliers = await supplierPricesService.getSuppliers();
+            res.json(suppliers);
+        } catch (err) {
+            debug.error('Error fetching suppliers:', err);
+            res.status(500).json({
+                error: 'Failed to fetch suppliers',
+                details: err.message,
+                suggestion: 'Please try again or contact support if the issue persists'
+            });
+        }
+    });
 
     // Get all items
     router.get('/', async (req, res) => {
