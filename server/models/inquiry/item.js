@@ -420,6 +420,44 @@ class InquiryItemModel extends BaseModel {
             }
         });
     }
+
+    async getInquiryItems(inquiryId) {
+        try {
+            const query = `
+                SELECT 
+                    ii.item_id,
+                    i.hebrew_description,
+                    i.english_description,
+                    ii.requested_qty,
+                    i.hs_code,
+                    i.origin,
+                    ii.reference_notes,
+                    i.import_markup,
+                    ph.ils_retail_price as retail_price
+                FROM inquiry_item ii
+                LEFT JOIN item i ON ii.item_id = i.item_id
+                LEFT JOIN price_history ph ON i.item_id = ph.item_id
+                    AND ph.date = (
+                        SELECT MAX(date)
+                        FROM price_history
+                        WHERE item_id = i.item_id
+                    )
+                WHERE ii.inquiry_id = ?
+                ORDER BY ii.inquiry_item_id
+            `;
+
+            const items = await this.executeQuery(query, [inquiryId]);
+            debug.log('Retrieved inquiry items:', {
+                inquiryId,
+                count: items.length
+            });
+
+            return items;
+        } catch (error) {
+            debug.error('Error retrieving inquiry items:', error);
+            throw error;
+        }
+    }
 }
 
 module.exports = InquiryItemModel;

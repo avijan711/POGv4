@@ -1,160 +1,135 @@
 const express = require('express');
 const cors = require('cors');
+const debug = require('./utils/debug');
 const path = require('path');
-const fs = require('fs');
-const { initializeDatabase, getDatabase } = require('./config/database');
+const { initializeDatabase, DatabaseAccessLayer } = require('./config/database');
+
+// Import route creators
+const createItemRoutes = require('./routes/items');
+const createSupplierRoutes = require('./routes/suppliers');
+const createInquiryRoutes = require('./routes/inquiries');
+const createSupplierResponseRoutes = require('./routes/supplier-responses');
+const createPromotionRoutes = require('./routes/promotions');
+const createSettingsRoutes = require('./routes/settings');
+const createPriceRoutes = require('./routes/prices');
 
 // Import models
 const PromotionModel = require('./models/promotion');
-const InquiryModel = require('./models/inquiry');
-const InquiryItemModel = require('./models/inquiry/item');
-const OrderModel = require('./models/order');
 
-// Import route creators
-const createItemsRouter = require('./routes/items');
-const createOrdersRouter = require('./routes/orders');
-const createPromotionsRouter = require('./routes/promotions');
-const createSettingsRouter = require('./routes/settings');
-const createSuppliersRouter = require('./routes/suppliers');
-const createInquiriesRouter = require('./routes/inquiries');
-const createSupplierResponsesRouter = require('./routes/supplier-responses');
-
-// Create Express app
-const app = express();
-
-// CORS configuration
-const corsOptions = {
-    origin: 'http://localhost:3000',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-    preflightContinue: false,
-    optionsSuccessStatus: 204
-};
-
-// Apply CORS middleware
-app.use(cors(corsOptions));
-
-// Handle preflight requests
-app.options('*', cors(corsOptions));
-
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-}
-app.use('/uploads', express.static(uploadsDir));
-
-// Initialize database and start server
 async function startServer() {
     try {
-        // Initialize database
-        await initializeDatabase();
-        const db = getDatabase();
+        const app = express();
+        const port = process.env.PORT || 5002;
 
-        // Initialize models
-        const inquiryModel = new InquiryModel(db);
-        const inquiryItemModel = new InquiryItemModel(db);
-        const promotionModel = new PromotionModel(db);
-        const orderModel = new OrderModel(db);
-        await promotionModel.initialize();
+        // Initialize database connection and get DAL instance
+        const dal = await initializeDatabase();
+        debug.log('Database initialized successfully');
 
-        // Mount routes with proper error handling
-        function mountRoute(path, createRouter, options = {}) {
-            try {
-                // Create router with appropriate dependencies
-                const router = options.deps ? 
-                    createRouter(options.deps) : 
-                    createRouter({ db });
+        // Initialize models with DAL
+        const promotionModel = new PromotionModel(dal);
 
-                // Validate router
-                if (!router || typeof router.use !== 'function') {
-                    throw new Error(`Invalid router returned for ${path}`);
-                }
+        // Middleware
+        app.use(cors({
+            origin: 'http://localhost:3000',
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+            allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+            credentials: true,
+            optionsSuccessStatus: 200,
+            preflightContinue: false
+        }));
+        app.use(express.json());
 
-                // Apply CORS to each route
-                router.use(cors(corsOptions));
+        // Serve static files
+        app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+        app.use('/uploads/item-files', express.static(path.join(__dirname, 'uploads', 'item-files')));
 
-                // Mount router
-                app.use(path, router);
-                console.log(`Mounted route: ${path}`);
-            } catch (err) {
-                console.error(`Failed to mount route ${path}:`, err);
-                throw err;
-            }
+        // Ensure upload directories exist
+        const fs = require('fs');
+        const uploadsDir = path.join(__dirname, 'uploads');
+        const itemFilesDir = path.join(__dirname, 'uploads', 'item-files');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir);
+        }
+        if (!fs.existsSync(itemFilesDir)) {
+            fs.mkdirSync(itemFilesDir);
         }
 
-        // Mount each route
-        const routes = [
-            { path: '/api/items', creator: createItemsRouter },
-            { 
-                path: '/api/orders', 
-                creator: createOrdersRouter, 
-                deps: orderModel 
-            },
-            { 
-                path: '/api/promotions', 
-                creator: createPromotionsRouter, 
-                deps: { db, promotionModel }
-            },
-            { 
-                path: '/api/settings', 
-                creator: createSettingsRouter,
-                deps: { db }  // Added db dependency for settings route
-            },
-            { path: '/api/suppliers', creator: createSuppliersRouter },
-            { 
-                path: '/api/inquiries', 
-                creator: createInquiriesRouter,
-                deps: { db, inquiryModel, inquiryItemModel }
-            },
-            { 
-                path: '/api/supplier-responses', 
-                creator: createSupplierResponsesRouter,
-                deps: { db }
-            }
-        ];
+        // Register routes
+        app.use('/api/items', createItemRoutes({ db: dal }));
+        app.use('/api/suppliers', createSupplierRoutes({ db: dal }));
+        app.use('/api/inquiries', createInquiryRoutes({ db: dal }));
+        app.use('/api/supplier-responses', createSupplierResponseRoutes({ db: dal }));
+        app.use('/api/promotions', createPromotionRoutes({ db: dal, promotionModel }));
+        app.use('/api/settings', createSettingsRoutes({ db: dal }));
+        app.use('/api/prices', createPriceRoutes({ db: dal }));
 
-        // Mount routes in sequence
-        for (const route of routes) {
-            mountRoute(route.path, route.creator, route.deps ? { deps: route.deps } : undefined);
-        }
-
-        // Error handling middleware
+        // Error handling
         app.use((err, req, res, next) => {
-            console.error('Global error handler:', err);
+            debug.error('Global error handler:', err);
             res.status(500).json({
-                error: 'Internal Server Error',
-                message: err.message
+                error: 'Internal server error',
+                message: err.message,
+                details: err.details || null
             });
         });
 
         // Start server
-        const port = process.env.PORT || 5002;
         app.listen(port, () => {
-            console.log(`Server running on port ${port}`);
+            debug.log(`Server running on port ${port}`);
+            debug.log('Server configuration:', {
+                port,
+                cors: {
+                    origin: 'http://localhost:3000',
+                    credentials: true
+                }
+            });
         });
-    } catch (err) {
-        console.error('Failed to start server:', err);
+
+        // Schedule promotion cleanup job (runs daily at midnight)
+        const CronJob = require('cron').CronJob;
+        const PriceHistoryService = require('./services/priceHistoryService');
+        const priceHistoryService = new PriceHistoryService(dal);
+
+        new CronJob('0 0 * * *', async () => {
+            try {
+                debug.log('Running scheduled promotion cleanup');
+                await priceHistoryService.cleanupExpiredPromotions();
+                debug.log('Promotion cleanup completed');
+            } catch (error) {
+                debug.error('Error in promotion cleanup job:', error);
+            }
+        }, null, true);
+
+        // Log successful initialization
+        debug.log('Server initialization completed successfully');
+        debug.log('Routes initialized:');
+        debug.log('- /api/items');
+        debug.log('- /api/suppliers');
+        debug.log('- /api/inquiries');
+        debug.log('- /api/supplier-responses');
+        debug.log('- /api/promotions');
+        debug.log('- /api/settings');
+        debug.log('- /api/prices');
+        debug.log('Static file serving:');
+        debug.log('- /uploads');
+        debug.log('- /uploads/item-files');
+
+    } catch (error) {
+        debug.error('Failed to start server:', error);
         process.exit(1);
     }
 }
 
-// Handle process termination
-process.on('SIGINT', () => {
-    const db = getDatabase();
-    if (db) {
-        db.close(() => {
-            console.log('Database connection closed');
-            process.exit(0);
-        });
-    } else {
-        process.exit(0);
-    }
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+    debug.error('Uncaught Exception:', err);
+    process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+    debug.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    process.exit(1);
 });
 
 startServer();

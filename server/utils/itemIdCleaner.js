@@ -6,13 +6,13 @@
  * Cleans and standardizes an item ID by:
  * 1. Removing decimal points
  * 2. Removing spaces
- * 3. Trimming leading zeros
+ * 3. Removing exactly 4 leading zeros if present
  * 4. Converting to uppercase
  * 
  * Examples:
- * - "1174.G9" -> "1174G9"
- * - "98 100 486 80" -> "9810048680"
- * - "00001109AL" -> "1109AL"
+ * - "00001109AL" -> "1109AL" (removes exactly 4 leading zeros)
+ * - "00000052CT" -> "052CT" (removes exactly 4 leading zeros)
+ * - "0111AT" -> "0111AT" (keeps zeros when not exactly 4 leading)
  * 
  * @param {string} itemId - The raw item ID to clean
  * @returns {string} The cleaned and standardized item ID
@@ -26,10 +26,8 @@ function cleanItemId(itemId) {
         .replace(/\./g, '')
         // Remove all spaces
         .replace(/\s+/g, '')
-        // Remove leading zeros, but handle special cases:
-        // 1. If the ID is all zeros, return "0"
-        // 2. Keep zeros that are between other characters
-        .replace(/^0+(?=\d)/, '')
+        // Remove exactly 4 leading zeros
+        .replace(/^0000(?=\d)/, '')
         // Convert to uppercase
         .toUpperCase();
 }

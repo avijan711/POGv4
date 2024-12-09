@@ -22,6 +22,7 @@ import {
   TableHead,
   TableRow,
   Collapse,
+  Snackbar,
 } from '@mui/material';
 import {
   Business as BusinessIcon,
@@ -38,6 +39,32 @@ import {
 import { useSupplierResponses } from '../hooks/useSupplierResponses';
 
 function MissingItemsDialog({ open, onClose, items = [], supplierName = '' }) {
+  const parsedItems = React.useMemo(() => {
+    try {
+      // Handle supplierSpecificMissing structure
+      if (items && Array.isArray(items.supplierSpecificMissing)) {
+        const supplierMissing = items.supplierSpecificMissing[0];
+        return supplierMissing ? (Array.isArray(supplierMissing.items) ? supplierMissing.items : []) : [];
+      }
+      
+      // Handle direct array
+      if (Array.isArray(items)) {
+        return items.filter(Boolean);
+      }
+
+      // Handle string
+      if (typeof items === 'string') {
+        const parsed = JSON.parse(items);
+        return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+      }
+
+      return [];
+    } catch (e) {
+      console.error('Error parsing missing items:', e);
+      return [];
+    }
+  }, [items]);
+
   return (
     <Dialog 
       open={open} 
@@ -48,7 +75,7 @@ function MissingItemsDialog({ open, onClose, items = [], supplierName = '' }) {
       <DialogTitle>
         <Box display="flex" alignItems="center" gap={1}>
           <WarningIcon color="warning" />
-          <Typography>Missing Items for {supplierName} ({items.length})</Typography>
+          <Typography>Missing Items for {supplierName} ({parsedItems.length})</Typography>
         </Box>
       </DialogTitle>
       <DialogContent>
@@ -64,21 +91,22 @@ function MissingItemsDialog({ open, onClose, items = [], supplierName = '' }) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {items.map((item) => (
-                <TableRow key={item.item_id}>
-                  <TableCell>{item.item_id}</TableCell>
-                  <TableCell>
-                    <Typography>{item.hebrew_description}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {item.english_description}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">{item.requested_qty}</TableCell>
-                  <TableCell align="right">₪{Number(item.retail_price).toFixed(2)}</TableCell>
-                  <TableCell>{item.origin || '-'}</TableCell>
-                </TableRow>
-              ))}
-              {items.length === 0 && (
+              {parsedItems.length > 0 ? (
+                parsedItems.map((item) => (
+                  <TableRow key={item.item_id}>
+                    <TableCell>{item.item_id}</TableCell>
+                    <TableCell>
+                      <Typography>{item.hebrew_description}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {item.english_description}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">{item.requested_qty}</TableCell>
+                    <TableCell align="right">₪{Number(item.retail_price).toFixed(2)}</TableCell>
+                    <TableCell>{item.origin || '-'}</TableCell>
+                  </TableRow>
+                ))
+              ) : (
                 <TableRow>
                   <TableCell colSpan={5} align="center">
                     <Typography color="text.secondary">No missing items found</Typography>
@@ -98,7 +126,46 @@ function MissingItemsDialog({ open, onClose, items = [], supplierName = '' }) {
 
 function SupplierRow({ supplierId, supplierData, totalExpectedItems, onDelete, onDeleteItem, onShowMissing }) {
   const [open, setOpen] = React.useState(false);
-  const missingItemsCount = supplierData.missingItems?.length || 0;
+  
+  const missingItemsData = React.useMemo(() => {
+    try {
+      // Handle supplierSpecificMissing structure
+      if (supplierData.missingItems && Array.isArray(supplierData.missingItems.supplierSpecificMissing)) {
+        const supplierMissing = supplierData.missingItems.supplierSpecificMissing.find(
+          s => s.supplier_id === supplierId
+        );
+        return {
+          items: supplierMissing ? (supplierMissing.items || []) : [],
+          count: supplierMissing ? supplierMissing.missingCount : 0
+        };
+      }
+
+      // Handle direct array
+      if (Array.isArray(supplierData.missingItems)) {
+        return {
+          items: supplierData.missingItems.filter(Boolean),
+          count: supplierData.missingItems.length
+        };
+      }
+
+      // Handle string
+      if (typeof supplierData.missingItems === 'string') {
+        const parsed = JSON.parse(supplierData.missingItems);
+        const items = Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+        return {
+          items,
+          count: items.length
+        };
+      }
+
+      return { items: [], count: 0 };
+    } catch (e) {
+      console.error('Error parsing missing items:', e);
+      return { items: [], count: 0 };
+    }
+  }, [supplierData.missingItems, supplierId]);
+
+  const missingItemsCount = supplierData.missing_count || missingItemsData.count;
 
   return (
     <>
@@ -122,16 +189,16 @@ function SupplierRow({ supplierId, supplierData, totalExpectedItems, onDelete, o
         </TableCell>
         <TableCell align="right">
           <Chip
-            label={`${supplierData.totalItems || 0} Items`}
+            label={`${supplierData.item_count || 0} Items`}
             size="small"
             color="primary"
             variant="outlined"
           />
         </TableCell>
-        <TableCell align="right">₪{Number(supplierData.averagePrice || 0).toFixed(2)}</TableCell>
-        <TableCell align="right">{new Date(supplierData.latestResponse || new Date()).toLocaleDateString()}</TableCell>
+        <TableCell align="right">₪{Number(supplierData.average_price || 0).toFixed(2)}</TableCell>
+        <TableCell align="right">{new Date(supplierData.latest_response || new Date()).toLocaleDateString()}</TableCell>
         <TableCell align="right">
-          {supplierData.totalItems === totalExpectedItems && missingItemsCount === 0 ? (
+          {missingItemsCount === 0 ? (
             <Chip
               icon={<CheckCircleIcon />}
               label="Complete"
@@ -141,10 +208,13 @@ function SupplierRow({ supplierId, supplierData, totalExpectedItems, onDelete, o
           ) : (
             <Chip
               icon={<InfoIcon />}
-              label={`${totalExpectedItems - supplierData.totalItems} Missing`}
+              label={`${missingItemsCount} Missing`}
               size="small"
               color="warning"
-              onClick={() => onShowMissing(supplierData)}
+              onClick={() => onShowMissing({
+                ...supplierData,
+                missingItems: missingItemsData.items
+              })}
               sx={{ cursor: 'pointer' }}
             />
           )}
@@ -247,6 +317,7 @@ function SupplierResponseList({ inquiryId }) {
   const [supplierToDelete, setSupplierToDelete] = React.useState(null);
   const [missingItemsDialogOpen, setMissingItemsDialogOpen] = React.useState(false);
   const [selectedSupplier, setSelectedSupplier] = React.useState(null);
+  const [snackbar, setSnackbar] = React.useState({ open: false, message: '', severity: 'info' });
 
   useEffect(() => {
     if (inquiryId) {
@@ -255,25 +326,107 @@ function SupplierResponseList({ inquiryId }) {
   }, [inquiryId, fetchResponses]);
 
   const handleDeleteResponse = async () => {
-    if (itemToDelete) {
-      await deleteResponse(itemToDelete.supplier_response_id);
-      setDeleteDialogOpen(false);
-      setItemToDelete(null);
+    if (!itemToDelete) return;
+
+    try {
+        console.log('Deleting individual response:', {
+            responseId: itemToDelete.supplier_response_id,
+            itemId: itemToDelete.item_id
+        });
+
+        const success = await deleteResponse(itemToDelete.supplier_response_id);
+        if (success) {
+            setSnackbar({
+                open: true,
+                message: 'Response deleted successfully',
+                severity: 'success'
+            });
+            await fetchResponses(); // Refresh the list
+        } else {
+            throw new Error('Failed to delete response');
+        }
+        setDeleteDialogOpen(false);
+        setItemToDelete(null);
+    } catch (error) {
+        console.error('Error deleting response:', error);
+        setSnackbar({
+            open: true,
+            message: `Failed to delete response: ${error.message}`,
+            severity: 'error'
+        });
     }
   };
 
   const handleBulkDelete = async () => {
-    if (supplierToDelete) {
-      const date = new Date(supplierToDelete.latestResponse).toISOString().split('T')[0];
-      await deleteBulkResponses(date, supplierToDelete.supplier_id);
-      setBulkDeleteDialogOpen(false);
-      setSupplierToDelete(null);
+    if (!supplierToDelete) return;
+
+    try {
+        // Validate supplier data
+        if (!supplierToDelete.supplier_id) {
+            throw new Error('Missing supplier ID');
+        }
+
+        if (!supplierToDelete.latest_response) {
+            throw new Error('No response date found');
+        }
+
+        // Use the latest_response if it exists and is valid, otherwise use current date
+        const date = supplierToDelete.latest_response ? 
+            new Date(supplierToDelete.latest_response) : 
+            new Date();
+
+        // Format the date as YYYY-MM-DD
+        const formattedDate = date.getFullYear() + '-' + 
+            String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+            String(date.getDate()).padStart(2, '0');
+
+        // Debug log to verify the data being sent
+        console.log('Bulk delete params:', {
+            date: formattedDate,
+            supplierId: supplierToDelete.supplier_id,
+            latest_response: supplierToDelete.latest_response,
+            itemCount: supplierToDelete.item_count,
+            supplierName: supplierToDelete.supplier_name
+        });
+
+        // Ensure supplier_id is a number
+        const supplierId = parseInt(supplierToDelete.supplier_id, 10);
+        if (isNaN(supplierId)) {
+            throw new Error('Invalid supplier ID format');
+        }
+
+        const success = await deleteBulkResponses(formattedDate, supplierId);
+        
+        if (success) {
+            setSnackbar({
+                open: true,
+                message: `Successfully deleted ${supplierToDelete.item_count} responses for ${supplierToDelete.supplier_name}`,
+                severity: 'success'
+            });
+            await fetchResponses(); // Refresh the list
+        } else {
+            throw new Error('Failed to delete responses');
+        }
+        
+        setBulkDeleteDialogOpen(false);
+        setSupplierToDelete(null);
+    } catch (error) {
+        console.error('Error in bulk delete:', error);
+        setSnackbar({
+            open: true,
+            message: `Failed to delete responses: ${error.message}`,
+            severity: 'error'
+        });
     }
   };
 
   const handleShowMissingItems = (supplier) => {
     setSelectedSupplier(supplier);
     setMissingItemsDialogOpen(true);
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false });
   };
 
   if (loading) {
@@ -413,11 +566,16 @@ function SupplierResponseList({ inquiryId }) {
       </TableContainer>
 
       {/* Delete Response Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+      <Dialog 
+        open={deleteDialogOpen} 
+        onClose={() => setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>Delete Response</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete this response? This action cannot be undone.
+            Are you sure you want to delete this response for item {itemToDelete?.item_id}? This action cannot be undone.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -429,12 +587,17 @@ function SupplierResponseList({ inquiryId }) {
       </Dialog>
 
       {/* Bulk Delete Dialog */}
-      <Dialog open={bulkDeleteDialogOpen} onClose={() => setBulkDeleteDialogOpen(false)}>
+      <Dialog 
+        open={bulkDeleteDialogOpen} 
+        onClose={() => setBulkDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>Delete All Responses</DialogTitle>
         <DialogContent>
           <Typography>
             Are you sure you want to delete all responses from {supplierToDelete?.supplier_name}? 
-            This will remove {supplierToDelete?.totalItems} responses and cannot be undone.
+            This will remove {supplierToDelete?.item_count || 0} responses and cannot be undone.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -455,6 +618,18 @@ function SupplierResponseList({ inquiryId }) {
         items={selectedSupplier?.missingItems || []}
         supplierName={selectedSupplier?.supplier_name || ''}
       />
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

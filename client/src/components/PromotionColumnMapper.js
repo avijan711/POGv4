@@ -13,6 +13,9 @@ import {
     Typography,
     Alert,
     Grid,
+    List,
+    ListItem,
+    ListItemText,
 } from '@mui/material';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
@@ -32,6 +35,7 @@ function PromotionColumnMapper({
     const [columns, setColumns] = useState([]);
     const [mapping, setMapping] = useState({});
     const [error, setError] = useState('');
+    const [errorDetails, setErrorDetails] = useState(null);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -44,29 +48,36 @@ function PromotionColumnMapper({
         try {
             setLoading(true);
             setError('');
+            setErrorDetails(null);
 
             const formData = new FormData();
             formData.append('file', file);
 
             const response = await axios.post(`${API_BASE_URL}/api/promotions/columns`, formData);
-            setColumns(response.data.columns || []);
+            if (response.data?.success) {
+                setColumns(response.data.data.columns || []);
 
-            // Try to auto-map columns
-            const autoMapping = {};
-            response.data.columns.forEach(column => {
-                const lowerColumn = column.toLowerCase();
-                if (lowerColumn.includes('item') || lowerColumn.includes('id') || lowerColumn.includes('sku')) {
-                    autoMapping.item_id = column;
-                }
-                if (lowerColumn.includes('price') || lowerColumn.includes('cost')) {
-                    autoMapping.price = column;
-                }
-            });
-            setMapping(autoMapping);
-
+                // Try to auto-map columns
+                const autoMapping = {};
+                response.data.data.columns.forEach(column => {
+                    const lowerColumn = column.toLowerCase();
+                    if (lowerColumn.includes('item') || lowerColumn.includes('id') || lowerColumn.includes('sku')) {
+                        autoMapping.item_id = column;
+                    }
+                    if (lowerColumn.includes('price') || lowerColumn.includes('cost')) {
+                        autoMapping.price = column;
+                    }
+                });
+                setMapping(autoMapping);
+            } else {
+                throw new Error(response.data?.message || 'Failed to read Excel columns');
+            }
         } catch (err) {
             console.error('Error fetching columns:', err);
-            setError('Failed to read Excel columns');
+            setError(err.response?.data?.message || 'Failed to read Excel columns');
+            if (err.response?.data?.suggestion) {
+                setErrorDetails([err.response.data.suggestion]);
+            }
         } finally {
             setLoading(false);
         }
@@ -78,6 +89,7 @@ function PromotionColumnMapper({
         try {
             setLoading(true);
             setError('');
+            setErrorDetails(null);
 
             const formData = new FormData();
             formData.append('file', file);
@@ -87,11 +99,28 @@ function PromotionColumnMapper({
             formData.append('end_date', promotionData.endDate);
             formData.append('column_mapping', JSON.stringify(mapping));
 
-            await axios.post(`${API_BASE_URL}/api/promotions/upload`, formData);
-            onComplete();
+            const response = await axios.post(`${API_BASE_URL}/api/promotions/upload`, formData);
+            
+            if (response.data?.success) {
+                onComplete();
+            } else {
+                throw new Error(response.data?.message || 'Failed to upload promotion');
+            }
         } catch (err) {
             console.error('Error uploading promotion:', err);
-            setError(err.response?.data?.message || 'Failed to upload promotion');
+            
+            const errorResponse = err.response?.data;
+            setError(errorResponse?.message || 'Failed to upload promotion');
+            
+            // Handle detailed error information
+            if (errorResponse?.code === 'INVALID_ITEMS_ERROR' && errorResponse?.details?.invalidItems) {
+                setErrorDetails([
+                    'The following items do not exist in the system:',
+                    ...errorResponse.details.invalidItems
+                ]);
+            } else if (errorResponse?.suggestion) {
+                setErrorDetails([errorResponse.suggestion]);
+            }
         } finally {
             setLoading(false);
         }
@@ -110,6 +139,7 @@ function PromotionColumnMapper({
         setColumns([]);
         setMapping({});
         setError('');
+        setErrorDetails(null);
         onClose();
     };
 
@@ -124,10 +154,38 @@ function PromotionColumnMapper({
             <DialogContent>
                 <Box sx={{ mt: 2 }}>
                     {loading ? (
-                        <Typography>Reading Excel columns...</Typography>
+                        <Typography>
+                            {columns.length ? 'Uploading promotion...' : 'Reading Excel columns...'}
+                        </Typography>
                     ) : error ? (
-                        <Alert severity="error" sx={{ mb: 2 }}>
+                        <Alert 
+                            severity="error" 
+                            sx={{ mb: 2 }}
+                            action={
+                                <Button 
+                                    color="inherit" 
+                                    size="small" 
+                                    onClick={fetchColumns}
+                                >
+                                    Retry
+                                </Button>
+                            }
+                        >
                             {error}
+                            {errorDetails && (
+                                <List dense sx={{ mt: 1, mb: 0 }}>
+                                    {errorDetails.map((detail, index) => (
+                                        <ListItem key={index} sx={{ py: 0 }}>
+                                            <ListItemText 
+                                                primary={detail}
+                                                primaryTypographyProps={{
+                                                    variant: 'body2'
+                                                }}
+                                            />
+                                        </ListItem>
+                                    ))}
+                                </List>
+                            )}
                         </Alert>
                     ) : (
                         <>

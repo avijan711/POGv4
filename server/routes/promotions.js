@@ -4,6 +4,7 @@ const debug = require('../utils/debug');
 const { uploadConfig, cleanupFile } = require('../middleware/upload');
 const { validateUpload, handleErrors } = require('../middleware/promotionMiddleware');
 const PromotionService = require('../services/promotionService');
+const { DatabaseAccessLayer } = require('../config/database');
 
 function createRouter({ db, promotionModel }) {
     if (!db) {
@@ -16,13 +17,35 @@ function createRouter({ db, promotionModel }) {
 
     const router = express.Router();
     const upload = multer(uploadConfig);
-    const promotionService = new PromotionService(db);
+    
+    // Create DatabaseAccessLayer instance for the service
+    const dal = db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db);
+    const promotionService = new PromotionService(dal);
 
     // Get all promotions
     router.get('/', async function(req, res, next) {
         try {
+            debug.log('Fetching all promotions');
             const promotions = await promotionService.getPromotions();
-            res.json(promotions);
+            res.json({
+                success: true,
+                data: promotions
+            });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    // Get active promotions
+    router.get('/active', async function(req, res, next) {
+        try {
+            debug.log('Fetching active promotions');
+            const currentDate = new Date().toISOString().split('T')[0];
+            const promotions = await promotionModel.getActivePromotions(currentDate);
+            res.json({
+                success: true,
+                data: promotions
+            });
         } catch (err) {
             next(err);
         }
@@ -31,8 +54,12 @@ function createRouter({ db, promotionModel }) {
     // Get promotion items
     router.get('/:promotion_id/items', async function(req, res, next) {
         try {
+            debug.log('Fetching items for promotion:', req.params.promotion_id);
             const items = await promotionService.getPromotionItems(req.params.promotion_id);
-            res.json(items);
+            res.json({
+                success: true,
+                data: items
+            });
         } catch (err) {
             next(err);
         }
@@ -41,7 +68,7 @@ function createRouter({ db, promotionModel }) {
     // Get columns from Excel file
     router.post('/columns', upload.single('file'), validateUpload, async function(req, res, next) {
         try {
-            debug.log('File upload request:', {
+            debug.log('Processing Excel columns request:', {
                 originalname: req.file.originalname,
                 mimetype: req.file.mimetype,
                 fieldname: req.file.fieldname
@@ -49,8 +76,11 @@ function createRouter({ db, promotionModel }) {
 
             const columns = await promotionService.getExcelColumns(req.file);
             res.json({
-                columns,
-                tempFile: req.file.filename
+                success: true,
+                data: {
+                    columns,
+                    tempFile: req.file.filename
+                }
             });
         } catch (error) {
             if (req.file?.path) {
@@ -84,7 +114,11 @@ function createRouter({ db, promotionModel }) {
                 cleanupFile(req.file.path);
             }
 
-            res.json(result);
+            res.json({
+                success: true,
+                data: result,
+                message: 'Promotion uploaded successfully'
+            });
         } catch (error) {
             if (req.file?.path) {
                 cleanupFile(req.file.path);
@@ -96,8 +130,21 @@ function createRouter({ db, promotionModel }) {
     // Delete promotion
     router.delete('/:promotion_id', async function(req, res, next) {
         try {
+            debug.log('Processing promotion delete request:', req.params.promotion_id);
             const result = await promotionService.deletePromotion(req.params.promotion_id);
-            res.json(result);
+            
+            if (result.deleted) {
+                res.json({
+                    success: true,
+                    message: 'Promotion deleted successfully'
+                });
+            } else {
+                res.status(404).json({
+                    success: false,
+                    error: 'Promotion not found',
+                    code: 'PROMOTION_NOT_FOUND'
+                });
+            }
         } catch (err) {
             next(err);
         }

@@ -27,9 +27,39 @@ function validateChangeId(req, res, next) {
 
 function validateBulkDelete(req, res, next) {
     const { date, supplier_id } = req.params;
+    
+    // Validate date and supplier_id presence
     if (!date || !supplier_id) {
         return res.status(400).json({ error: 'Date and supplier ID are required' });
     }
+
+    // Validate date format (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+        return res.status(400).json({ 
+            error: 'Invalid date format',
+            message: 'Date must be in YYYY-MM-DD format'
+        });
+    }
+
+    // Validate supplier_id is a valid number
+    const supplierId = parseInt(supplier_id, 10);
+    if (isNaN(supplierId) || supplierId <= 0) {
+        return res.status(400).json({ 
+            error: 'Invalid supplier ID',
+            message: 'Supplier ID must be a positive number'
+        });
+    }
+
+    // Store the validated supplier_id as a number
+    req.validatedSupplierId = supplierId;
+
+    debug.log('Bulk delete validation:', {
+        date,
+        supplier_id,
+        validatedSupplierId: supplierId
+    });
+
     next();
 }
 

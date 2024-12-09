@@ -1,12 +1,12 @@
 const express = require('express');
 const debug = require('../utils/debug');
 const SettingsModel = require('../models/settings');
-const fs = require('fs');
-const path = require('path');
+const { DatabaseAccessLayer } = require('../config/database');
 
 function createRouter({ db }) {
     const router = express.Router();
-    const settingsModel = new SettingsModel(db);
+    const dal = db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db);
+    const settingsModel = new SettingsModel(dal);
 
     // Get all settings
     router.get('/', async (req, res) => {
@@ -54,40 +54,10 @@ function createRouter({ db }) {
     // Reset application data
     router.post('/reset', async (req, res) => {
         try {
-            // Read the clear_database.sql file
-            const clearDbPath = path.join(__dirname, '..', 'migrations', 'clear_database.sql');
-            const clearDbSql = fs.readFileSync(clearDbPath, 'utf8');
-
-            // Step 1: Execute DELETE operations in a transaction
-            await db.runAsync('BEGIN TRANSACTION');
-            await db.execAsync(clearDbSql);
-            await db.runAsync('COMMIT');
-
-            // Step 2: Run VACUUM separately (outside transaction)
-            await db.execAsync('VACUUM');
-
-            // Step 3: Re-enable foreign keys
-            await db.runAsync('PRAGMA foreign_keys = ON');
-
-            debug.log('Successfully reset database');
-
-            res.json({ 
-                success: true, 
-                message: 'Application reset successfully',
-                details: 'Database cleared and vacuumed successfully'
-            });
+            const result = await settingsModel.resetDatabase();
+            res.json(result);
         } catch (error) {
             debug.error('Error resetting app:', error);
-            
-            try {
-                // Attempt to rollback if we're in a transaction
-                await db.runAsync('ROLLBACK');
-                // Always ensure foreign keys are re-enabled
-                await db.runAsync('PRAGMA foreign_keys = ON');
-            } catch (rollbackError) {
-                debug.error('Error during rollback:', rollbackError);
-            }
-
             res.status(500).json({ 
                 success: false, 
                 message: 'Error resetting application', 

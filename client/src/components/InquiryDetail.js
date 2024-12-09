@@ -13,6 +13,7 @@ import InquiryItemsTable from './InquiryItemsTable';
 import InquiryHeader from './InquiryHeader';
 import SupplierResponseList from './SupplierResponseList';
 import InquiryDialogs from './InquiryDialogs';
+import ItemDialog from './ItemDialog';
 import { useInquiryItems } from '../hooks/useInquiryItems';
 import { useInquiryFilters } from '../hooks/useInquiryFilters';
 import { useInquiryDialogs } from '../hooks/useInquiryDialogs';
@@ -31,6 +32,7 @@ function InquiryDetail() {
     fetchItems,
     handleUpdateQuantity,
     handleDeleteItem,
+    handleAddItem,
     setError
   } = useInquiryItems(inquiryId || '');
 
@@ -128,6 +130,15 @@ function InquiryDetail() {
     }
   };
 
+  // Handle adding new item
+  const handleSaveNewItem = async (itemData) => {
+    const success = await handleAddItem(itemData);
+    if (success) {
+      dialogStates.setAddItemDialogOpen(false);
+    }
+    return success;
+  };
+
   // Effects must be at the top level
   useEffect(() => {
     if (!inquiryId) {
@@ -175,6 +186,7 @@ function InquiryDetail() {
           onUploadResponse={() => dialogStates.setSupplierUploadOpen(true)}
           onViewBestPrices={() => navigate(`/comparisons/${inquiryId}`)}
           onDeleteInquiry={() => dialogStates.setDeleteInquiryConfirmOpen(true)}
+          onAddItem={() => dialogStates.handleAddItem()}
           error={error}
           statistics={statistics}
         />
@@ -212,6 +224,13 @@ function InquiryDetail() {
           onDelete={handleDelete}
           onUploadSuccess={fetchItems}
           inquiryId={inquiryId}
+        />
+
+        <ItemDialog
+          open={dialogStates.addItemDialogOpen}
+          onClose={() => dialogStates.setAddItemDialogOpen(false)}
+          onSave={handleSaveNewItem}
+          mode="add"
         />
       </Paper>
     </Box>

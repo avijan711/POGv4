@@ -9,8 +9,111 @@ const verbose = sqlite3.verbose();
 // Database connection pool
 let db = null;
 
+// Custom error types for better error handling
+class DatabaseError extends Error {
+    constructor(message, code, details = null) {
+        super(message);
+        this.name = 'DatabaseError';
+        this.code = code;
+        this.details = details;
+    }
+}
+
+class TransactionError extends DatabaseError {
+    constructor(message, details = null) {
+        super(message, 'TRANSACTION_ERROR', details);
+        this.name = 'TransactionError';
+    }
+}
+
+// Database Access Layer class
+class DatabaseAccessLayer {
+    constructor(db) {
+        if (!db) {
+            throw new DatabaseError('Database instance is required', 'INITIALIZATION_ERROR');
+        }
+        this.db = db;
+    }
+
+    // Core database operations
+    async query(sql, params = []) {
+        try {
+            const queryId = Math.random().toString(36).substring(7);
+            debug.time(`Query ${queryId}`);
+            debug.logQuery(`Query ${queryId}`, sql, params);
+
+            const rows = await this.db.allAsync(sql, params);
+            debug.timeEnd(`Query ${queryId}`);
+            return rows || [];
+        } catch (err) {
+            throw new DatabaseError('Query execution failed', 'QUERY_ERROR', { sql, params, originalError: err });
+        }
+    }
+
+    async querySingle(sql, params = []) {
+        try {
+            const queryId = Math.random().toString(36).substring(7);
+            debug.time(`Single Query ${queryId}`);
+            debug.logQuery(`Single Query ${queryId}`, sql, params);
+
+            const row = await this.db.getAsync(sql, params);
+            debug.timeEnd(`Query ${queryId}`);
+            return row;
+        } catch (err) {
+            throw new DatabaseError('Single query execution failed', 'QUERY_ERROR', { sql, params, originalError: err });
+        }
+    }
+
+    async run(sql, params = []) {
+        try {
+            const queryId = Math.random().toString(36).substring(7);
+            debug.time(`Run ${queryId}`);
+            debug.logQuery(`Run ${queryId}`, sql, params);
+
+            const result = await this.db.runAsync(sql, params);
+            debug.timeEnd(`Run ${queryId}`);
+            return result;
+        } catch (err) {
+            throw new DatabaseError('Run operation failed', 'RUN_ERROR', { sql, params, originalError: err });
+        }
+    }
+
+    // Transaction management
+    async executeTransaction(callback) {
+        const transactionId = Math.random().toString(36).substring(7);
+        debug.time(`Transaction ${transactionId}`);
+        debug.log(`Starting transaction ${transactionId}`);
+
+        try {
+            await this.run('BEGIN IMMEDIATE TRANSACTION');
+            const result = await callback();
+            await this.run('COMMIT');
+            debug.log(`Transaction ${transactionId} committed successfully`);
+            debug.timeEnd(`Transaction ${transactionId}`);
+            return result;
+        } catch (error) {
+            debug.error(`Transaction ${transactionId} error:`, error);
+            try {
+                await this.run('ROLLBACK');
+                debug.log(`Transaction ${transactionId} rolled back successfully`);
+            } catch (rollbackError) {
+                debug.error(`Failed to rollback transaction ${transactionId}:`, rollbackError);
+                throw new TransactionError('Transaction and rollback failed', {
+                    transactionId,
+                    originalError: error,
+                    rollbackError
+                });
+            }
+            throw new TransactionError('Transaction failed', {
+                transactionId,
+                originalError: error
+            });
+        }
+    }
+}
+
 // Helper function to run PRAGMA settings
-const setPragma = (pragma, value) => {
+const setPragma = (db, pragma, value) => {
     return new Promise((resolve, reject) => {
         const pragmaStatement = `PRAGMA ${pragma} = ${value};`;
         db.run(pragmaStatement, (err) => {
@@ -26,7 +129,6 @@ const setPragma = (pragma, value) => {
 
 // Helper function to promisify database methods
 function promisifyDb(db) {
-    // Promisify get and all methods using arrow functions to preserve context
     db.allAsync = (sql, params = []) => new Promise((resolve, reject) => {
         db.all(sql, params, (err, rows) => {
             if (err) reject(err);
@@ -48,7 +150,6 @@ function promisifyDb(db) {
         });
     });
     
-    // Custom promisification for run to preserve this context
     db.runAsync = (sql, params = []) => new Promise((resolve, reject) => {
         db.run(sql, params, function(err) {
             if (err) reject(err);
@@ -56,7 +157,6 @@ function promisifyDb(db) {
         });
     });
     
-    // Add serialize method that returns a Promise
     db.serializeAsync = () => new Promise((resolve) => {
         db.serialize(() => resolve());
     });
@@ -69,7 +169,6 @@ async function initializeDatabase() {
         const dbPath = path.join(__dirname, '..', 'inventory.db');
         const schemaPath = path.join(__dirname, '..', 'schema.sql');
 
-        // Create database connection with verbose mode
         const Database = verbose.Database;
         db = new Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, async (err) => {
             if (err) {
@@ -78,28 +177,20 @@ async function initializeDatabase() {
                 return;
             }
 
-            // Promisify database methods
             db = promisifyDb(db);
-
             console.log('Connected to SQLite database');
             
             try {
-                // First, ensure we're not in a transaction
                 await db.getAsync("PRAGMA query_only = 0;");
+                await setPragma(db, 'journal_mode', 'WAL');
+                await setPragma(db, 'synchronous', 'NORMAL');
+                await setPragma(db, 'busy_timeout', '30000');
+                await setPragma(db, 'foreign_keys', 'ON');
+                await setPragma(db, 'cache_size', '-4000');
+                await setPragma(db, 'temp_store', 'MEMORY');
+                await setPragma(db, 'locking_mode', 'NORMAL');
+                await setPragma(db, 'mmap_size', '268435456');
 
-                // Set critical PRAGMA settings first
-                await setPragma('journal_mode', 'WAL');
-                await setPragma('synchronous', 'NORMAL');
-                
-                // Set remaining PRAGMA settings
-                await setPragma('busy_timeout', '30000');
-                await setPragma('foreign_keys', 'ON');
-                await setPragma('cache_size', '-4000');
-                await setPragma('temp_store', 'MEMORY');
-                await setPragma('locking_mode', 'NORMAL');
-                await setPragma('mmap_size', '268435456');
-
-                // Check JSON1 extension
                 try {
                     await db.getAsync("SELECT json_group_array(1) as test");
                 } catch (e) {
@@ -109,22 +200,17 @@ async function initializeDatabase() {
                     console.error('Error checking JSON1 extension:', e);
                 }
 
-                // Check if database needs initialization
                 const row = await db.getAsync('SELECT COUNT(*) as count FROM sqlite_master WHERE type="table" AND name="item"');
                 const needsInit = !row || row.count === 0;
 
                 if (needsInit) {
                     console.log('Database needs initialization, creating tables...');
-                    // Read schema
                     const schema = fs.readFileSync(schemaPath, 'utf8');
-                    
-                    // Remove DROP statements
                     const cleanSchema = schema
                         .split('\n')
                         .filter(line => !line.trim().toLowerCase().startsWith('drop'))
                         .join('\n');
                     
-                    // Split schema into individual statements, preserving triggers
                     const statements = [];
                     let currentStatement = '';
                     let inTrigger = false;
@@ -146,7 +232,6 @@ async function initializeDatabase() {
                         }
                     });
 
-                    // Begin transaction for schema creation
                     await db.runAsync('BEGIN IMMEDIATE TRANSACTION;');
 
                     try {
@@ -179,19 +264,19 @@ async function initializeDatabase() {
                     console.log('Database already initialized, skipping schema creation');
                 }
 
-                resolve(db);
+                // Create DAL instance
+                const dal = new DatabaseAccessLayer(db);
+                resolve(dal);
             } catch (error) {
                 console.error('Error initializing database:', error);
                 reject(error);
             }
         });
 
-        // Handle database errors
         db.on('error', (err) => {
             console.error('Database error:', err);
         });
 
-        // Handle process termination
         process.on('SIGINT', () => {
             if (db) {
                 db.close((err) => {
@@ -210,12 +295,15 @@ async function initializeDatabase() {
 // Export a function to get the database instance
 function getDatabase() {
     if (!db) {
-        throw new Error('Database not initialized');
+        throw new DatabaseError('Database not initialized', 'INITIALIZATION_ERROR');
     }
-    return db;
+    return new DatabaseAccessLayer(db);
 }
 
 module.exports = {
     initializeDatabase,
-    getDatabase
+    getDatabase,
+    DatabaseAccessLayer,
+    DatabaseError,
+    TransactionError
 };

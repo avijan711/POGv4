@@ -38,12 +38,19 @@ function PromotionList() {
     const fetchPromotions = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(`${API_BASE_URL}/api/promotions`);
-            setPromotions(response.data || []);
             setError(null);
+            // Use the /api/promotions endpoint instead of /api/promotions/active
+            const response = await axios.get(`${API_BASE_URL}/api/promotions`);
+            if (response.data?.success) {
+                setPromotions(response.data.data || []);
+            } else {
+                throw new Error(response.data?.message || 'Failed to load promotions');
+            }
         } catch (err) {
             console.error('Error fetching promotions:', err);
-            setError('Failed to load promotions');
+            const errorMessage = err.response?.data?.message || 'Failed to load promotions';
+            const suggestion = err.response?.data?.suggestion;
+            setError(suggestion ? `${errorMessage} - ${suggestion}` : errorMessage);
         } finally {
             setLoading(false);
         }
@@ -55,11 +62,17 @@ function PromotionList() {
         }
 
         try {
-            await axios.delete(`${API_BASE_URL}/api/promotions/${promotionId}`);
-            await fetchPromotions();
+            const response = await axios.delete(`${API_BASE_URL}/api/promotions/${promotionId}`);
+            if (response.data?.success) {
+                await fetchPromotions();
+            } else {
+                throw new Error(response.data?.message || 'Failed to delete promotion');
+            }
         } catch (err) {
             console.error('Error deleting promotion:', err);
-            setError('Failed to delete promotion');
+            const errorMessage = err.response?.data?.message || 'Failed to delete promotion';
+            const suggestion = err.response?.data?.suggestion;
+            setError(suggestion ? `${errorMessage} - ${suggestion}` : errorMessage);
         }
     };
 

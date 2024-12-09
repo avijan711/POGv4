@@ -38,6 +38,7 @@ import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import { formatIlsPrice } from '../utils/priceUtils';
 import { dataDebug, perfDebug } from '../utils/debug';
+import ExportHeadersDialog from './ExportHeadersDialog';
 
 function InquiryItemsDialog({ open, onClose, items, onViewDetails }) {
   const [sortField, setSortField] = useState('item_id');
@@ -193,6 +194,8 @@ function InquiryList() {
   const [inquiryToDelete, setInquiryToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportInquiryId, setExportInquiryId] = useState(null);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -307,6 +310,11 @@ function InquiryList() {
   };
 
   const handleExportInquiry = async (inquiryId) => {
+    setExportInquiryId(inquiryId);
+    setExportDialogOpen(true);
+  };
+
+  const handleExportConfirm = async (selectedHeaders) => {
     try {
       setIsExporting(true);
       setLoadingMessage('Preparing export...');
@@ -319,7 +327,17 @@ function InquiryList() {
         });
       }, 200);
 
-      const response = await axios.get(`${API_BASE_URL}/api/inquiries/${inquiryId}/export`, {
+      // Ensure we have at least one header selected
+      if (!selectedHeaders || selectedHeaders.length === 0) {
+        throw new Error('Please select at least one header for export');
+      }
+
+      dataDebug.log('Exporting with headers:', selectedHeaders);
+
+      const response = await axios.get(`${API_BASE_URL}/api/inquiries/${exportInquiryId}/export`, {
+        params: { 
+          headers: JSON.stringify(selectedHeaders)
+        },
         responseType: 'blob'
       });
       clearInterval(progressInterval);
@@ -342,6 +360,8 @@ function InquiryList() {
       setError('Failed to export inquiry. Please try again later.');
     } finally {
       setIsExporting(false);
+      setExportDialogOpen(false);
+      setExportInquiryId(null);
     }
   };
 
@@ -592,6 +612,15 @@ function InquiryList() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ExportHeadersDialog
+        open={exportDialogOpen}
+        onClose={() => {
+          setExportDialogOpen(false);
+          setExportInquiryId(null);
+        }}
+        onConfirm={handleExportConfirm}
+      />
 
       {(isExporting || isDeleting) && (
         <LoadingProgress value={loadingProgress} message={loadingMessage} />

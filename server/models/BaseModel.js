@@ -1,11 +1,11 @@
 const debug = require('../utils/debug');
 
 class BaseModel {
-    constructor(db) {
-        if (!db) {
-            throw new Error('Database instance is required');
+    constructor(dal) {
+        if (!dal) {
+            throw new Error('Database Access Layer instance is required');
         }
-        this.db = db;
+        this.db = dal;
     }
 
     /**
@@ -15,19 +15,7 @@ class BaseModel {
      * @returns {Promise} - Resolves with query results
      */
     async executeQuery(query, params = []) {
-        const queryId = Math.random().toString(36).substring(7);
-        debug.time(`Query ${queryId}`);
-        debug.logQuery(`Query ${queryId}`, query, params);
-
-        try {
-            const rows = await this.db.allAsync(query, params);
-            debug.log(`Query ${queryId} result`, rows);
-            debug.timeEnd(`Query ${queryId}`);
-            return rows || [];
-        } catch (err) {
-            debug.error(`Query ${queryId} error:`, err);
-            throw err;
-        }
+        return await this.db.query(query, params);
     }
 
     /**
@@ -37,19 +25,7 @@ class BaseModel {
      * @returns {Promise} - Resolves with a single row
      */
     async executeQuerySingle(query, params = []) {
-        const queryId = Math.random().toString(36).substring(7);
-        debug.time(`Single Query ${queryId}`);
-        debug.logQuery(`Single Query ${queryId}`, query, params);
-
-        try {
-            const row = await this.db.getAsync(query, params);
-            debug.log(`Single Query ${queryId} result`, row);
-            debug.timeEnd(`Single Query ${queryId}`);
-            return row;
-        } catch (err) {
-            debug.error(`Single Query ${queryId} error:`, err);
-            throw err;
-        }
+        return await this.db.querySingle(query, params);
     }
 
     /**
@@ -59,19 +35,7 @@ class BaseModel {
      * @returns {Promise} - Resolves with the result
      */
     async executeRun(query, params = []) {
-        const queryId = Math.random().toString(36).substring(7);
-        debug.time(`Run ${queryId}`);
-        debug.logQuery(`Run ${queryId}`, query, params);
-
-        try {
-            const result = await this.db.runAsync(query, params);
-            debug.log(`Run ${queryId} result`, result);
-            debug.timeEnd(`Run ${queryId}`);
-            return result;
-        } catch (err) {
-            debug.error(`Run ${queryId} error:`, err);
-            throw err;
-        }
+        return await this.db.run(query, params);
     }
 
     /**
@@ -80,22 +44,7 @@ class BaseModel {
      * @returns {Promise} - Resolves when transaction is complete
      */
     async executeTransaction(transactionCallback) {
-        const transactionId = Math.random().toString(36).substring(7);
-        debug.time(`Transaction ${transactionId}`);
-        debug.log(`Starting transaction ${transactionId}`);
-
-        try {
-            await this.db.runAsync('BEGIN TRANSACTION');
-            const result = await transactionCallback();
-            await this.db.runAsync('COMMIT');
-            debug.log(`Transaction ${transactionId} committed successfully`);
-            debug.timeEnd(`Transaction ${transactionId}`);
-            return result;
-        } catch (error) {
-            debug.error(`Transaction ${transactionId} error:`, error);
-            await this.db.runAsync('ROLLBACK');
-            throw error;
-        }
+        return await this.db.executeTransaction(transactionCallback);
     }
 
     /**

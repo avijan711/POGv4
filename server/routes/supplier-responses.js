@@ -43,11 +43,36 @@ function createRouter({ db }) {
                 pageSize
             );
 
-            // Log the response data for debugging
-            debug.log('Response data:', {
-                supplierCount: Object.keys(responses.data || {}).length,
-                stats: responses.stats,
-                missingItemsCount: responses.stats?.missingItems?.length || 0
+            // Enhanced debugging for response data
+            debug.log('Raw response data structure:', {
+                dataKeys: Object.keys(responses.data || {}),
+                statsKeys: Object.keys(responses.stats || {}),
+                paginationKeys: Object.keys(responses.pagination || {})
+            });
+
+            // Log sample supplier data
+            const sampleSupplierId = Object.keys(responses.data || {})[0];
+            if (sampleSupplierId) {
+                const sampleSupplier = responses.data[sampleSupplierId];
+                debug.log('Sample supplier data structure:', {
+                    supplier_id: sampleSupplierId,
+                    dataKeys: Object.keys(sampleSupplier),
+                    missingItemsType: typeof sampleSupplier.missingItems,
+                    missingItemsLength: Array.isArray(sampleSupplier.missingItems) ? sampleSupplier.missingItems.length : 'not an array',
+                    missingItemsSample: Array.isArray(sampleSupplier.missingItems) && sampleSupplier.missingItems.length > 0 
+                        ? sampleSupplier.missingItems[0] 
+                        : 'no items'
+                });
+            }
+
+            // Log missing items data specifically
+            debug.log('Missing items data:', {
+                globalMissingItems: responses.stats.missingItems,
+                supplierSpecificMissing: Object.entries(responses.data || {}).map(([id, data]) => ({
+                    supplier_id: id,
+                    missingCount: Array.isArray(data.missingItems) ? data.missingItems.length : 'not an array',
+                    sample: Array.isArray(data.missingItems) && data.missingItems.length > 0 ? data.missingItems[0] : null
+                }))
             });
 
             // Add pagination metadata to response headers
@@ -57,16 +82,31 @@ function createRouter({ db }) {
                 'X-Has-More': responses.pagination.hasMore
             });
 
+            // Transform the response to ensure missing items are properly included
+            const transformedData = Object.entries(responses.data).reduce((acc, [supplierId, supplierData]) => {
+                // Ensure missingItems is always an array
+                const missingItems = Array.isArray(supplierData.missingItems) 
+                    ? supplierData.missingItems 
+                    : (typeof supplierData.missingItems === 'string' 
+                        ? JSON.parse(supplierData.missingItems) 
+                        : []);
+
+                acc[supplierId] = {
+                    ...supplierData,
+                    missingItems: missingItems
+                };
+                return acc;
+            }, {});
+
             // Send the response data with stats
             res.json({
-                data: responses.data,
+                data: transformedData,
                 stats: {
                     totalResponses: responses.stats.totalResponses,
                     totalItems: responses.stats.totalItems,
                     totalSuppliers: responses.stats.totalSuppliers,
                     respondedItems: responses.stats.respondedItems,
-                    missingResponses: responses.stats.missingResponses,
-                    missingItems: responses.stats.missingItems || []
+                    missingResponses: responses.stats.missingResponses
                 }
             });
         } catch (err) {

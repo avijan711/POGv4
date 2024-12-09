@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { uiDebug, dataDebug } from '../utils/debug';
 import inventoryUtils from '../utils/inventoryUtils';
 import axiosInstance from '../utils/axiosConfig';
@@ -52,48 +52,49 @@ export const useItemDetails = (item, open, mode = 'view') => {
     }
   };
 
+  // Fetch item data function
+  const fetchFullItemData = useCallback(async () => {
+    if (!open || !item?.item_id) return;
+
+    try {
+      setLoading(true);
+      dataDebug.log('Fetching full item data for:', item.item_id);
+
+      const [
+        itemDetailsResponse,
+        priceHistoryResponse,
+        supplierPricesResponse,
+        referenceChangesResponse
+      ] = await Promise.all([
+        axiosInstance.get(`/api/items/${item.item_id}`),
+        axiosInstance.get(`/api/items/${item.item_id}/price-history`),
+        axiosInstance.get(`/api/items/${item.item_id}/supplier-prices`),
+        axiosInstance.get(`/api/items/${item.item_id}/reference-changes`)
+      ]);
+
+      // Process supplier prices immediately when setting full item data
+      const processedSupplierPrices = processSupplierPrices(supplierPricesResponse.data);
+
+      setFullItemData({
+        details: itemDetailsResponse.data,
+        priceHistory: priceHistoryResponse.data,
+        supplierPrices: processedSupplierPrices,
+        referenceChanges: referenceChangesResponse.data
+      });
+
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching item data:', err);
+      setError(err.response?.data?.message || 'Error loading item data');
+    } finally {
+      setLoading(false);
+    }
+  }, [open, item?.item_id]);
+
   // Fetch complete item data when dialog opens
   useEffect(() => {
-    const fetchFullItemData = async () => {
-      if (!open || !item?.item_id) return;
-
-      try {
-        setLoading(true);
-        dataDebug.log('Fetching full item data for:', item.item_id);
-
-        const [
-          itemDetailsResponse,
-          priceHistoryResponse,
-          supplierPricesResponse,
-          referenceChangesResponse
-        ] = await Promise.all([
-          axiosInstance.get(`/api/items/${item.item_id}`),
-          axiosInstance.get(`/api/items/${item.item_id}/price-history`),
-          axiosInstance.get(`/api/items/${item.item_id}/supplier-prices`),
-          axiosInstance.get(`/api/items/${item.item_id}/reference-changes`)
-        ]);
-
-        // Process supplier prices immediately when setting full item data
-        const processedSupplierPrices = processSupplierPrices(supplierPricesResponse.data);
-
-        setFullItemData({
-          details: itemDetailsResponse.data,
-          priceHistory: priceHistoryResponse.data,
-          supplierPrices: processedSupplierPrices,
-          referenceChanges: referenceChangesResponse.data
-        });
-
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching item data:', err);
-        setError(err.response?.data?.message || 'Error loading item data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchFullItemData();
-  }, [open, item?.item_id]);
+  }, [fetchFullItemData]);
 
   // Process item data based on mode
   const itemData = useMemo(() => {
@@ -106,8 +107,8 @@ export const useItemDetails = (item, open, mode = 'view') => {
       const details = fullItemData?.details || item;
       const priceHistory = fullItemData?.priceHistory || [];
       
-      // Process supplier prices from either source
-      const supplierPrices = fullItemData?.supplierPrices || processSupplierPrices(item.supplier_prices);
+      // Process supplier prices from either source, with null check for item.supplier_prices
+      const supplierPrices = fullItemData?.supplierPrices || (item && item.supplier_prices ? processSupplierPrices(item.supplier_prices) : []);
       
       const referenceChanges = fullItemData?.referenceChanges || [];
 
@@ -200,12 +201,18 @@ export const useItemDetails = (item, open, mode = 'view') => {
     return errorState;
   }, [error]);
 
+  // Function to refresh item data
+  const refreshItemData = useCallback(() => {
+    fetchFullItemData();
+  }, [fetchFullItemData]);
+
   return {
     tabValue,
     setTabValue,
     itemData,
     isLoading,
     hasError,
-    error
+    error,
+    refreshItemData
   };
 };

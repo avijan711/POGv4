@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const ExcelProcessor = require('../utils/excelProcessor/index');
 const { getExcelColumns } = require('../utils/excelProcessor/columnReader');
+const { processInquiryData, processExportData } = require('../utils/excelProcessor/dataProcessor');
 const InquiryModel = require('../models/inquiry');
 const InquiryItemModel = require('../models/inquiry/item');
 const Promotion = require('../models/promotion');
@@ -10,9 +11,152 @@ const { handleUpload, cleanupFile } = require('../middleware/upload');
 const XLSX = require('xlsx');
 const path = require('path');
 const fs = require('fs');
+const { DatabaseAccessLayer } = require('../config/database');
 
-function createRouter({ db, inquiryModel, inquiryItemModel }) {
+function createRouter({ db }) {
     const router = express.Router();
+    const dal = db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db);
+    const inquiryModel = new InquiryModel(dal);
+    const inquiryItemModel = new InquiryItemModel(dal);
+
+    // Get all inquiries
+    router.get('/', async (req, res) => {
+        try {
+            const inquiries = await inquiryModel.getAllInquiries();
+            res.json(inquiries);
+        } catch (err) {
+            debug.error('Error fetching inquiries:', err);
+            res.status(500).json({
+                error: 'Failed to fetch inquiries',
+                details: err.message
+            });
+        }
+    });
+
+    // Get single inquiry with its items
+    router.get('/:inquiryId', async (req, res) => {
+        try {
+            const { inquiryId } = req.params;
+            const inquiry = await inquiryModel.getInquiryById(inquiryId);
+            
+            if (!inquiry) {
+                return res.status(404).json({
+                    error: 'Inquiry not found',
+                    details: `No inquiry found with ID ${inquiryId}`
+                });
+            }
+
+            res.json(inquiry);
+        } catch (err) {
+            debug.error('Error fetching inquiry:', err);
+            res.status(500).json({
+                error: 'Failed to fetch inquiry',
+                details: err.message
+            });
+        }
+    });
+
+    // Export inquiry to Excel
+    router.get('/:inquiryId/export', async (req, res) => {
+        try {
+            const { inquiryId } = req.params;
+            const headersParam = req.query.headers;
+            
+            if (!headersParam) {
+                return res.status(400).json({
+                    error: 'Missing headers parameter',
+                    details: 'Headers parameter is required for export'
+                });
+            }
+
+            let headers;
+            try {
+                headers = JSON.parse(decodeURIComponent(headersParam));
+            } catch (err) {
+                return res.status(400).json({
+                    error: 'Invalid headers format',
+                    details: 'Headers must be a valid JSON array'
+                });
+            }
+
+            // Get inquiry items
+            const items = await inquiryModel.getInquiryItems(inquiryId);
+            
+            if (!items || items.length === 0) {
+                return res.status(404).json({
+                    error: 'No items found',
+                    details: 'No items found for this inquiry'
+                });
+            }
+
+            // Map header display names
+            const headerDisplayMap = {
+                'item_id': 'Item ID',
+                'hebrew_description': 'Hebrew Description',
+                'english_description': 'English Description',
+                'requested_qty': 'Requested Quantity',
+                'import_markup': 'Import Markup',
+                'hs_code': 'HS Code',
+                'origin': 'Origin',
+                'retail_price': 'Retail Price (ILS)',
+                'qty_in_stock': 'Current Stock',
+                'sold_this_year': 'Sold This Year',
+                'sold_last_year': 'Sold Last Year',
+                'notes': 'Notes'
+            };
+
+            // Process data for export
+            const { buffer } = await processExportData(items, headers, headerDisplayMap);
+
+            // Set response headers
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename=inquiry_${inquiryId}_export.xlsx`);
+            
+            // Send the Excel file
+            res.send(buffer);
+
+        } catch (err) {
+            debug.error('Error exporting inquiry:', err);
+            res.status(500).json({
+                error: 'Failed to export inquiry',
+                details: err.message
+            });
+        }
+    });
+
+    // Add new item to inquiry
+    router.post('/:inquiryId/items', async (req, res) => {
+        try {
+            const { inquiryId } = req.params;
+            const { item_id, hebrew_description, english_description, requested_qty, notes } = req.body;
+
+            if (!item_id || !requested_qty) {
+                return res.status(400).json({
+                    error: 'Missing required fields',
+                    details: 'Item ID and quantity are required',
+                    suggestion: 'Please provide both item ID and quantity'
+                });
+            }
+
+            await inquiryItemModel.createInquiryItem(inquiryId, {
+                item_id,
+                hebrew_description: hebrew_description || `Item ${item_id}`,
+                english_description: english_description || '',
+                requested_qty: parseInt(requested_qty, 10),
+                notes: notes || ''
+            });
+
+            const updatedInquiry = await inquiryModel.getInquiryById(inquiryId);
+            res.status(201).json(updatedInquiry);
+        } catch (err) {
+            debug.error('Error adding item:', err);
+            res.status(500).json({
+                error: 'Failed to add item',
+                details: err.message,
+                suggestion: 'Please try again or contact support if the issue persists'
+            });
+        }
+    });
 
     // Get Excel columns for mapping
     router.post('/columns', handleUpload, async (req, res, next) => {
@@ -39,7 +183,7 @@ function createRouter({ db, inquiryModel, inquiryItemModel }) {
         }
     });
 
-    // Upload Excel file
+    // Upload Excel file for inquiry
     router.post('/upload', handleUpload, async (req, res, next) => {
         try {
             if (!req.file) {
@@ -50,295 +194,104 @@ function createRouter({ db, inquiryModel, inquiryItemModel }) {
                 });
             }
 
-            debug.log('Upload request:', {
-                file: req.file,
-                body: req.body
-            });
-
             const { inquiryNumber, columnMapping } = req.body;
+            
             if (!inquiryNumber) {
+                cleanupFile(req.file.path);
                 return res.status(400).json({
                     error: 'Missing inquiry number',
                     details: 'An inquiry number is required',
-                    suggestion: 'Please provide a valid inquiry number'
+                    suggestion: 'Please provide an inquiry number'
                 });
             }
 
             if (!columnMapping) {
+                cleanupFile(req.file.path);
                 return res.status(400).json({
                     error: 'Missing column mapping',
                     details: 'Column mapping is required',
-                    suggestion: 'Please map the Excel columns to the required fields'
+                    suggestion: 'Please map the Excel columns first'
                 });
             }
 
-            let parsedMapping;
+            let mapping;
             try {
-                parsedMapping = JSON.parse(columnMapping);
+                mapping = JSON.parse(columnMapping);
             } catch (err) {
-                debug.error('Error parsing column mapping:', err);
+                cleanupFile(req.file.path);
                 return res.status(400).json({
-                    error: 'Invalid column mapping format',
-                    details: 'The column mapping could not be parsed',
-                    suggestion: 'Please ensure the column mapping is valid JSON'
+                    error: 'Invalid column mapping',
+                    details: 'Column mapping must be valid JSON',
+                    suggestion: 'Please try mapping the columns again'
                 });
             }
 
-            // Get Excel columns first
-            const columns = await ExcelProcessor.getColumns(req.file.path);
+            // Process the Excel file using the mapping
+            const items = await processInquiryData(req.file.path, mapping, dal);
             
-            // Validate the mapping against actual Excel columns
-            ExcelProcessor.validateMapping(parsedMapping, columns);
-            
-            // Process the Excel file
-            const items = await ExcelProcessor.readExcelFile(req.file.path);
-            
-            debug.log('Processed items:', {
-                count: items.length,
-                sample: items[0]
-            });
-
-            // Create the inquiry
+            // Create a new inquiry with the processed items
             const inquiry = await inquiryModel.createInquiry({
                 inquiryNumber,
-                items: items.map(item => {
-                    const mappedItem = {};
-                    for (const [field, excelColumn] of Object.entries(parsedMapping)) {
-                        mappedItem[field] = item[excelColumn];
-                    }
-                    return mappedItem;
-                })
+                items
             });
 
-            // Clean up the uploaded file after processing
+            // Clean up the uploaded file
             cleanupFile(req.file.path);
 
-            res.json({
+            res.status(201).json({
                 message: 'File processed successfully',
                 inquiryId: inquiry.id,
                 itemCount: items.length
             });
+
         } catch (err) {
-            debug.error('Error processing file:', err);
+            debug.error('Error processing upload:', err);
             cleanupFile(req.file?.path);
-            
-            // Send appropriate error response
-            if (err.message.includes('Invalid column mappings')) {
-                return res.status(400).json({
-                    error: 'Invalid column mapping',
-                    details: err.message,
-                    suggestion: 'Please ensure all mapped columns exist in the Excel file'
-                });
-            }
-            
-            if (err.message.includes('validation failed')) {
-                return res.status(400).json({
-                    error: 'Data validation failed',
-                    details: err.message,
-                    suggestion: 'Please check your Excel file data'
-                });
-            }
-
-            next(err);
-        }
-    });
-
-    // Get all inquiries
-    router.get('/', async (req, res, next) => {
-        try {
-            const inquiries = await inquiryModel.getAllInquiries();
-            res.json(inquiries);
-        } catch (err) {
-            next(err);
-        }
-    });
-
-    // Get specific inquiry
-    router.get('/:id', async (req, res, next) => {
-        try {
-            const inquiry = await inquiryModel.getInquiryById(req.params.id);
-            if (!inquiry) {
-                return res.status(404).json({ error: 'Inquiry not found' });
-            }
-            res.json(inquiry);
-        } catch (err) {
-            next(err);
-        }
-    });
-
-    // Export inquiry for suppliers
-    router.get('/:id/export', async (req, res, next) => {
-        try {
-            debug.log('Exporting inquiry:', req.params.id);
-            
-            // Get inquiry data
-            const inquiry = await inquiryModel.getInquiryById(req.params.id);
-            if (!inquiry) {
-                return res.status(404).json({ error: 'Inquiry not found' });
-            }
-
-            // Parse items if needed
-            let items = inquiry.items;
-            if (typeof items === 'string') {
-                items = JSON.parse(items);
-            }
-
-            // Create workbook
-            const wb = XLSX.utils.book_new();
-            
-            // Transform items into rows with all relevant fields
-            const rows = items.map(item => ({
-                item_id: item.item_id || '',
-                hebrew_description: item.hebrew_description || '',
-                english_description: item.english_description || '',
-                requested_qty: item.requested_qty || '',
-                hs_code: item.hs_code || '',
-                origin: item.origin || '',
-                reference_notes: item.reference_notes || ''
-            }));
-
-            // Create worksheet
-            const ws = XLSX.utils.json_to_sheet(rows);
-
-            // Add worksheet to workbook
-            XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-
-            // Ensure uploads directory exists
-            const uploadsDir = path.join(process.cwd(), 'server', 'uploads');
-            if (!fs.existsSync(uploadsDir)) {
-                fs.mkdirSync(uploadsDir, { recursive: true });
-            }
-
-            // Generate filename with inquiry number
-            const filename = `inquiry_export_${inquiry.inquiry.inquiry_number}_${Date.now()}.xlsx`;
-            const filepath = path.join(uploadsDir, filename);
-
-            // Write file
-            XLSX.writeFile(wb, filepath);
-
-            // Set headers for file download
-            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-            // Send file and clean up
-            res.download(filepath, filename, (err) => {
-                // Clean up file after sending
-                cleanupFile(filepath);
-                if (err) {
-                    debug.error('Error sending file:', err);
-                    next(err);
-                }
-            });
-        } catch (err) {
-            debug.error('Error exporting inquiry:', err);
             next(err);
         }
     });
 
     // Create new inquiry
-    router.post('/', async (req, res, next) => {
+    router.post('/', async (req, res) => {
         try {
             const inquiry = await inquiryModel.createInquiry(req.body);
             res.status(201).json(inquiry);
         } catch (err) {
-            next(err);
+            debug.error('Error creating inquiry:', err);
+            res.status(500).json({
+                error: 'Failed to create inquiry',
+                details: err.message
+            });
         }
     });
 
     // Update inquiry
-    router.put('/:id', async (req, res, next) => {
+    router.put('/:inquiryId', async (req, res) => {
         try {
-            const inquiry = await inquiryModel.updateInquiry(req.params.id, req.body);
-            if (!inquiry) {
-                return res.status(404).json({ error: 'Inquiry not found' });
-            }
+            const { inquiryId } = req.params;
+            const inquiry = await inquiryModel.updateInquiry(inquiryId, req.body);
             res.json(inquiry);
         } catch (err) {
-            next(err);
+            debug.error('Error updating inquiry:', err);
+            res.status(500).json({
+                error: 'Failed to update inquiry',
+                details: err.message
+            });
         }
     });
 
     // Delete inquiry
-    router.delete('/:id', async (req, res, next) => {
+    router.delete('/:inquiryId', async (req, res) => {
         try {
-            const result = await inquiryModel.deleteInquiry(req.params.id);
-            if (!result) {
-                return res.status(404).json({ error: 'Inquiry not found' });
-            }
-            res.json({ message: 'Inquiry deleted successfully' });
+            const { inquiryId } = req.params;
+            await inquiryModel.deleteInquiry(inquiryId);
+            res.status(204).send();
         } catch (err) {
-            next(err);
-        }
-    });
-
-    // Update inquiry item quantity
-    router.put('/inquiry-items/:id/quantity', async (req, res, next) => {
-        try {
-            debug.log('Updating quantity:', {
-                itemId: req.params.id,
-                requestedQty: req.body.requested_qty
+            debug.error('Error deleting inquiry:', err);
+            res.status(500).json({
+                error: 'Failed to delete inquiry',
+                details: err.message
             });
-
-            const { requested_qty } = req.body;
-            if (requested_qty === undefined || requested_qty === null) {
-                return res.status(400).json({
-                    error: 'Invalid quantity',
-                    details: 'Quantity must be provided'
-                });
-            }
-
-            const qty = parseInt(requested_qty);
-            if (isNaN(qty) || qty < 0) {
-                return res.status(400).json({
-                    error: 'Invalid quantity',
-                    details: 'Quantity must be a non-negative number'
-                });
-            }
-
-            try {
-                // Use updateQuantity instead of updateInquiryItem
-                const result = await inquiryItemModel.updateQuantity(req.params.id, qty);
-
-                if (result) {
-                    res.json({ message: 'Quantity updated successfully' });
-                }
-            } catch (error) {
-                if (error.message.includes('not found')) {
-                    return res.status(404).json({ 
-                        error: 'Item not found',
-                        details: error.message
-                    });
-                }
-                throw error;
-            }
-        } catch (err) {
-            debug.error('Error updating quantity:', err);
-            next(err);
-        }
-    });
-
-    // Delete inquiry item
-    router.delete('/inquiry-items/:id', async (req, res, next) => {
-        try {
-            debug.log('Deleting item:', req.params.id);
-            
-            try {
-                const result = await inquiryItemModel.deleteItem(req.params.id);
-                if (result) {
-                    res.json({ message: 'Item deleted successfully' });
-                }
-            } catch (error) {
-                if (error.message.includes('not found')) {
-                    return res.status(404).json({ 
-                        error: 'Item not found',
-                        details: error.message
-                    });
-                }
-                throw error;
-            }
-        } catch (err) {
-            debug.error('Error deleting item:', err);
-            next(err);
         }
     });
 

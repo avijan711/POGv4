@@ -18,6 +18,12 @@ class InquiryModel extends BaseModel {
 
             // First pass: Create all items and referenced items
             for (const item of items) {
+                // Skip if no item_id
+                if (!item.item_id) {
+                    debug.log('Skipping item with no item_id');
+                    continue;
+                }
+
                 // Check and create the main item if it doesn't exist
                 const existingItem = await this.executeQuerySingle(
                     'SELECT item_id FROM item WHERE item_id = ?',
@@ -96,6 +102,12 @@ class InquiryModel extends BaseModel {
 
             // Second pass: Insert inquiry items now that all referenced items exist
             for (const item of items) {
+                // Skip if no item_id
+                if (!item.item_id) {
+                    debug.log('Skipping inquiry item with no item_id');
+                    continue;
+                }
+
                 const inquiryItemSql = `
                     INSERT INTO inquiry_item (
                         inquiry_id, item_id, requested_qty,

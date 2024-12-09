@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -12,6 +12,12 @@ import {
   Divider,
   Paper,
   Stack,
+  IconButton,
+  Tooltip,
+  Snackbar,
+  Alert,
+  Popover,
+  TextField,
 } from '@mui/material';
 import {
   SwapHoriz as SwapHorizIcon,
@@ -22,9 +28,54 @@ import {
   Notes as NotesIcon,
   Inventory as InventoryIcon,
   Public as PublicIcon,
+  ContentCopy as ContentCopyIcon,
+  Edit as EditIcon,
+  Save as SaveIcon,
+  Close as CloseIcon,
+  Upload as UploadIcon,
+  AttachFile as AttachFileIcon,
 } from '@mui/icons-material';
+import axios from 'axios';
+import { API_BASE_URL } from '../config';
+import { useItemFiles } from '../hooks/useItemFiles';
+import ItemFiles from './ItemDetailsDialog/ItemFiles';
 
 function ItemDetailsDialog({ open, onClose, item }) {
+  const [showCopySuccess, setShowCopySuccess] = useState(false);
+  const [priceHistoryAnchor, setPriceHistoryAnchor] = useState(null);
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [notesContent, setNotesContent] = useState(item?.notes || '');
+  const [dragActive, setDragActive] = useState(false);
+  const [priceHistory, setPriceHistory] = useState([]);
+  const [showUploadSuccess, setShowUploadSuccess] = useState(false);
+
+  const {
+    files,
+    loading: filesLoading,
+    error: filesError,
+    uploadProgress,
+    uploadFiles,
+    deleteFile,
+    downloadFile
+  } = useItemFiles(item?.item_id);
+
+  useEffect(() => {
+    if (item?.item_id) {
+      // Fetch price history
+      axios.get(`${API_BASE_URL}/api/items/${item.item_id}/price-history`)
+        .then(response => {
+          setPriceHistory(response.data);
+        })
+        .catch(error => {
+          console.error('Error fetching price history:', error);
+        });
+
+      // Reset notes content when item changes
+      setNotesContent(item.notes || '');
+      setIsEditingNotes(false);
+    }
+  }, [item?.item_id, item?.notes]);
+
   if (!item) return null;
 
   const formatPrice = (price) => {
@@ -37,26 +88,121 @@ function ItemDetailsDialog({ open, onClose, item }) {
     return new Date(date).toLocaleDateString();
   };
 
-  const SectionTitle = ({ icon: Icon, title }) => (
+  const handleCopyItemId = async () => {
+    try {
+      await navigator.clipboard.writeText(item.item_id);
+      setShowCopySuccess(true);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const success = await uploadFiles(files);
+      if (success) {
+        setShowUploadSuccess(true);
+      }
+    }
+  };
+
+  const handleFileSelect = async (e) => {
+    const files = e.target.files;
+    if (files.length > 0) {
+      const success = await uploadFiles(files);
+      if (success) {
+        setShowUploadSuccess(true);
+      }
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    try {
+      await axios.patch(`${API_BASE_URL}/api/items/${item.item_id}`, {
+        notes: notesContent
+      });
+      setIsEditingNotes(false);
+    } catch (error) {
+      console.error('Error saving notes:', error);
+    }
+  };
+
+  const SectionTitle = ({ icon: Icon, title, onEdit, canEdit }) => (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
       <Icon color="primary" />
       <Typography variant="subtitle1" fontWeight="bold">
         {title}
       </Typography>
+      {canEdit && (
+        <IconButton 
+          size="small" 
+          onClick={() => {
+            if (isEditingNotes) {
+              handleSaveNotes();
+            } else {
+              setIsEditingNotes(true);
+            }
+          }} 
+          sx={{ ml: 'auto' }}
+        >
+          {isEditingNotes ? <SaveIcon /> : <EditIcon />}
+        </IconButton>
+      )}
     </Box>
   );
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Stack spacing={1}>
-            <Typography variant="h6">Item Details</Typography>
-            <Typography variant="body2" color="text.secondary">
-              {item.hebrew_description}
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column',
+          gap: 2,
+          bgcolor: 'grey.100',
+          p: 2,
+          borderRadius: 1,
+          border: '1px solid',
+          borderColor: 'grey.300'
+        }}>
+          {/* Item ID and Copy Button */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="h4" component="div" sx={{ 
+              fontWeight: 'bold',
+              color: 'primary.main',
+              letterSpacing: '0.5px'
+            }}>
+              {item.item_id}
             </Typography>
-          </Stack>
-          <Chip label={item.item_id} color="primary" />
+            <Tooltip title="Copy Item ID">
+              <IconButton onClick={handleCopyItemId} size="small">
+                <ContentCopyIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+          
+          {/* Hebrew Description */}
+          <Typography variant="h5" sx={{ 
+            color: 'text.primary',
+            fontWeight: 500,
+            direction: 'rtl'  // Right-to-left for Hebrew
+          }}>
+            {item.hebrew_description}
+          </Typography>
         </Box>
       </DialogTitle>
       <DialogContent>
@@ -68,9 +214,21 @@ function ItemDetailsDialog({ open, onClose, item }) {
               <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <Typography variant="body2" color="text.secondary">Current Retail Price</Typography>
-                  <Typography variant="h6" color="primary.main">
-                    {formatPrice(item.retail_price)}
-                  </Typography>
+                  <Box 
+                    onClick={(e) => setPriceHistoryAnchor(e.currentTarget)}
+                    sx={{ 
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: 'action.hover',
+                        borderRadius: 1
+                      },
+                      p: 1
+                    }}
+                  >
+                    <Typography variant="h6" color="primary.main">
+                      {formatPrice(item.retail_price)}
+                    </Typography>
+                  </Box>
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="body2" color="text.secondary">Import Markup</Typography>
@@ -80,32 +238,6 @@ function ItemDetailsDialog({ open, onClose, item }) {
                   <Typography variant="body2" color="text.secondary">Last Updated</Typography>
                   <Typography>{formatDate(item.last_price_update)}</Typography>
                 </Grid>
-                {item.supplier_responses?.length > 0 && (
-                  <Grid item xs={12}>
-                    <Divider sx={{ my: 1 }} />
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                      Supplier Pricing History
-                    </Typography>
-                    <Stack spacing={1}>
-                      {item.supplier_responses.map((response, index) => (
-                        <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Chip
-                            icon={<BusinessIcon />}
-                            label={response.supplier_name}
-                            size="small"
-                            variant="outlined"
-                          />
-                          <Typography>
-                            {formatPrice(response.price_quoted)}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {formatDate(response.response_date)}
-                          </Typography>
-                        </Box>
-                      ))}
-                    </Stack>
-                  </Grid>
-                )}
               </Grid>
             </Paper>
           </Grid>
@@ -155,34 +287,92 @@ function ItemDetailsDialog({ open, onClose, item }) {
 
           {/* Notes Section */}
           <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 2, height: '100%' }}>
-              <SectionTitle icon={NotesIcon} title="Notes" />
-              {item.notes ? (
-                <Typography>{item.notes}</Typography>
-              ) : (
-                <Typography color="text.secondary" variant="body2">No notes available</Typography>
-              )}
-              {item.reference_change && (
-                <div>
-                  <Divider sx={{ my: 2 }} />
-                  <Typography variant="body2" color="text.secondary" gutterBottom>Reference Change</Typography>
-                  <Stack spacing={1}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <SwapHorizIcon color="warning" fontSize="small" />
-                      <Typography>Replaced by {item.reference_change.new_reference_id}</Typography>
-                    </Box>
-                    <Typography variant="body2" color="text.secondary">
-                      {item.reference_change.source === 'supplier'
-                        ? `Changed by ${item.reference_change.supplier_name}`
-                        : 'Changed by user'} on {formatDate(item.reference_change.change_date)}
+            <Paper 
+              sx={{ 
+                p: 2, 
+                height: '100%',
+                position: 'relative',
+                ...(dragActive && {
+                  borderColor: 'primary.main',
+                  borderStyle: 'dashed',
+                  bgcolor: 'action.hover'
+                })
+              }}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+            >
+              <SectionTitle 
+                icon={NotesIcon} 
+                title="Notes" 
+                canEdit={true}
+              />
+              {isEditingNotes ? (
+                <Box sx={{ position: 'relative' }}>
+                  <TextField
+                    multiline
+                    fullWidth
+                    minRows={4}
+                    value={notesContent}
+                    onChange={(e) => setNotesContent(e.target.value)}
+                    placeholder="Enter notes here..."
+                    variant="outlined"
+                  />
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Attached Files
                     </Typography>
-                    {item.reference_change.notes && (
-                      <Typography variant="body2">
-                        Note: {item.reference_change.notes}
-                      </Typography>
-                    )}
-                  </Stack>
-                </div>
+                    <ItemFiles
+                      files={files}
+                      onDownload={downloadFile}
+                      onDelete={deleteFile}
+                      uploadProgress={uploadProgress}
+                    />
+                    <Box 
+                      sx={{ 
+                        mt: 2,
+                        p: 2,
+                        border: '2px dashed',
+                        borderColor: 'grey.300',
+                        borderRadius: 1,
+                        textAlign: 'center',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <input
+                        type="file"
+                        multiple
+                        style={{ display: 'none' }}
+                        id="file-upload"
+                        onChange={handleFileSelect}
+                      />
+                      <label htmlFor="file-upload" style={{ cursor: 'pointer' }}>
+                        <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
+                          <AttachFileIcon color="action" />
+                          <Typography variant="body2" color="text.secondary">
+                            Drag & drop files here or click to upload
+                          </Typography>
+                        </Stack>
+                      </label>
+                    </Box>
+                  </Box>
+                </Box>
+              ) : (
+                <Box>
+                  <Typography sx={{ whiteSpace: 'pre-wrap', mb: 2 }}>
+                    {notesContent || 'No notes available'}
+                  </Typography>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Attached Files
+                  </Typography>
+                  <ItemFiles
+                    files={files}
+                    onDownload={downloadFile}
+                    onDelete={deleteFile}
+                    uploadProgress={uploadProgress}
+                  />
+                </Box>
               )}
             </Paper>
           </Grid>
@@ -221,59 +411,64 @@ function ItemDetailsDialog({ open, onClose, item }) {
               )}
             </Paper>
           </Grid>
-
-          {/* Supplier Responses */}
-          {item.supplier_responses?.length > 0 && (
-            <Grid item xs={12}>
-              <Paper sx={{ p: 2 }}>
-                <SectionTitle icon={BusinessIcon} title="Supplier Responses" />
-                <Grid container spacing={2}>
-                  {item.supplier_responses.map((response, index) => (
-                    <Grid item xs={12} key={index}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Chip
-                          icon={<BusinessIcon />}
-                          label={response.supplier_name}
-                          color="primary"
-                          variant="outlined"
-                        />
-                        <Chip
-                          icon={<AttachMoneyIcon />}
-                          label={formatPrice(response.price_quoted)}
-                          color={response.is_promotion ? "secondary" : "default"}
-                          variant="outlined"
-                        />
-                        {response.is_promotion && (
-                          <Chip
-                            icon={<LocalOfferIcon />}
-                            label="Promotion"
-                            color="secondary"
-                            size="small"
-                          />
-                        )}
-                        <Typography variant="body2" color="text.secondary">
-                          {formatDate(response.response_date)}
-                        </Typography>
-                      </Box>
-                      {response.notes && (
-                        <Typography variant="body2" sx={{ mt: 1, ml: 1 }}>
-                          Notes: {response.notes}
-                        </Typography>
-                      )}
-                      {index < item.supplier_responses.length - 1 && (
-                        <Divider sx={{ my: 1 }} />
-                      )}
-                    </Grid>
-                  ))}
-                </Grid>
-              </Paper>
-            </Grid>
-          )}
         </Grid>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
+
+      {/* Price History Popover */}
+      <Popover
+        open={Boolean(priceHistoryAnchor)}
+        anchorEl={priceHistoryAnchor}
+        onClose={() => setPriceHistoryAnchor(null)}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'left',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'left',
+        }}
+      >
+        <Box sx={{ p: 2, maxWidth: 300 }}>
+          <Typography variant="subtitle2" gutterBottom>Price History</Typography>
+          <Stack spacing={1}>
+            {priceHistory.map((record, index) => (
+              <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2">{formatDate(record.date)}</Typography>
+                <Typography variant="body2" color="primary">
+                  {formatPrice(record.ils_retail_price)}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
+        </Box>
+      </Popover>
+
+      {/* Copy Success Snackbar */}
+      <Snackbar
+        open={showCopySuccess}
+        autoHideDuration={2000}
+        onClose={() => setShowCopySuccess(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" sx={{ width: '100%' }}>
+          Item ID copied to clipboard
+        </Alert>
+      </Snackbar>
+
+      {/* Upload Success Snackbar */}
+      <Snackbar
+        open={showUploadSuccess}
+        autoHideDuration={2000}
+        onClose={() => setShowUploadSuccess(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" sx={{ width: '100%' }}>
+          Files uploaded successfully
+        </Alert>
+      </Snackbar>
     </Dialog>
   );
 }

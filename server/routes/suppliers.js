@@ -1,10 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const SupplierModel = require('../models/supplier');
+const { DatabaseAccessLayer } = require('../config/database');
 
 function createRouter({ db }) {
     const router = express.Router();
-    const supplierModel = new SupplierModel(db);
+    const supplierModel = new SupplierModel(db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db));
 
     // Enable CORS
     router.use(cors({

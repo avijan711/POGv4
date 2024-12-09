@@ -133,7 +133,7 @@ async function processInquiryData(filePath, columnMapping, model) {
                             ORDER BY rc.change_date DESC
                             LIMIT 1
                         `;
-                        const reference = await model.executeQuerySingle(referenceQuery, [value, value]);
+                        const reference = await model.querySingle(referenceQuery, [value, value]);
                         
                         if (reference) {
                             if (reference.original_item_id === value) {
@@ -446,8 +446,137 @@ function validateData(data, requiredFields) {
     return true;
 }
 
+// Helper function to get optimal column width based on content type
+function getColumnWidth(header, sampleValue) {
+    if (header.includes('Description')) {
+        return { wch: 40 }; // Wider for descriptions
+    } else if (header === 'Item ID' || header.includes('Code')) {
+        return { wch: 12 }; // Medium for IDs and codes
+    } else if (typeof sampleValue === 'number') {
+        return { wch: 10 }; // Narrower for numbers
+    }
+    return { wch: 15 }; // Default width
+}
+
+// Process and format data for Excel export
+async function processExportData(items, selectedHeaders, headerDisplayMap) {
+    debug.log('Starting export data processing with:', {
+        itemCount: items.length,
+        selectedHeaders,
+        headerDisplayMap
+    });
+
+    try {
+        // Transform items to include ONLY selected headers with strict filtering
+        const rows = items.map((item, index) => {
+            const filteredRow = {};
+            selectedHeaders.forEach(header => {
+                let value = item[header];
+                
+                // Format specific values
+                if (['retail_price', 'import_markup'].includes(header) && value != null) {
+                    value = parseNumericValue(value, 0).toFixed(2);
+                } else if (header === 'requested_qty') {
+                    value = parseNumericValue(value, 0);
+                } else if (header === 'hebrew_description' || header === 'english_description') {
+                    // Ensure text fields are properly encoded
+                    value = value ? String(value).trim() : '';
+                }
+
+                // Use the display name as the key
+                const displayName = headerDisplayMap[header];
+                filteredRow[displayName] = value ?? ''; // Convert null/undefined to empty string
+            });
+
+            if (index === 0) {
+                debug.log('First row sample after filtering:', filteredRow);
+                debug.log('First row keys:', Object.keys(filteredRow));
+            }
+
+            return filteredRow;
+        });
+
+        debug.log('Transformed all rows. Sample sizes:', {
+            rowCount: rows.length,
+            firstRowKeys: Object.keys(rows[0] || {}),
+            expectedHeaders: selectedHeaders.map(h => headerDisplayMap[h])
+        });
+
+        // Create workbook and worksheet
+        const wb = XLSX.utils.book_new();
+        const headerDisplayNames = selectedHeaders.map(header => headerDisplayMap[header]);
+        
+        debug.log('Creating worksheet with headers:', headerDisplayNames);
+
+        // Set worksheet options for better RTL and Unicode support
+        const ws = XLSX.utils.json_to_sheet(rows, {
+            header: headerDisplayNames,
+            raw: false // This ensures text is properly encoded
+        });
+
+        // Verify worksheet structure
+        debug.log('Worksheet created. Properties:', {
+            ref: ws['!ref'],
+            cols: ws['!cols']?.length,
+            merges: ws['!merges']?.length,
+            firstCell: ws['A1']
+        });
+
+        // Set RTL for Hebrew columns
+        const hebrewColumns = headerDisplayNames.reduce((acc, header, idx) => {
+            if (header === 'Hebrew Description') {
+                acc[XLSX.utils.encode_col(idx)] = { direction: 'rtl' };
+            }
+            return acc;
+        }, {});
+
+        debug.log('Hebrew columns configuration:', hebrewColumns);
+
+        // Set column properties
+        ws['!cols'] = headerDisplayNames.map((header, idx) => {
+            const sampleValue = rows[0] ? rows[0][header] : null;
+            const width = getColumnWidth(header, sampleValue);
+            const colConfig = {
+                ...width,
+                rtl: header === 'Hebrew Description',
+                wpx: width.wch * 7
+            };
+            debug.log(`Column ${idx} (${header}) config:`, colConfig);
+            return colConfig;
+        });
+
+        // Add worksheet to workbook with UTF-8 encoding
+        XLSX.utils.book_append_sheet(wb, ws, 'Inquiry Items');
+
+        debug.log('Generating final Excel buffer with options:', {
+            bookSST: true,
+            cellStyles: true,
+            compression: true
+        });
+
+        // Generate Excel file with RTL and encoding options
+        const buffer = XLSX.write(wb, { 
+            type: 'buffer', 
+            bookType: 'xlsx',
+            bookSST: true, // Enable shared strings for better Unicode support
+            cellStyles: true, // Enable cell styles for RTL
+            compression: true // Enable compression for better file size
+        });
+
+        return {
+            buffer,
+            rowCount: rows.length,
+            headers: headerDisplayNames
+        };
+    } catch (error) {
+        debug.error('Error processing export data:', error);
+        throw new Error('Failed to process export data: ' + error.message);
+    }
+}
+
 module.exports = {
     processInquiryData,
     processSupplierResponse,
-    validateData
+    validateData,
+    processExportData
 };

@@ -1,14 +1,16 @@
 const debug = require('../../utils/debug');
+const { getSQLDate, DateValidationError, isValidDate } = require('../../utils/dateUtils');
+const { DatabaseAccessLayer } = require('../../config/database');
 
 class ItemUpdates {
     constructor(db) {
-        this.db = db;
+        this.db = db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db);
     }
 
     async verifyItemExists(itemId, inquiryId) {
         try {
             // First check if the item exists in inquiry_item table for this inquiry
-            const inquiryRow = await this.db.getAsync(
+            const inquiryRow = await this.db.querySingle(
                 'SELECT 1 FROM inquiry_item WHERE item_id = ? AND inquiry_id = ?',
                 [itemId, inquiryId]
             );
@@ -21,7 +23,7 @@ class ItemUpdates {
             }
 
             // If item exists in inquiry_item, check if it exists in main item table
-            const itemRow = await this.db.getAsync(
+            const itemRow = await this.db.querySingle(
                 'SELECT 1 FROM item WHERE item_id = ?',
                 [itemId]
             );
@@ -36,10 +38,18 @@ class ItemUpdates {
         }
     }
 
+    // Add date validation method
+    validateDate(date) {
+        if (!isValidDate(date)) {
+            throw new DateValidationError(`Invalid date format: ${date}`);
+        }
+        return true;
+    }
+
     async createUnknownItem(itemId, inquiryId) {
         try {
             // First verify this item exists in inquiry_item table
-            const inquiryItem = await this.db.getAsync(
+            const inquiryItem = await this.db.querySingle(
                 `SELECT hebrew_description, english_description, import_markup, hs_code, origin 
                  FROM inquiry_item WHERE item_id = ? AND inquiry_id = ?`,
                 [itemId, inquiryId]
@@ -50,7 +60,7 @@ class ItemUpdates {
             }
 
             // Insert the item
-            await this.db.runAsync(
+            await this.db.run(
                 `INSERT INTO item (
                     item_id, hebrew_description, english_description, import_markup, hs_code, origin
                 ) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -64,12 +74,12 @@ class ItemUpdates {
                 ]
             );
             
-            // Insert initial history record
-            await this.db.runAsync(
+            // Insert initial history record with proper date handling
+            await this.db.run(
                 `INSERT INTO price_history (
                     item_id, ils_retail_price, qty_in_stock, 
                     qty_sold_this_year, qty_sold_last_year, date
-                ) VALUES (?, NULL, 0, 0, 0, datetime('now'))`,
+                ) VALUES (?, NULL, 0, 0, 0, ${getSQLDate()})`,
                 [itemId]
             );
         } catch (err) {
@@ -104,12 +114,12 @@ class ItemUpdates {
         try {
             // Update item table
             const itemSql = `UPDATE item SET ${updateFields} WHERE item_id = ?`;
-            await this.db.runAsync(itemSql, params);
+            await this.db.run(itemSql, params);
             debug.log('Item details updated successfully');
 
             // Update inquiry_item table with the same updates
             const inquirySql = `UPDATE inquiry_item SET ${updateFields} WHERE item_id = ?`;
-            await this.db.runAsync(inquirySql, params);
+            await this.db.run(inquirySql, params);
             debug.log('Inquiry item details updated successfully');
         } catch (err) {
             debug.error('Error updating item details:', err);
@@ -130,7 +140,7 @@ class ItemUpdates {
                 inquiryId
             ];
 
-            await this.db.runAsync(sql, params);
+            await this.db.run(sql, params);
             debug.log('inquiry_item updated');
         } catch (err) {
             debug.error('Error updating inquiry_item:', err);

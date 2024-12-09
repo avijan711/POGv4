@@ -8,9 +8,11 @@ function validateUpload(req, res, next) {
     try {
         // Check if file exists
         if (!req.file) {
-            const error = new Error('No file uploaded');
-            error.name = 'ValidationError';
-            throw error;
+            return res.status(400).json({
+                error: 'Validation failed',
+                message: 'No file uploaded',
+                code: 'NO_FILE_ERROR'
+            });
         }
 
         // Set the full path in req.file
@@ -18,7 +20,11 @@ function validateUpload(req, res, next) {
 
         // Verify file exists
         if (!fs.existsSync(req.file.fullPath)) {
-            throw new Error('File not found after upload');
+            return res.status(400).json({
+                error: 'Validation failed',
+                message: 'File not found after upload',
+                code: 'FILE_NOT_FOUND_ERROR'
+            });
         }
 
         // Update req.file with the correct path
@@ -26,66 +32,67 @@ function validateUpload(req, res, next) {
 
         // Only validate additional fields for /upload endpoint
         if (req.path === '/upload') {
+            const validationErrors = [];
+
             // Check required fields
             if (!req.body.name) {
-                const error = new Error('Promotion name is required');
-                error.name = 'ValidationError';
-                throw error;
+                validationErrors.push('Promotion name is required');
             }
 
             if (!req.body.supplier_id) {
-                const error = new Error('Supplier ID is required');
-                error.name = 'ValidationError';
-                throw error;
+                validationErrors.push('Supplier ID is required');
             }
 
             if (!req.body.start_date) {
-                const error = new Error('Start date is required');
-                error.name = 'ValidationError';
-                throw error;
+                validationErrors.push('Start date is required');
             }
 
             if (!req.body.end_date) {
-                const error = new Error('End date is required');
-                error.name = 'ValidationError';
-                throw error;
+                validationErrors.push('End date is required');
             }
 
-            // Validate dates
-            const startDate = new Date(req.body.start_date);
-            const endDate = new Date(req.body.end_date);
+            // Validate dates if provided
+            if (req.body.start_date && req.body.end_date) {
+                const startDate = new Date(req.body.start_date);
+                const endDate = new Date(req.body.end_date);
 
-            if (isNaN(startDate.getTime())) {
-                const error = new Error('Invalid start date format');
-                error.name = 'ValidationError';
-                throw error;
-            }
+                if (isNaN(startDate.getTime())) {
+                    validationErrors.push('Invalid start date format');
+                }
 
-            if (isNaN(endDate.getTime())) {
-                const error = new Error('Invalid end date format');
-                error.name = 'ValidationError';
-                throw error;
-            }
+                if (isNaN(endDate.getTime())) {
+                    validationErrors.push('Invalid end date format');
+                }
 
-            if (endDate <= startDate) {
-                const error = new Error('End date must be after start date');
-                error.name = 'ValidationError';
-                throw error;
+                if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime()) && endDate <= startDate) {
+                    validationErrors.push('End date must be after start date');
+                }
             }
 
             // Check column mapping
             if (!req.body.column_mapping) {
-                const error = new Error('Column mapping is required');
-                error.name = 'ValidationError';
-                throw error;
+                validationErrors.push('Column mapping is required');
+            } else {
+                try {
+                    JSON.parse(req.body.column_mapping);
+                } catch (error) {
+                    validationErrors.push('Invalid column mapping format');
+                }
             }
 
-            try {
-                JSON.parse(req.body.column_mapping);
-            } catch (error) {
-                const parseError = new Error('Invalid column mapping format');
-                parseError.name = 'ValidationError';
-                throw parseError;
+            // If there are validation errors, return them all at once
+            if (validationErrors.length > 0) {
+                if (req.file?.path) {
+                    cleanupFile(req.file.path);
+                }
+                return res.status(400).json({
+                    error: 'Validation failed',
+                    message: 'Please check your input data',
+                    code: 'VALIDATION_ERROR',
+                    details: {
+                        errors: validationErrors
+                    }
+                });
             }
         }
 
@@ -95,15 +102,7 @@ function validateUpload(req, res, next) {
         if (req.file?.path) {
             cleanupFile(req.file.path);
         }
-        if (error.name === 'ValidationError') {
-            res.status(400).json({
-                error: 'Validation failed',
-                message: error.message,
-                suggestion: 'Please check your input data'
-            });
-        } else {
-            next(error);
-        }
+        next(error);
     }
 }
 
@@ -114,11 +113,28 @@ function handleErrors(err, req, res, next) {
     if (res.headersSent) {
         return next(err);
     }
+
+    // Clean up uploaded file if exists
+    if (req.file?.path) {
+        cleanupFile(req.file.path);
+    }
     
+    // Handle specific error types
+    if (err.name === 'PromotionError') {
+        return res.status(400).json({
+            error: 'Promotion operation failed',
+            message: err.message,
+            code: err.code,
+            details: err.details,
+            suggestion: getSuggestionForError(err.code)
+        });
+    }
+
     if (err.name === 'ValidationError') {
         return res.status(400).json({
             error: 'Validation failed',
             message: err.message,
+            code: 'VALIDATION_ERROR',
             suggestion: 'Please check your input data'
         });
     }
@@ -127,15 +143,8 @@ function handleErrors(err, req, res, next) {
         return res.status(400).json({
             error: 'Invalid file type',
             message: err.message,
+            code: 'FILE_TYPE_ERROR',
             suggestion: 'Please upload an Excel file (.xlsx or .xls)'
-        });
-    }
-
-    if (err.name === 'ColumnMappingError') {
-        return res.status(400).json({
-            error: 'Invalid column mapping',
-            message: err.message,
-            suggestion: 'Please check your column mapping configuration'
         });
     }
 
@@ -143,6 +152,21 @@ function handleErrors(err, req, res, next) {
     if (!res.headersSent) {
         next(err);
     }
+}
+
+// Helper function to provide specific suggestions based on error codes
+function getSuggestionForError(code) {
+    const suggestions = {
+        'INVALID_ITEMS_ERROR': 'Please ensure all items exist in the system before uploading',
+        'INVALID_SUPPLIER_ERROR': 'Please verify the supplier ID is correct',
+        'INVALID_EXCEL_DATA': 'Please check the Excel file format and ensure it contains valid data',
+        'UPLOAD_PROCESSING_ERROR': 'Please try uploading the file again',
+        'ITEM_INSERTION_ERROR': 'Please verify all items are valid and try again',
+        'PROMOTION_CREATION_ERROR': 'Please check the promotion details and try again',
+        'EXCEL_COLUMN_ERROR': 'Please ensure the Excel file has the required columns'
+    };
+    
+    return suggestions[code] || 'Please check your input and try again';
 }
 
 module.exports = {

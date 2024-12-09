@@ -8,68 +8,23 @@ class ItemModel extends BaseModel {
 
     async getAllItems() {
         const sql = `
-            WITH LatestPrices AS (
-                SELECT *
-                FROM price_history
-                WHERE (item_id, date) IN (
-                    SELECT item_id, MAX(date)
-                    FROM price_history
-                    GROUP BY item_id
-                )
-            ),
-            ReferenceInfo AS (
-                SELECT 
-                    rc.original_item_id,
-                    rc.new_reference_id,
-                    rc.change_date,
-                    rc.notes,
-                    s.name as supplier_name,
-                    rc.changed_by_user,
-                    JSON_OBJECT(
-                        'new_reference_id', rc.new_reference_id,
-                        'change_date', rc.change_date,
-                        'notes', rc.notes,
-                        'supplier_name', s.name,
-                        'source', CASE WHEN rc.supplier_id IS NOT NULL THEN 'supplier' ELSE 'user' END
-                    ) as reference_change
-                FROM item_reference_change rc
-                LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
-                WHERE (rc.original_item_id, rc.change_date) IN (
-                    SELECT original_item_id, MAX(change_date)
-                    FROM item_reference_change
-                    GROUP BY original_item_id
-                )
-            ),
-            ReferencedBy AS (
-                SELECT 
-                    new_reference_id as item_id,
-                    COUNT(*) as referenced_by_count,
-                    GROUP_CONCAT(original_item_id) as referencing_items
-                FROM item_reference_change
-                GROUP BY new_reference_id
-            )
             SELECT 
                 i.*,
                 p.ils_retail_price as retail_price,
                 p.qty_in_stock,
                 p.sold_this_year,
                 p.sold_last_year,
-                p.date as last_price_update,
-                ri.reference_change,
-                CASE 
-                    WHEN ri.new_reference_id IS NOT NULL THEN 1 
-                    ELSE 0 
-                END as has_reference_change,
-                CASE 
-                    WHEN rb.referenced_by_count > 0 THEN 1 
-                    ELSE 0 
-                END as is_referenced_by,
-                rb.referenced_by_count,
-                rb.referencing_items
+                p.date as last_price_update
             FROM item i
-            LEFT JOIN LatestPrices p ON i.item_id = p.item_id
-            LEFT JOIN ReferenceInfo ri ON i.item_id = ri.original_item_id
-            LEFT JOIN ReferencedBy rb ON i.item_id = rb.item_id
+            LEFT JOIN (
+                SELECT *
+                FROM price_history ph1
+                WHERE ph1.date = (
+                    SELECT MAX(date)
+                    FROM price_history ph2
+                    WHERE ph2.item_id = ph1.item_id
+                )
+            ) p ON i.item_id = p.item_id
             ORDER BY i.item_id
         `;
         return await this.executeQuery(sql);
@@ -77,68 +32,23 @@ class ItemModel extends BaseModel {
 
     async getItemById(itemId) {
         const sql = `
-            WITH LatestPrices AS (
-                SELECT *
-                FROM price_history
-                WHERE (item_id, date) IN (
-                    SELECT item_id, MAX(date)
-                    FROM price_history
-                    GROUP BY item_id
-                )
-            ),
-            ReferenceInfo AS (
-                SELECT 
-                    rc.original_item_id,
-                    rc.new_reference_id,
-                    rc.change_date,
-                    rc.notes,
-                    s.name as supplier_name,
-                    rc.changed_by_user,
-                    JSON_OBJECT(
-                        'new_reference_id', rc.new_reference_id,
-                        'change_date', rc.change_date,
-                        'notes', rc.notes,
-                        'supplier_name', s.name,
-                        'source', CASE WHEN rc.supplier_id IS NOT NULL THEN 'supplier' ELSE 'user' END
-                    ) as reference_change
-                FROM item_reference_change rc
-                LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
-                WHERE (rc.original_item_id, rc.change_date) IN (
-                    SELECT original_item_id, MAX(change_date)
-                    FROM item_reference_change
-                    GROUP BY original_item_id
-                )
-            ),
-            ReferencedBy AS (
-                SELECT 
-                    new_reference_id as item_id,
-                    COUNT(*) as referenced_by_count,
-                    GROUP_CONCAT(original_item_id) as referencing_items
-                FROM item_reference_change
-                GROUP BY new_reference_id
-            )
             SELECT 
                 i.*,
                 p.ils_retail_price as retail_price,
                 p.qty_in_stock,
                 p.sold_this_year,
                 p.sold_last_year,
-                p.date as last_price_update,
-                ri.reference_change,
-                CASE 
-                    WHEN ri.new_reference_id IS NOT NULL THEN 1 
-                    ELSE 0 
-                END as has_reference_change,
-                CASE 
-                    WHEN rb.referenced_by_count > 0 THEN 1 
-                    ELSE 0 
-                END as is_referenced_by,
-                rb.referenced_by_count,
-                rb.referencing_items
+                p.date as last_price_update
             FROM item i
-            LEFT JOIN LatestPrices p ON i.item_id = p.item_id
-            LEFT JOIN ReferenceInfo ri ON i.item_id = ri.original_item_id
-            LEFT JOIN ReferencedBy rb ON i.item_id = rb.item_id
+            LEFT JOIN (
+                SELECT *
+                FROM price_history ph1
+                WHERE ph1.date = (
+                    SELECT MAX(date)
+                    FROM price_history ph2
+                    WHERE ph2.item_id = ph1.item_id
+                )
+            ) p ON i.item_id = p.item_id
             WHERE i.item_id = ?
         `;
         return await this.executeQuerySingle(sql, [itemId]);
@@ -161,47 +71,17 @@ class ItemModel extends BaseModel {
 
     async getSupplierPrices(itemId) {
         const sql = `
-            WITH PriceChanges AS (
-                SELECT 
-                    sr1.supplier_id,
-                    sr1.item_id,
-                    sr1.price_quoted as current_price,
-                    sr1.response_date as current_date,
-                    sr2.price_quoted as previous_price,
-                    sr2.response_date as previous_date,
-                    CASE 
-                        WHEN sr2.price_quoted IS NOT NULL 
-                        THEN ((sr1.price_quoted - sr2.price_quoted) / sr2.price_quoted * 100)
-                        ELSE 0 
-                    END as price_change
-                FROM supplier_response sr1
-                LEFT JOIN supplier_response sr2 ON 
-                    sr1.supplier_id = sr2.supplier_id AND
-                    sr1.item_id = sr2.item_id AND
-                    sr2.response_date = (
-                        SELECT MAX(response_date)
-                        FROM supplier_response sr3
-                        WHERE sr3.supplier_id = sr1.supplier_id
-                        AND sr3.item_id = sr1.item_id
-                        AND sr3.response_date < sr1.response_date
-                    )
-                WHERE sr1.item_id = ?
-            )
             SELECT 
                 s.name as supplier_name,
-                pc.current_price as price_quoted,
-                pc.current_date as response_date,
+                sr.price_quoted,
+                sr.response_date,
                 sr.status,
                 sr.is_promotion,
-                sr.promotion_name,
-                pc.price_change
-            FROM PriceChanges pc
-            JOIN supplier s ON pc.supplier_id = s.supplier_id
-            JOIN supplier_response sr ON 
-                sr.supplier_id = pc.supplier_id AND
-                sr.item_id = pc.item_id AND
-                sr.response_date = pc.current_date
-            ORDER BY pc.current_date DESC
+                sr.promotion_name
+            FROM supplier_response sr
+            JOIN supplier s ON sr.supplier_id = s.supplier_id
+            WHERE sr.item_id = ?
+            ORDER BY sr.response_date DESC
         `;
         return await this.executeQuery(sql, [itemId]);
     }
@@ -227,6 +107,45 @@ class ItemModel extends BaseModel {
         return await this.executeQuery(sql, [itemId, itemId]);
     }
 
+    async getItemFiles(itemId) {
+        const sql = `
+            SELECT id, file_path, file_type, upload_date, description
+            FROM item_files
+            WHERE item_id = ?
+            ORDER BY upload_date DESC
+        `;
+        return await this.executeQuery(sql, [itemId]);
+    }
+
+    async addItemFiles(itemId, files) {
+        const sql = `
+            INSERT INTO item_files (item_id, file_path, file_type, description)
+            VALUES (?, ?, ?, ?)
+        `;
+        
+        return await this.executeTransaction(async () => {
+            const results = [];
+            for (const file of files) {
+                const result = await this.executeRun(sql, [
+                    itemId,
+                    file.filename,
+                    file.mimetype,
+                    file.originalname
+                ]);
+                results.push(result);
+            }
+            return results;
+        });
+    }
+
+    async deleteItemFile(itemId, fileId) {
+        const sql = `
+            DELETE FROM item_files
+            WHERE id = ? AND item_id = ?
+        `;
+        return await this.executeRun(sql, [fileId, itemId]);
+    }
+
     async createItem(itemData) {
         return await this.executeTransaction(async () => {
             const {
@@ -239,19 +158,20 @@ class ItemModel extends BaseModel {
                 qtyInStock,
                 soldThisYear,
                 soldLastYear,
-                retailPrice
+                retailPrice,
+                notes
             } = itemData;
 
             // Insert into item table
             const itemSql = `
                 INSERT INTO item (
                     item_id, hebrew_description, english_description, 
-                    import_markup, hs_code, image
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    import_markup, hs_code, image, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
             `;
             await this.executeRun(itemSql, [
                 itemID, hebrewDescription, englishDescription,
-                importMarkup, hsCode, image
+                importMarkup, hsCode, image, notes
             ]);
 
             // Insert initial price history
@@ -285,7 +205,8 @@ class ItemModel extends BaseModel {
                 qtyInStock,
                 soldThisYear,
                 soldLastYear,
-                retailPrice
+                retailPrice,
+                notes
             } = updateData;
 
             // Update item table
@@ -294,7 +215,8 @@ class ItemModel extends BaseModel {
                 SET hebrew_description = ?,
                     english_description = ?,
                     import_markup = ?,
-                    hs_code = ?
+                    hs_code = ?,
+                    notes = ?
                     ${image ? ', image = ?' : ''}
                 WHERE item_id = ?
             `;
@@ -302,7 +224,8 @@ class ItemModel extends BaseModel {
                 hebrewDescription,
                 englishDescription,
                 importMarkup,
-                hsCode
+                hsCode,
+                notes
             ];
             if (image) itemParams.push(image);
             itemParams.push(itemId);
@@ -324,6 +247,16 @@ class ItemModel extends BaseModel {
                 ]);
             }
         });
+    }
+
+    async updateNotes(itemId, notes) {
+        const sql = `
+            UPDATE item 
+            SET notes = ?
+            WHERE item_id = ?
+        `;
+        await this.executeRun(sql, [notes, itemId]);
+        return await this.getItemById(itemId);
     }
 
     async deleteItem(itemId) {

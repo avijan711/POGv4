@@ -1,15 +1,15 @@
 const debug = require('../../utils/debug');
 const { getSupplierResponsesQuery } = require('../../models/queries/supplier-responses/main-query');
+const { DatabaseAccessLayer } = require('../../config/database');
 
 class ResponseQueries {
     constructor(db) {
-        this.db = db;
+        this.db = db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db);
     }
 
-    // Transaction management methods
     async beginTransaction() {
         try {
-            await this.db.runAsync('BEGIN TRANSACTION');
+            await this.db.run('BEGIN TRANSACTION');
             debug.log('Transaction started');
         } catch (err) {
             debug.error('Error starting transaction:', err);
@@ -19,7 +19,7 @@ class ResponseQueries {
 
     async commitTransaction() {
         try {
-            await this.db.runAsync('COMMIT');
+            await this.db.run('COMMIT');
             debug.log('Transaction committed');
         } catch (err) {
             debug.error('Error committing transaction:', err);
@@ -29,7 +29,7 @@ class ResponseQueries {
 
     async rollbackTransaction() {
         try {
-            await this.db.runAsync('ROLLBACK');
+            await this.db.run('ROLLBACK');
             debug.log('Transaction rolled back');
         } catch (err) {
             debug.error('Error rolling back transaction:', err);
@@ -48,17 +48,11 @@ class ResponseQueries {
         const { query, params } = getSupplierResponsesQuery();
         const queryParams = params(inquiryId, page, pageSize);
         
-        debug.log('Executing query with params:', {
-            inquiryId,
-            page,
-            pageSize
-        });
-        
         try {
-            const rows = await this.db.allAsync(query, queryParams);
-            const transformedData = {};
+            const rows = await this.db.query(query, queryParams);
+            debug.log('Raw query results:', rows);
             
-            // Initialize default stats
+            const transformedData = {};
             let globalStats = {
                 totalResponses: 0,
                 totalItems: 0,
@@ -80,17 +74,14 @@ class ResponseQueries {
                     responses = [];
                 }
 
-                // Parse missing items for this supplier
                 try {
-                    debug.log(`Raw missing_items for supplier ${supplierName}:`, row.missing_items);
                     missingItems = JSON.parse(row.missing_items || '[]');
-                    debug.log(`Parsed missing items for supplier ${supplierName}:`, missingItems);
+                    missingItems = Array.isArray(missingItems) ? missingItems.filter(Boolean) : [];
                 } catch (e) {
-                    debug.error(`Error parsing missing items JSON for supplier ${supplierName}:`, e);
+                    debug.error('Error parsing missing items JSON:', e);
                     missingItems = [];
                 }
 
-                // Update global stats from first row
                 if (row) {
                     globalStats = {
                         totalResponses: row.total_responses || 0,
@@ -103,6 +94,7 @@ class ResponseQueries {
 
                 transformedData[supplierId] = {
                     supplier_name: supplierName,
+                    supplier_id: supplierId,
                     responses: responses.map(response => ({
                         supplier_response_id: response.supplier_response_id,
                         supplier_id: supplierId,
@@ -125,12 +117,6 @@ class ResponseQueries {
                 };
             });
 
-            debug.log('Successfully processed supplier responses:', {
-                inquiryId,
-                supplierCount: Object.keys(transformedData).length,
-                stats: globalStats
-            });
-
             return {
                 data: transformedData,
                 pagination: {
@@ -146,7 +132,6 @@ class ResponseQueries {
         }
     }
 
-    // Rest of the methods remain unchanged...
     async insertSupplierResponse(inquiryId, supplierId, itemId, price) {
         const sql = `INSERT INTO supplier_response (
             inquiry_id, supplier_id, item_id, price_quoted, response_date, status
@@ -154,7 +139,7 @@ class ResponseQueries {
         const params = [inquiryId, supplierId, itemId, price];
 
         try {
-            const result = await this.db.runAsync(sql, params);
+            const result = await this.db.run(sql, params);
             debug.log('supplier_response inserted:', {
                 responseId: result.lastID,
                 itemId: itemId
@@ -183,7 +168,7 @@ class ResponseQueries {
         ];
 
         try {
-            const result = await this.db.runAsync(sql, params);
+            const result = await this.db.run(sql, params);
             debug.log('supplier_response_item inserted:', {
                 itemId: item.item_id,
                 price: item.price
@@ -203,7 +188,7 @@ class ResponseQueries {
         const params = [itemId, newReferenceId, supplierId, notes || 'Replacement from supplier response'];
 
         try {
-            const result = await this.db.runAsync(sql, params);
+            const result = await this.db.run(sql, params);
             debug.log('item_reference_change inserted');
             return result;
         } catch (err) {
@@ -218,7 +203,7 @@ class ResponseQueries {
                    WHERE inquiry_id = ? AND supplier_id = ? AND status = 'pending'`;
         
         try {
-            const result = await this.db.runAsync(sql, [inquiryId, supplierId]);
+            const result = await this.db.run(sql, [inquiryId, supplierId]);
             debug.log('Response status updated:', {
                 changedRows: result.changes
             });
@@ -236,7 +221,7 @@ class ResponseQueries {
         WHERE item_id = new_reference_id AND inquiry_id = ?`;
 
         try {
-            const result = await this.db.runAsync(sql, [inquiryId]);
+            const result = await this.db.run(sql, [inquiryId]);
             debug.log('Self-references cleaned up');
             return result;
         } catch (err) {
@@ -249,7 +234,7 @@ class ResponseQueries {
         const sql = 'DELETE FROM item_reference_change WHERE original_item_id = new_reference_id';
 
         try {
-            const result = await this.db.runAsync(sql, []);
+            const result = await this.db.run(sql, []);
             debug.log('Reference changes cleaned up');
             return result;
         } catch (err) {
@@ -260,7 +245,7 @@ class ResponseQueries {
 
     async deleteResponse(responseId) {
         try {
-            const result = await this.db.runAsync(
+            const result = await this.db.run(
                 'DELETE FROM supplier_response WHERE supplier_response_id = ?',
                 [responseId]
             );
@@ -275,7 +260,7 @@ class ResponseQueries {
 
     async deleteReferenceChange(changeId) {
         try {
-            const result = await this.db.runAsync(
+            const result = await this.db.run(
                 'DELETE FROM item_reference_change WHERE change_id = ?',
                 [changeId]
             );
@@ -289,19 +274,45 @@ class ResponseQueries {
     }
 
     async deleteBulkResponses(date, supplierId) {
+        debug.log('Attempting bulk delete:', { date, supplierId });
+        
         try {
-            const result = await this.db.runAsync(
-                'DELETE FROM supplier_response WHERE date(response_date) = date(?) AND supplier_id = ?',
-                [date, supplierId]
+            await this.beginTransaction();
+
+            // Convert supplierId to integer if it's a string
+            const supplierIdInt = parseInt(supplierId, 10);
+            if (isNaN(supplierIdInt)) {
+                throw new Error('Invalid supplier ID');
+            }
+
+            // Delete all responses for the supplier on the given date
+            const result = await this.db.run(
+                `DELETE FROM supplier_response 
+                WHERE supplier_id = ? 
+                AND date(response_date) >= date(?)
+                AND date(response_date) < date(?, '+1 day')`,
+                [supplierIdInt, date, date]
             );
+
+            await this.commitTransaction();
+            
             const deleted = { deleted: result.changes > 0 };
-            debug.log('Delete bulk responses result:', deleted);
+            debug.log('Bulk delete result:', {
+                ...deleted,
+                date,
+                supplierId: supplierIdInt,
+                rowsAffected: result.changes
+            });
+            
             return deleted;
         } catch (err) {
-            debug.error('Error deleting bulk responses:', err);
+            debug.error('Error in bulk delete:', err);
+            await this.rollbackTransaction();
             throw err;
         }
     }
+
+    // Other methods remain unchanged...
 }
 
 module.exports = ResponseQueries;

@@ -269,6 +269,22 @@ export const useInquiryItems = (inquiryId) => {
     }
   };
 
+  const handleAddItem = async (itemData) => {
+    if (!inquiryId) return false;
+
+    try {
+      dataDebug.log('Adding item to inquiry:', { inquiryId, itemData });
+      await axios.post(`${API_BASE_URL}/api/inquiries/${inquiryId}/items`, itemData);
+      await fetchItems();
+      setError('');
+      return true;
+    } catch (error) {
+      console.error('Error adding item:', error);
+      setError('Failed to add item. Please try again.');
+      return false;
+    }
+  };
+
   return {
     items,
     loading,
@@ -278,6 +294,7 @@ export const useInquiryItems = (inquiryId) => {
     fetchItems,
     handleUpdateQuantity,
     handleDeleteItem,
+    handleAddItem,
     setError
   };
 };

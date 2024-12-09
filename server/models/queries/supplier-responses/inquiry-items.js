@@ -53,18 +53,26 @@ function getInquiryItemsQuery() {
                 AND s.name IS NOT NULL
                 AND sr.price_quoted IS NOT NULL
             GROUP BY sr.inquiry_id, sr.item_id
+        ),
+        BaseItems AS (
+            SELECT DISTINCT
+                ii.inquiry_item_id,
+                ii.item_id,
+                i.hebrew_description,
+                i.english_description,
+                i.import_markup,
+                i.hs_code,
+                i.origin,
+                ii.qty_in_stock,
+                ii.requested_qty,
+                ii.retail_price,
+                ii.excel_row_index
+            FROM inquiry_item ii
+            JOIN item i ON ii.item_id = i.item_id
+            WHERE ii.inquiry_id = ?
         )
-        SELECT DISTINCT 
-            ii.inquiry_item_id,
-            ii.item_id,
-            i.hebrew_description,
-            i.english_description,
-            i.import_markup,
-            i.hs_code,
-            i.origin,
-            ii.qty_in_stock,
-            ii.requested_qty,
-            ii.retail_price,
+        SELECT 
+            bi.*,
             p.id as promotion_id,
             p.name as promotion_name,
             pi.promotion_price,
@@ -81,19 +89,17 @@ function getInquiryItemsQuery() {
             END as is_referenced_by,
             rb.referencing_items,
             COALESCE(vsr.supplier_responses, '[]') as supplier_responses
-        FROM inquiry_item ii
-        JOIN item i ON ii.item_id = i.item_id
-        LEFT JOIN ReferenceInfo ri ON ii.item_id = ri.original_item_id
-        LEFT JOIN ReferencedBy rb ON ii.item_id = rb.item_id
-        LEFT JOIN promotion_items pi ON ii.item_id = pi.item_id
+        FROM BaseItems bi
+        LEFT JOIN promotion_items pi ON bi.item_id = pi.item_id
         LEFT JOIN promotions p ON pi.promotion_id = p.id 
             AND p.is_active = 1 
             AND (p.start_date IS NULL OR p.start_date <= datetime('now'))
             AND (p.end_date IS NULL OR p.end_date >= datetime('now'))
-        LEFT JOIN ValidSupplierResponses vsr ON ii.item_id = vsr.item_id 
-            AND ii.inquiry_id = vsr.inquiry_id
-        WHERE ii.inquiry_id = ?
-        ORDER BY ii.excel_row_index
+        LEFT JOIN ReferenceInfo ri ON bi.item_id = ri.original_item_id
+        LEFT JOIN ReferencedBy rb ON bi.item_id = rb.item_id
+        LEFT JOIN ValidSupplierResponses vsr ON bi.item_id = vsr.item_id 
+            AND ? = vsr.inquiry_id
+        ORDER BY bi.excel_row_index
     )`;
 }
 

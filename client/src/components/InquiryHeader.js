@@ -21,6 +21,7 @@ import {
   Business as BusinessIcon,
   Schedule as ScheduleIcon,
   TrendingUp as TrendingUpIcon,
+  Add as AddIcon,
 } from '@mui/icons-material';
 
 function InquiryHeader({
@@ -35,6 +36,7 @@ function InquiryHeader({
   onUploadResponse,
   onViewBestPrices,
   onDeleteInquiry,
+  onAddItem,
   error,
   statistics = {},
 }) {
@@ -172,7 +174,15 @@ function InquiryHeader({
               startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
             }}
           />
-          {/* Primary action button */}
+          {/* Primary action buttons */}
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            onClick={onAddItem}
+          >
+            Add Item
+          </Button>
           <Button
             variant="contained"
             color="primary"

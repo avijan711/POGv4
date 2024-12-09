@@ -15,6 +15,7 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [error, setError] = useState('');
   const [editingQty, setEditingQty] = useState(null);
+  const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
 
   const processSupplierPrices = (prices) => {
     if (!prices) return [];
@@ -69,6 +70,11 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
     setDialogOpen(true);
   };
 
+  const handleAddItem = () => {
+    setSelectedItem(null);
+    setAddItemDialogOpen(true);
+  };
+
   const handleSaveItem = async (itemData) => {
     if (!itemData) return;
 
@@ -81,6 +87,7 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
       await onRefresh();
       setDialogOpen(false);
       setSelectedItem(null);
+      setAddItemDialogOpen(false);
       setError('');
     } catch (error) {
       console.error('Error saving item:', error);
@@ -160,6 +167,7 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
     setDeleteInquiryConfirmOpen(false);
     setSupplierUploadOpen(false);
     setEditingQty(null);
+    setAddItemDialogOpen(false);
     setError('');
   };
 
@@ -176,6 +184,7 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
     loadingDetails,
     error,
     editingQty,
+    addItemDialogOpen,
     setDialogOpen,
     setItemDetailsOpen,
     setDeleteConfirmOpen,
@@ -183,7 +192,9 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
     setDeleteInquiryConfirmOpen,
     setSupplierUploadOpen,
     setEditingQty,
+    setAddItemDialogOpen,
     handleEditItem,
+    handleAddItem,
     handleSaveItem,
     handleViewItemDetails,
     handleDeleteInquiry,

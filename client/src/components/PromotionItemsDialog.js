@@ -34,6 +34,11 @@ function PromotionItemsDialog({ open, onClose, promotion }) {
     useEffect(() => {
         if (open && promotion) {
             fetchItems();
+        } else {
+            // Clear state when dialog closes
+            setItems([]);
+            setError(null);
+            setSearchTerm('');
         }
     }, [open, promotion]);
 
@@ -41,11 +46,15 @@ function PromotionItemsDialog({ open, onClose, promotion }) {
         try {
             setLoading(true);
             const response = await axios.get(`${API_BASE_URL}/api/promotions/${promotion.promotion_id}/items`);
-            setItems(response.data || []);
+            // Handle the new response format
+            setItems(response.data?.data || []);
             setError(null);
         } catch (err) {
             console.error('Error fetching promotion items:', err);
-            setError('Failed to load promotion items');
+            // Extract error message from the new error format
+            const errorMessage = err.response?.data?.message || 'Failed to load promotion items';
+            const suggestion = err.response?.data?.suggestion;
+            setError(suggestion ? `${errorMessage} - ${suggestion}` : errorMessage);
         } finally {
             setLoading(false);
         }
@@ -109,7 +118,16 @@ function PromotionItemsDialog({ open, onClose, promotion }) {
                 {loading ? (
                     <Typography>Loading items...</Typography>
                 ) : error ? (
-                    <Typography color="error">{error}</Typography>
+                    <Box sx={{ textAlign: 'center', py: 2 }}>
+                        <Typography color="error">{error}</Typography>
+                        <Button 
+                            sx={{ mt: 2 }}
+                            variant="outlined" 
+                            onClick={fetchItems}
+                        >
+                            Retry
+                        </Button>
+                    </Box>
                 ) : (
                     <TableContainer component={Paper} sx={{ maxHeight: 400 }}>
                         <Table stickyHeader size="small">
@@ -140,7 +158,7 @@ function PromotionItemsDialog({ open, onClose, promotion }) {
                                                 </Typography>
                                             </TableCell>
                                             <TableCell align="right">
-                                                ₪{Number(item.price).toFixed(2)}
+                                                ₪{Number(item.promotion_price).toFixed(2)}
                                             </TableCell>
                                         </TableRow>
                                     ))

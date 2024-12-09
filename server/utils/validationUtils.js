@@ -1,4 +1,5 @@
 const { getReferenceChain } = require('./referenceUtils');
+const { DatabaseAccessLayer } = require('../config/database');
 
 async function validateReferenceChange(db, originalItemId, newReferenceId) {
     // Check if it's a self-reference
@@ -22,30 +23,27 @@ async function validateReferenceChange(db, originalItemId, newReferenceId) {
 }
 
 async function validateItemsExist(db, itemIds) {
-    return new Promise((resolve, reject) => {
+    const dal = db instanceof DatabaseAccessLayer ? db : new DatabaseAccessLayer(db);
+    try {
         const placeholders = itemIds.map(() => '?').join(',');
-        db.all(
+        const rows = await dal.query(
             `SELECT ItemID FROM Item WHERE ItemID IN (${placeholders})`,
-            itemIds,
-            (err, rows) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-
-                if (rows.length !== itemIds.length) {
-                    const foundIds = rows.map(row => row.ItemID);
-                    const missingIds = itemIds.filter(id => !foundIds.includes(id));
-                    resolve({
-                        valid: false,
-                        reason: `Items not found: ${missingIds.join(', ')}`
-                    });
-                } else {
-                    resolve({ valid: true });
-                }
-            }
+            itemIds
         );
-    });
+
+        if (rows.length !== itemIds.length) {
+            const foundIds = rows.map(row => row.ItemID);
+            const missingIds = itemIds.filter(id => !foundIds.includes(id));
+            return {
+                valid: false,
+                reason: `Items not found: ${missingIds.join(', ')}`
+            };
+        }
+        return { valid: true };
+    } catch (err) {
+        console.error('Error validating items exist:', err);
+        throw err;
+    }
 }
 
 async function validateSupplierResponse(data, requiredFields) {

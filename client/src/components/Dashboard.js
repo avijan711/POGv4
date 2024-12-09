@@ -30,6 +30,7 @@ import {
   Warning as WarningIcon,
   DeleteForever as DeleteForeverIcon,
 } from '@mui/icons-material';
+import axios from 'axios';
 import Settings from './Settings';
 import { API_BASE_URL } from '../config';
 
@@ -97,15 +98,24 @@ function Dashboard() {
           },
         ]);
 
-        // Fetch active promotions
-        const promotionsResponse = await fetch(`${API_BASE_URL}/api/promotions/active`);
-        if (promotionsResponse.ok) {
-          const promotionsData = await promotionsResponse.json();
-          setActivePromotions(promotionsData);
+        // Fetch active promotions using the regular promotions endpoint
+        const response = await axios.get(`${API_BASE_URL}/api/promotions`);
+        if (response.data?.success) {
+          // Filter active promotions on the client side
+          const now = new Date();
+          const activePromos = response.data.data.filter(promo => {
+            const startDate = new Date(promo.start_date);
+            const endDate = new Date(promo.end_date);
+            return now >= startDate && now <= endDate;
+          });
+          setActivePromotions(activePromos);
+        } else {
+          throw new Error(response.data?.message || 'Failed to fetch promotions');
         }
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
-        setError('Failed to load dashboard data');
+        const errorMessage = error.response?.data?.message || 'Failed to load dashboard data';
+        setError({ severity: 'error', message: errorMessage });
       } finally {
         setLoading(false);
       }
@@ -118,28 +128,24 @@ function Dashboard() {
     setReinitializing(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/settings/reset`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await axios.post(`${API_BASE_URL}/api/settings/reset`);
       
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.details || data.error || 'Failed to reset database');
+      if (response.data?.success) {
+        // Show success message and reload after a short delay
+        setError({ 
+          severity: 'success', 
+          message: 'Database reset to clean state successfully. Reloading...' 
+        });
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      } else {
+        throw new Error(response.data?.message || 'Failed to reset database');
       }
-
-      // Show success message and reload after a short delay
-      setError({ severity: 'success', message: 'Database reset to clean state successfully. Reloading...' });
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
     } catch (error) {
       console.error('Error resetting database:', error);
-      setError({ severity: 'error', message: error.message });
+      const errorMessage = error.response?.data?.message || error.message;
+      setError({ severity: 'error', message: errorMessage });
     } finally {
       setReinitializing(false);
       setOpenDialog(false);
@@ -282,11 +288,11 @@ function Dashboard() {
             <List>
               {activePromotions.length > 0 ? (
                 activePromotions.map((promotion, index) => (
-                  <React.Fragment key={promotion.PromotionGroupID}>
+                  <React.Fragment key={promotion.promotion_id}>
                     <ListItem>
                       <ListItemText
-                        primary={promotion.Name}
-                        secondary={`${promotion.ItemCount} items • Valid until ${new Date(promotion.EndDate).toLocaleDateString()}`}
+                        primary={promotion.name}
+                        secondary={`${promotion.item_count} items • Valid until ${new Date(promotion.end_date).toLocaleDateString()}`}
                       />
                     </ListItem>
                     {index < activePromotions.length - 1 && <Divider />}

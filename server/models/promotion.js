@@ -6,77 +6,23 @@ class PromotionModel extends BaseModel {
         super(db);
     }
 
-    get schema() {
-        return `
-            CREATE TABLE IF NOT EXISTS promotion (
-                promotion_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                supplier_id INTEGER NOT NULL,
-                start_date TEXT NOT NULL,
-                end_date TEXT NOT NULL,
-                is_active INTEGER DEFAULT 1,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                FOREIGN KEY (supplier_id) REFERENCES supplier (supplier_id)
-            );
-
-            CREATE TABLE IF NOT EXISTS promotion_item (
-                promotion_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                promotion_id INTEGER NOT NULL,
-                item_id TEXT NOT NULL,
-                promotion_price REAL NOT NULL,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                FOREIGN KEY (promotion_id) REFERENCES promotion (promotion_id) ON DELETE CASCADE
-            );
-
-            -- Indexes for better query performance
-            CREATE INDEX IF NOT EXISTS idx_promotion_supplier 
-            ON promotion (supplier_id);
-
-            CREATE INDEX IF NOT EXISTS idx_promotion_dates 
-            ON promotion (start_date, end_date);
-
-            CREATE INDEX IF NOT EXISTS idx_promotion_active 
-            ON promotion (is_active);
-
-            CREATE INDEX IF NOT EXISTS idx_promotion_item_promotion 
-            ON promotion_item (promotion_id);
-
-            CREATE INDEX IF NOT EXISTS idx_promotion_item_item 
-            ON promotion_item (item_id);
-        `;
-    }
-
-    async initialize() {
-        debug.log('Initializing promotion tables...');
-        
-        return await this.executeTransaction(async () => {
-            const statements = this.schema.split(';').filter(stmt => stmt.trim());
-            for (const stmt of statements) {
-                await this.executeRun(stmt);
-            }
-            debug.log('Promotion tables initialized successfully');
-        });
-    }
-
     async createPromotion({ name, supplier_id, start_date, end_date }) {
-        return await this.executeTransaction(async () => {
-            const sql = `
-                INSERT INTO promotion (
-                    name, supplier_id, start_date, end_date, is_active
-                ) VALUES (?, ?, ?, ?, 1)
-            `;
-            const result = await this.executeRun(sql, [
-                name,
-                supplier_id,
-                start_date,
-                end_date
-            ]);
-            return {
-                success: true,
-                promotionId: result.lastID,
-                message: 'Promotion created successfully'
-            };
-        });
+        const sql = `
+            INSERT INTO promotion (
+                name, supplier_id, start_date, end_date, is_active
+            ) VALUES (?, ?, ?, ?, 1)
+        `;
+        const result = await this.executeRun(sql, [
+            name,
+            supplier_id,
+            start_date,
+            end_date
+        ]);
+        return {
+            success: true,
+            promotionId: result.lastID,
+            message: 'Promotion created successfully'
+        };
     }
 
     async deletePromotion(promotionId) {
