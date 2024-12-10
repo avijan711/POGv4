@@ -15,9 +15,7 @@ class PriceHistoryService extends BaseModel {
             sourceId
         });
 
-        try {
-            await this.beginTransaction();
-
+        return await this.executeTransaction(async () => {
             // Add to price history
             const historyResult = await this.executeRun(`
                 INSERT INTO price_history (
@@ -56,18 +54,12 @@ class PriceHistoryService extends BaseModel {
                 notes
             ]);
 
-            await this.commitTransaction();
-
             return {
                 success: true,
                 historyId: historyResult.lastID,
                 message: 'Price recorded successfully'
             };
-        } catch (error) {
-            await this.rollbackTransaction();
-            debug.error('Error recording price:', error);
-            throw error;
-        }
+        });
     }
 
     async getPriceHistory(itemId, supplierId, dateRange = null) {
@@ -152,9 +144,7 @@ class PriceHistoryService extends BaseModel {
             sourceId
         });
 
-        try {
-            await this.beginTransaction();
-
+        return await this.executeTransaction(async () => {
             for (const item of items) {
                 await this.recordPrice(
                     item.item_id,
@@ -166,17 +156,11 @@ class PriceHistoryService extends BaseModel {
                 );
             }
 
-            await this.commitTransaction();
-
             return {
                 success: true,
                 message: `Updated ${items.length} prices successfully`
             };
-        } catch (error) {
-            await this.rollbackTransaction();
-            debug.error('Error updating price list:', error);
-            throw error;
-        }
+        });
     }
 
     async cleanupExpiredPromotions() {

@@ -3,6 +3,7 @@ const { cleanItemId } = require('../utils/itemIdCleaner');
 const ExcelProcessor = require('../utils/excelProcessor');
 const PromotionProcessor = require('../utils/excelProcessor/promotionProcessor');
 const BaseModel = require('../models/BaseModel');
+const PriceHistoryService = require('./priceHistoryService');
 const path = require('path');
 const fs = require('fs');
 
@@ -18,6 +19,7 @@ class PromotionError extends Error {
 class PromotionService extends BaseModel {
     constructor(db) {
         super(db);
+        this.priceHistoryService = new PriceHistoryService(db);
         // Ensure temp directory exists
         this.tempDir = path.join(__dirname, '..', 'temp');
         if (!fs.existsSync(this.tempDir)) {
@@ -36,24 +38,23 @@ class PromotionService extends BaseModel {
         let promotionId;
         let totalCount = 0;
         let matchedCount = 0;
+        let stagingCreated = false;
 
         try {
-            // Start transaction
-            await this.db.run('BEGIN IMMEDIATE TRANSACTION');
-
-            try {
+            return await this.executeTransaction(async () => {
                 // First create the promotion record
                 promotionId = await this.insertPromotion(name, supplierId, startDate, endDate);
                 debug.log('Created promotion:', promotionId);
 
                 // Create staging table
-                await this.db.run(`
+                await this.executeRun(`
                     CREATE TEMP TABLE IF NOT EXISTS promotion_staging (
                         item_id TEXT NOT NULL,
                         price REAL NOT NULL
                     );
                     CREATE INDEX IF NOT EXISTS idx_staging_item_id ON promotion_staging(item_id);
                 `);
+                stagingCreated = true;
 
                 // Process Excel file and insert data directly
                 const processor = PromotionProcessor.processFileInChunks(file.path, JSON.parse(columnMapping));
@@ -70,7 +71,7 @@ class PromotionService extends BaseModel {
                         return `('${cleanedId}', ${item.price})`;
                     }).join(',');
 
-                    await this.db.run(`
+                    await this.executeRun(`
                         INSERT INTO promotion_staging (item_id, price)
                         VALUES ${stagingValues};
                     `);
@@ -78,53 +79,8 @@ class PromotionService extends BaseModel {
 
                 debug.log('Total rows:', totalCount);
 
-                // Insert into supplier_response
-                await this.db.run(`
-                    INSERT INTO supplier_response (
-                        inquiry_id,
-                        supplier_id,
-                        item_id,
-                        price_quoted,
-                        status,
-                        is_promotion,
-                        promotion_name
-                    )
-                    SELECT 
-                        NULL,
-                        ?,
-                        s.item_id,
-                        s.price,
-                        'active',
-                        1,
-                        ?
-                    FROM promotion_staging s;
-                `, [supplierId, name]);
-
-                // Insert into supplier_response_item
-                await this.db.run(`
-                    INSERT INTO supplier_response_item (
-                        supplier_response_id,
-                        item_id,
-                        price,
-                        new_reference_id
-                    )
-                    SELECT 
-                        sr.supplier_response_id,
-                        s.item_id,
-                        s.price,
-                        CASE 
-                            WHEN EXISTS (SELECT 1 FROM item i WHERE i.item_id = s.item_id) 
-                            THEN NULL 
-                            ELSE s.item_id 
-                        END
-                    FROM promotion_staging s
-                    JOIN supplier_response sr ON sr.item_id = s.item_id
-                    WHERE sr.is_promotion = 1 
-                    AND sr.promotion_name = ?;
-                `, [name]);
-
                 // Insert matched items into promotion_item
-                const result = await this.db.run(`
+                const result = await this.executeRun(`
                     INSERT INTO promotion_item (promotion_id, item_id, promotion_price)
                     SELECT 
                         ?,
@@ -138,27 +94,63 @@ class PromotionService extends BaseModel {
 
                 matchedCount = result.changes;
 
-                // Update price history for matched items
-                await this.db.run(`
-                    INSERT INTO price_history (
+                // Update supplier_price_list for matched items
+                await this.executeRun(`
+                    INSERT INTO supplier_price_list (
                         item_id,
-                        ils_retail_price,
-                        date
+                        supplier_id,
+                        current_price,
+                        is_promotion,
+                        promotion_id,
+                        last_updated
                     )
                     SELECT 
                         s.item_id,
+                        ?,
                         s.price,
+                        1,
+                        ?,
                         CURRENT_TIMESTAMP
+                    FROM promotion_staging s
+                    WHERE EXISTS (
+                        SELECT 1 FROM item i WHERE i.item_id = s.item_id
+                    )
+                    ON CONFLICT(item_id, supplier_id) DO UPDATE SET
+                        current_price = excluded.current_price,
+                        is_promotion = excluded.is_promotion,
+                        promotion_id = excluded.promotion_id,
+                        last_updated = excluded.last_updated;
+                `, [supplierId, promotionId]);
+
+                // Update price history for matched items
+                const matchedItems = await this.executeQuery(`
+                    SELECT item_id, price
                     FROM promotion_staging s
                     WHERE EXISTS (
                         SELECT 1 FROM item i WHERE i.item_id = s.item_id
                     );
                 `);
 
-                debug.log(`Processing completed:`, { total: totalCount, matchedCount });
+                for (const item of matchedItems) {
+                    await this.executeRun(`
+                        INSERT INTO price_history (
+                            item_id,
+                            price,
+                            effective_date,
+                            source_type,
+                            source_id,
+                            notes
+                        ) VALUES (?, ?, ?, 'promotion', ?, ?)
+                    `, [
+                        item.item_id,
+                        item.price,
+                        startDate,
+                        promotionId,
+                        `Promotion: ${name}`
+                    ]);
+                }
 
-                // Commit transaction
-                await this.db.run('COMMIT');
+                debug.log(`Processing completed:`, { total: totalCount, matchedCount });
 
                 return {
                     promotionId,
@@ -166,18 +158,19 @@ class PromotionService extends BaseModel {
                     matchedCount,
                     message: `Promotion uploaded successfully. ${matchedCount} items matched out of ${totalCount} total items.`
                 };
-
-            } catch (err) {
-                // Rollback transaction on error
-                await this.db.run('ROLLBACK');
-                throw err;
-            } finally {
-                // Drop temporary table
-                await this.db.run('DROP TABLE IF EXISTS promotion_staging');
-            }
+            });
         } catch (err) {
             debug.error('Transaction error:', err);
             throw err;
+        } finally {
+            // Clean up staging table if it was created
+            if (stagingCreated) {
+                try {
+                    await this.executeRun('DROP TABLE IF EXISTS promotion_staging');
+                } catch (err) {
+                    debug.error('Error dropping staging table:', err);
+                }
+            }
         }
     }
 
@@ -187,27 +180,28 @@ class PromotionService extends BaseModel {
                 WITH LatestPrices AS (
                     SELECT 
                         item_id,
-                        price_quoted,
+                        current_price as price,
                         supplier_id,
-                        promotion_name,
-                        response_date,
-                        ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY response_date DESC) as rn
-                    FROM supplier_response
+                        promotion_id,
+                        last_updated,
+                        ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY last_updated DESC) as rn
+                    FROM supplier_price_list
                     WHERE is_promotion = 1
                     AND item_id = ?
                 )
                 SELECT 
                     lp.item_id,
-                    lp.price_quoted as price,
-                    lp.promotion_name,
+                    lp.price,
+                    p.name as promotion_name,
                     lp.supplier_id,
                     s.name as supplier_name,
-                    lp.response_date as created_at
+                    lp.last_updated as created_at
                 FROM LatestPrices lp
                 JOIN supplier s ON s.supplier_id = lp.supplier_id
+                JOIN promotion p ON p.promotion_id = lp.promotion_id
                 WHERE lp.rn = 1
             `;
-            return await this.db.querySingle(sql, [itemId]);
+            return await this.executeQuerySingle(sql, [itemId]);
         } catch (err) {
             debug.error('Error getting latest price:', err);
             throw new PromotionError(
@@ -222,19 +216,20 @@ class PromotionService extends BaseModel {
         try {
             const sql = `
                 SELECT 
-                    sr.item_id,
-                    sr.price_quoted as price,
-                    sr.promotion_name,
-                    sr.supplier_id,
+                    ph.item_id,
+                    ph.price,
+                    p.name as promotion_name,
+                    ph.supplier_id,
                     s.name as supplier_name,
-                    sr.response_date as created_at
-                FROM supplier_response sr
-                JOIN supplier s ON s.supplier_id = sr.supplier_id
-                WHERE sr.is_promotion = 1
-                AND sr.item_id = ?
-                ORDER BY sr.response_date DESC
+                    ph.effective_date as created_at
+                FROM price_history ph
+                JOIN supplier s ON s.supplier_id = ph.supplier_id
+                LEFT JOIN promotion p ON p.promotion_id = ph.source_id
+                WHERE ph.source_type = 'promotion'
+                AND ph.item_id = ?
+                ORDER BY ph.effective_date DESC
             `;
-            return await this.db.query(sql, [itemId]);
+            return await this.executeQuery(sql, [itemId]);
         } catch (err) {
             debug.error('Error getting price history:', err);
             throw new PromotionError(
@@ -247,53 +242,59 @@ class PromotionService extends BaseModel {
 
     async syncUnmatchedItems() {
         try {
-            const sql = `
-                -- Update supplier_response_item for newly matched items
-                UPDATE supplier_response_item
-                SET new_reference_id = NULL
-                WHERE new_reference_id IS NOT NULL
-                AND EXISTS (
-                    SELECT 1 FROM item i 
-                    WHERE i.item_id = supplier_response_item.item_id
-                );
+            return await this.executeTransaction(async () => {
+                // Insert newly matched items into promotion_item
+                await this.executeRun(`
+                    INSERT INTO promotion_item (promotion_id, item_id, promotion_price)
+                    SELECT 
+                        spl.promotion_id,
+                        spl.item_id,
+                        spl.current_price
+                    FROM supplier_price_list spl
+                    WHERE spl.is_promotion = 1
+                    AND EXISTS (
+                        SELECT 1 FROM item i WHERE i.item_id = spl.item_id
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM promotion_item pi 
+                        WHERE pi.promotion_id = spl.promotion_id 
+                        AND pi.item_id = spl.item_id
+                    );
+                `);
 
-                -- Insert newly matched items into promotion_item
-                INSERT INTO promotion_item (promotion_id, item_id, promotion_price)
-                SELECT 
-                    p.promotion_id,
-                    sri.item_id,
-                    sri.price
-                FROM supplier_response_item sri
-                JOIN supplier_response sr ON sr.supplier_response_id = sri.supplier_response_id
-                JOIN promotion p ON p.name = sr.promotion_name
-                WHERE sr.is_promotion = 1
-                AND sri.new_reference_id IS NULL
-                AND NOT EXISTS (
-                    SELECT 1 FROM promotion_item pi 
-                    WHERE pi.promotion_id = p.promotion_id 
-                    AND pi.item_id = sri.item_id
-                );
+                // Update price history for newly matched items
+                await this.executeRun(`
+                    INSERT INTO price_history (
+                        item_id,
+                        price,
+                        effective_date,
+                        source_type,
+                        source_id,
+                        notes
+                    )
+                    SELECT 
+                        spl.item_id,
+                        spl.current_price,
+                        p.start_date,
+                        'promotion',
+                        p.promotion_id,
+                        'Synced from promotion: ' || p.name
+                    FROM supplier_price_list spl
+                    JOIN promotion p ON p.promotion_id = spl.promotion_id
+                    WHERE spl.is_promotion = 1
+                    AND EXISTS (
+                        SELECT 1 FROM item i WHERE i.item_id = spl.item_id
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM price_history ph
+                        WHERE ph.item_id = spl.item_id
+                        AND ph.source_type = 'promotion'
+                        AND ph.source_id = p.promotion_id
+                    );
+                `);
 
-                -- Update price history for newly matched items
-                INSERT INTO price_history (
-                    item_id,
-                    ils_retail_price,
-                    date
-                )
-                SELECT 
-                    sri.item_id,
-                    sri.price,
-                    CURRENT_TIMESTAMP
-                FROM supplier_response_item sri
-                JOIN supplier_response sr ON sr.supplier_response_id = sri.supplier_response_id
-                WHERE sr.is_promotion = 1
-                AND sri.new_reference_id IS NULL
-                AND EXISTS (
-                    SELECT 1 FROM item i WHERE i.item_id = sri.item_id
-                );
-            `;
-            await this.db.run(sql);
-            return { success: true };
+                return { success: true };
+            });
         } catch (err) {
             debug.error('Error syncing unmatched items:', err);
             throw new PromotionError(
@@ -307,7 +308,7 @@ class PromotionService extends BaseModel {
     async insertPromotion(name, supplierId, startDate, endDate) {
         try {
             // Validate supplier exists
-            const supplierExists = await this.db.querySingle(
+            const supplierExists = await this.executeQuerySingle(
                 'SELECT supplier_id FROM supplier WHERE supplier_id = ?',
                 [supplierId]
             );
@@ -326,7 +327,7 @@ class PromotionService extends BaseModel {
                 ) VALUES (?, ?, ?, ?, 1)
             `;
             
-            const result = await this.db.run(sql, [name, supplierId, startDate, endDate]);
+            const result = await this.executeRun(sql, [name, supplierId, startDate, endDate]);
             return result.lastID;
         } catch (err) {
             debug.error('Error inserting promotion:', err);
@@ -386,10 +387,10 @@ class PromotionService extends BaseModel {
                     s.name as supplier_name,
                     COUNT(DISTINCT pi.item_id) as matched_count,
                     (
-                        SELECT COUNT(DISTINCT sr.item_id)
-                        FROM supplier_response sr
-                        WHERE sr.is_promotion = 1
-                        AND sr.promotion_name = p.name
+                        SELECT COUNT(DISTINCT spl.item_id)
+                        FROM supplier_price_list spl
+                        WHERE spl.is_promotion = 1
+                        AND spl.promotion_id = p.promotion_id
                     ) as total_count
                 FROM promotion p
                 LEFT JOIN supplier s ON p.supplier_id = s.supplier_id
@@ -399,7 +400,7 @@ class PromotionService extends BaseModel {
                 ORDER BY p.created_at DESC
             `;
 
-            return await this.db.query(sql);
+            return await this.executeQuery(sql);
         } catch (err) {
             debug.error('Error fetching promotions:', err);
             throw new PromotionError(
@@ -416,19 +417,16 @@ class PromotionService extends BaseModel {
             if (includeUnmatched) {
                 sql = `
                     SELECT 
-                        sr.item_id,
-                        sr.price_quoted as promotion_price,
-                        CASE WHEN sri.new_reference_id IS NULL THEN 1 ELSE 0 END as is_matched,
+                        spl.item_id,
+                        spl.current_price as promotion_price,
+                        CASE WHEN i.item_id IS NOT NULL THEN 1 ELSE 0 END as is_matched,
                         i.hebrew_description,
                         i.english_description
-                    FROM supplier_response sr
-                    JOIN supplier_response_item sri ON sri.supplier_response_id = sr.supplier_response_id
-                    LEFT JOIN item i ON i.item_id = sr.item_id
-                    WHERE sr.is_promotion = 1
-                    AND sr.promotion_name = (
-                        SELECT name FROM promotion WHERE promotion_id = ?
-                    )
-                    ORDER BY sr.item_id
+                    FROM supplier_price_list spl
+                    LEFT JOIN item i ON i.item_id = spl.item_id
+                    WHERE spl.is_promotion = 1
+                    AND spl.promotion_id = ?
+                    ORDER BY spl.item_id
                 `;
             } else {
                 sql = `
@@ -443,7 +441,7 @@ class PromotionService extends BaseModel {
                 `;
             }
 
-            return await this.db.query(sql, [promotionId]);
+            return await this.executeQuery(sql, [promotionId]);
         } catch (err) {
             debug.error('Error fetching promotion items:', err);
             throw new PromotionError(
@@ -462,7 +460,7 @@ class PromotionService extends BaseModel {
                 WHERE promotion_id = ?
             `;
 
-            const result = await this.db.run(sql, [promotionId]);
+            const result = await this.executeRun(sql, [promotionId]);
             
             if (result.changes === 0) {
                 throw new PromotionError(

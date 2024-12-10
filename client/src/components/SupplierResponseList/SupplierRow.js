@@ -123,8 +123,8 @@ export function SupplierRow({
                                     </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                    {supplierData.responses.map((response) => (
-                                        <TableRow key={response.supplier_response_id || `${response.item_id}-${response.response_date}`}>
+                                    {supplierData.responses.map((response, index) => (
+                                        <TableRow key={response.supplier_response_id || `${response.item_id}-${response.response_date}-${index}`}>
                                             <TableCell component="th" scope="row">{response.item_id}</TableCell>
                                             <TableCell>
                                                 <Typography>{response.hebrew_description}</Typography>

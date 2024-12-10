@@ -307,18 +307,21 @@ async function processInquiryData(filePath, columnMapping, model) {
 function processSupplierResponse(filePath, columnMapping) {
     try {
         const workbook = XLSX.readFile(filePath, {
-            raw: true,      // Get raw values
-            cellDates: true, // Handle dates properly
-            cellNF: false,   // Don't parse number formats
-            cellText: false  // Don't generate text values
+            cellDates: true,  // Handle dates properly
+            cellNF: true,     // Keep number formats
+            cellText: false,  // Don't generate text values
+            cellFormula: false, // Don't parse formulas
+            WTF: false       // Don't include cell metadata
         });
         
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         
+        // Get the data with raw values and number formats
         const data = XLSX.utils.sheet_to_json(firstSheet, {
-            raw: true,      // Get raw values
-            defval: '',     // Default value for empty cells
-            blankrows: false // Skip blank rows
+            header: 'A',     // Use A1 notation
+            raw: false,      // Don't use raw values
+            defval: '',      // Default empty cells to empty string
+            blankrows: false // Skip empty rows
         });
 
         if (data.length === 0) {
@@ -329,15 +332,16 @@ function processSupplierResponse(filePath, columnMapping) {
         const itemIdCounts = {};
         const itemIdFirstIndex = {};
 
-        const processedData = data.map((row, index) => {
+        const processedData = data.slice(1).map((row, index) => { // Skip header row
             const processedRow = {
-                excel_row_index: index // Preserve original Excel order
+                excel_row_index: index
             };
             
             Object.entries(columnMapping).forEach(([field, excelCol]) => {
                 if (!excelCol) return;
                 
                 let value = row[excelCol];
+                const cell = firstSheet[XLSX.utils.encode_cell({r: index + 1, c: XLSX.utils.decode_col(excelCol)})];
                 
                 // Convert field to snake_case
                 const dbField = convertToSnakeCase(field);
@@ -362,10 +366,41 @@ function processSupplierResponse(filePath, columnMapping) {
                         break;
                         
                     case 'price_quoted':
-                        // Parse price and ensure it's a non-negative number or 0
-                        const priceValue = parseNumericValue(value, 0);
+                        let priceValue;
+                        
+                        if (cell && cell.v !== undefined) {
+                            if (typeof cell.v === 'number') {
+                                // If it's a number, use it directly
+                                priceValue = cell.v;
+                            } else if (typeof cell.v === 'string') {
+                                // If it's a string, try to parse it
+                                // Remove any currency symbols and spaces
+                                const cleanValue = cell.v.replace(/[^\d.,\-]/g, '').trim();
+                                // Handle comma as decimal separator
+                                const normalizedValue = cleanValue.replace(',', '.');
+                                priceValue = parseFloat(normalizedValue);
+                            }
+                            
+                            // If parsing failed or value is invalid, default to 0
+                            if (isNaN(priceValue)) {
+                                priceValue = 0;
+                                debug.warn(`Invalid price value in row ${index + 2}: ${cell.v}`);
+                            }
+                        } else {
+                            priceValue = 0;
+                        }
+                        
+                        // Store the price with full precision
                         processedRow.price = priceValue;
-                        processedRow.price_quoted = priceValue;  // Set both price and price_quoted
+                        processedRow.price_quoted = priceValue;
+                        
+                        // Log for debugging
+                        debug.log(`Processing price for row ${index + 2}:`, {
+                            originalValue: cell?.v,
+                            valueType: typeof cell?.v,
+                            cellFormat: cell?.z,
+                            parsedPrice: priceValue
+                        });
                         break;
                         
                     case 'new_reference_id':

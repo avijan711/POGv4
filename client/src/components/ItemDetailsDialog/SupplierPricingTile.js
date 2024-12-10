@@ -43,7 +43,12 @@ function formatPrice(price, currency = 'ILS') {
 
 function formatDate(date) {
     if (!date) return '';
-    return format(new Date(date), 'dd/MM/yyyy');
+    try {
+        return format(new Date(date), 'dd/MM/yyyy');
+    } catch (err) {
+        console.error('Error formatting date:', err);
+        return date;
+    }
 }
 
 function formatDiscount(discount) {
@@ -73,7 +78,34 @@ export default function SupplierPricingTile({
         }
     };
 
-    const bestPrice = supplierPrices[0]; // Already sorted by discount on server
+    // Validate and sort supplier prices
+    const validSupplierPrices = React.useMemo(() => {
+        if (!Array.isArray(supplierPrices)) {
+            console.error('Invalid supplier prices:', supplierPrices);
+            return [];
+        }
+
+        return supplierPrices
+            .filter(price => 
+                price && 
+                typeof price === 'object' &&
+                price.supplier_name &&
+                typeof price.supplier_name === 'string' &&
+                'price_eur' in price &&
+                typeof price.price_eur === 'number'
+            )
+            .map(price => ({
+                ...price,
+                date: price.date || new Date().toISOString(),
+                discount_percentage: price.discount_percentage || 0,
+                cost_ils: price.cost_ils || 0,
+                is_promotion: !!price.is_promotion,
+                promotion_name: price.promotion_name || null,
+                status: price.status || 'active'
+            }));
+    }, [supplierPrices]);
+
+    const bestPrice = validSupplierPrices[0]; // Already sorted by discount on server
 
     return (
         <Paper sx={{ p: 2, height: '100%' }}>
@@ -118,7 +150,7 @@ export default function SupplierPricingTile({
                         >
                             <MenuItem value="">All</MenuItem>
                             {suppliers.map(supplier => (
-                                <MenuItem key={supplier.id} value={supplier.id}>
+                                <MenuItem key={supplier.supplier_id} value={supplier.supplier_id}>
                                     {supplier.name}
                                 </MenuItem>
                             ))}
@@ -186,9 +218,9 @@ export default function SupplierPricingTile({
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {supplierPrices.map((price, index) => (
+                        {validSupplierPrices.map((price, index) => (
                             <TableRow 
-                                key={index}
+                                key={`${price.supplier_id}-${price.date}-${index}`}
                                 sx={price === bestPrice ? { 
                                     bgcolor: 'success.light',
                                     '& > *': { color: 'success.contrastText' }

@@ -12,12 +12,22 @@ class ExcelProcessor {
         try {
             debug.log('Reading Excel file:', filePath);
 
-            const workbook = XLSX.readFile(filePath);
+            const workbook = XLSX.readFile(filePath, {
+                cellDates: true,
+                cellNF: false,
+                cellHTML: false
+            });
+            
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
 
+            // Get headers first
+            const headers = this.getHeaderRow(worksheet);
+            
+            // Read data with header reference
             const rows = XLSX.utils.sheet_to_json(worksheet, {
-                raw: true,
+                header: headers,
+                raw: false,
                 defval: null
             });
 
@@ -31,6 +41,26 @@ class ExcelProcessor {
     }
 
     /**
+     * Get header row from worksheet
+     * @param {Object} worksheet - XLSX worksheet
+     * @returns {Array<string>} Array of header names
+     */
+    static getHeaderRow(worksheet) {
+        const headers = XLSX.utils.sheet_to_json(worksheet, {
+            header: 1,
+            range: 0,
+            raw: true,
+            defval: null
+        })[0];
+
+        if (!headers || headers.length === 0) {
+            throw new Error('No headers found in Excel file');
+        }
+
+        return headers.map(h => h?.toString().trim()).filter(h => h && h.length > 0);
+    }
+
+    /**
      * Get column names from Excel file
      * @param {string} filePath - Path to Excel file
      * @returns {Array<string>} Array of column names
@@ -39,16 +69,17 @@ class ExcelProcessor {
         try {
             debug.log('Getting columns from file:', filePath);
 
-            const workbook = XLSX.readFile(filePath);
+            const workbook = XLSX.readFile(filePath, {
+                sheetRows: 1,
+                cellNF: false,
+                cellHTML: false
+            });
+            
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
 
             // Get headers from first row
-            const headers = XLSX.utils.sheet_to_json(worksheet, {
-                header: 1,
-                raw: true,
-                defval: null
-            })[0];
+            const headers = this.getHeaderRow(worksheet);
 
             debug.log('Found columns:', headers);
 
@@ -57,6 +88,44 @@ class ExcelProcessor {
             debug.error('Error getting columns:', err);
             throw new Error(`Failed to get columns: ${err.message}`);
         }
+    }
+
+    /**
+     * Parse numeric value handling both dot and comma decimal separators
+     * @param {any} value - The value to parse
+     * @returns {number} Parsed number or 0 if invalid
+     */
+    static parseNumericValue(value) {
+        if (value === null || value === undefined || value === '') {
+            return 0;
+        }
+
+        // If it's already a number, return it
+        if (typeof value === 'number') {
+            return value;
+        }
+
+        // Convert to string and clean up
+        const strValue = String(value).trim();
+        
+        // Remove any currency symbols, spaces and handle both comma and period
+        const cleanValue = strValue.replace(/[^\d.,\-]/g, '').trim();
+        
+        // Replace comma with period for proper parsing
+        const normalizedValue = cleanValue.replace(',', '.');
+        
+        // Parse the normalized value
+        const numValue = parseFloat(normalizedValue);
+
+        // Log the parsing process for debugging
+        debug.log('Parsing numeric value:', {
+            original: value,
+            cleaned: cleanValue,
+            normalized: normalizedValue,
+            result: numValue
+        });
+
+        return !isNaN(numValue) ? numValue : 0;
     }
 
     /**
@@ -74,8 +143,25 @@ class ExcelProcessor {
                 options
             });
 
-            // Read Excel file
-            const rows = await this.readExcelFile(filePath);
+            const workbook = XLSX.readFile(filePath, {
+                cellDates: true,
+                cellNF: false,
+                cellHTML: false
+            });
+            
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+
+            // Get headers first
+            const headers = this.getHeaderRow(worksheet);
+            
+            // Read data with header reference
+            const rows = XLSX.utils.sheet_to_json(worksheet, {
+                header: headers,
+                raw: false,
+                defval: null
+            });
+
             if (!rows || rows.length === 0) {
                 throw new Error('No data found in Excel file');
             }
@@ -88,7 +174,11 @@ class ExcelProcessor {
                     
                     // Handle special cases
                     if (field === 'price_quoted' || field === 'price') {
-                        value = parseFloat(value) || 0;
+                        value = this.parseNumericValue(value);
+                        debug.log(`Processed price for field ${field}:`, {
+                            original: row[excelColumn],
+                            processed: value
+                        });
                     } else if (typeof value === 'string') {
                         value = value.trim();
                     }

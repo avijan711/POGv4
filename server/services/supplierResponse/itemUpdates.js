@@ -77,11 +77,21 @@ class ItemUpdates {
             // Insert initial history record with proper date handling
             await this.db.run(
                 `INSERT INTO price_history (
-                    item_id, ils_retail_price, qty_in_stock, 
-                    qty_sold_this_year, qty_sold_last_year, date
-                ) VALUES (?, NULL, 0, 0, 0, ${getSQLDate()})`,
+                    item_id,
+                    supplier_id,
+                    price,
+                    effective_date,
+                    source_type,
+                    source_id,
+                    notes
+                ) VALUES (?, NULL, NULL, date('now'), 'manual', NULL, 'Initial record for unknown item')`,
                 [itemId]
             );
+
+            return {
+                success: true,
+                message: `Created unknown item ${itemId}`
+            };
         } catch (err) {
             debug.error('Error creating unknown item:', err);
             throw err;
@@ -121,6 +131,11 @@ class ItemUpdates {
             const inquirySql = `UPDATE inquiry_item SET ${updateFields} WHERE item_id = ?`;
             await this.db.run(inquirySql, params);
             debug.log('Inquiry item details updated successfully');
+
+            return {
+                success: true,
+                message: `Updated details for item ${itemId}`
+            };
         } catch (err) {
             debug.error('Error updating item details:', err);
             throw err;
@@ -142,6 +157,11 @@ class ItemUpdates {
 
             await this.db.run(sql, params);
             debug.log('inquiry_item updated');
+
+            return {
+                success: true,
+                message: `Updated reference for item ${itemId} to ${newReferenceId}`
+            };
         } catch (err) {
             debug.error('Error updating inquiry_item:', err);
             throw err;

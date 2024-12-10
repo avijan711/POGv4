@@ -6,19 +6,58 @@ WITH exchange_rate AS (
     FROM settings
     WHERE key = 'eur_ils_rate'
 ),
-latest_supplier_responses AS (
+latest_supplier_prices AS (
     SELECT 
-        sr.item_id,
-        sr.supplier_id,
-        sr.price_quoted,
-        sr.response_date,
-        sr.is_promotion,
-        sr.promotion_name,
-        ROW_NUMBER() OVER (PARTITION BY sr.item_id, sr.supplier_id ORDER BY sr.response_date DESC) as rn
-    FROM supplier_response sr
-    WHERE sr.status = 'active'
+        spl.item_id,
+        spl.supplier_id,
+        spl.current_price as price_quoted,
+        spl.last_updated as response_date,
+        spl.is_promotion,
+        p.name as promotion_name,
+        ROW_NUMBER() OVER (PARTITION BY spl.item_id, spl.supplier_id ORDER BY spl.last_updated DESC) as rn
+    FROM supplier_price_list spl
+    LEFT JOIN promotion p ON spl.promotion_id = p.promotion_id
+    WHERE spl.item_id = ?
 ),
 latest_prices AS (
+    SELECT 
+        spl.item_id,
+        spl.supplier_id,
+        s.name as supplier_name,
+        spl.price_quoted as price_eur,
+        spl.is_promotion,
+        spl.promotion_name,
+        strftime('%Y-%m-%d', spl.response_date) as date,  -- Format date consistently
+        i.import_markup,
+        ph.ils_retail_price as retail_price_ils,
+        er.eur_ils_rate,
+        -- Calculate cost in ILS
+        ROUND(spl.price_quoted * i.import_markup * er.eur_ils_rate, 2) as cost_ils,
+        -- Calculate discount percentage
+        CASE 
+            WHEN ph.ils_retail_price > 0 THEN
+                ROUND(
+                    ((ph.ils_retail_price - (spl.price_quoted * i.import_markup * er.eur_ils_rate)) / ph.ils_retail_price) * 100,
+                    1
+                )
+            ELSE NULL
+        END as discount_percentage,
+        'active' as status
+    FROM latest_supplier_prices spl
+    JOIN supplier s ON spl.supplier_id = s.supplier_id
+    JOIN item i ON spl.item_id = i.item_id
+    CROSS JOIN exchange_rate er
+    LEFT JOIN (
+        SELECT 
+            item_id,
+            ils_retail_price,
+            date,
+            ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY date DESC) as rn
+        FROM price_history
+    ) ph ON i.item_id = ph.item_id AND ph.rn = 1
+    WHERE spl.rn = 1
+),
+supplier_responses AS (
     SELECT 
         sr.item_id,
         sr.supplier_id,
@@ -26,107 +65,90 @@ latest_prices AS (
         sr.price_quoted as price_eur,
         sr.is_promotion,
         sr.promotion_name,
-        sr.response_date as date,
+        strftime('%Y-%m-%d', sr.response_date) as date,  -- Format date consistently
         i.import_markup,
-        i.retail_price as retail_price_ils,
+        ph.ils_retail_price as retail_price_ils,
         er.eur_ils_rate,
         -- Calculate cost in ILS
         ROUND(sr.price_quoted * i.import_markup * er.eur_ils_rate, 2) as cost_ils,
         -- Calculate discount percentage
         CASE 
-            WHEN i.retail_price > 0 THEN
+            WHEN ph.ils_retail_price > 0 THEN
                 ROUND(
-                    ((i.retail_price - (sr.price_quoted * i.import_markup * er.eur_ils_rate)) / i.retail_price) * 100,
+                    ((ph.ils_retail_price - (sr.price_quoted * i.import_markup * er.eur_ils_rate)) / ph.ils_retail_price) * 100,
                     1
                 )
             ELSE NULL
-        END as discount_percentage
-    FROM latest_supplier_responses sr
+        END as discount_percentage,
+        sr.status
+    FROM supplier_response sr
     JOIN supplier s ON sr.supplier_id = s.supplier_id
     JOIN item i ON sr.item_id = i.item_id
     CROSS JOIN exchange_rate er
-    WHERE sr.rn = 1
-),
-price_history AS (
-    SELECT 
-        ph.item_id,
-        ph.supplier_id,
-        s.name as supplier_name,
-        ph.price as price_eur,
-        CASE 
-            WHEN ph.source_type = 'promotion' THEN 1
-            ELSE 0
-        END as is_promotion,
-        ph.notes as promotion_name,
-        ph.effective_date as date,
-        i.import_markup,
-        i.retail_price as retail_price_ils,
-        er.eur_ils_rate,
-        -- Calculate cost in ILS
-        ROUND(ph.price * i.import_markup * er.eur_ils_rate, 2) as cost_ils,
-        -- Calculate discount percentage
-        CASE 
-            WHEN i.retail_price > 0 THEN
-                ROUND(
-                    ((i.retail_price - (ph.price * i.import_markup * er.eur_ils_rate)) / i.retail_price) * 100,
-                    1
-                )
-            ELSE NULL
-        END as discount_percentage
-    FROM price_history ph
-    JOIN supplier s ON ph.supplier_id = s.supplier_id
-    JOIN item i ON ph.item_id = i.item_id
-    CROSS JOIN exchange_rate er
-    WHERE ph.item_id = ?
+    LEFT JOIN (
+        SELECT 
+            item_id,
+            ils_retail_price,
+            date,
+            ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY date DESC) as rn
+        FROM price_history
+    ) ph ON i.item_id = ph.item_id AND ph.rn = 1
+    WHERE sr.item_id = ?
 )
 SELECT *
 FROM (
     SELECT * FROM latest_prices
-    WHERE item_id = ?
     UNION ALL
-    SELECT * FROM price_history
+    SELECT * FROM supplier_responses
 ) combined_prices
 WHERE 
-    (?1 IS NULL OR date >= ?1)
-    AND (?2 IS NULL OR supplier_id = ?2)
+    (? IS NULL OR date >= ?)  -- fromDate parameter
+    AND (? IS NULL OR supplier_id = ?)  -- supplierId parameter
 ORDER BY date DESC, discount_percentage DESC
 LIMIT ? OFFSET ?;
 `;
 
 const getSupplierPricesCountQuery = `
-WITH latest_supplier_responses AS (
+WITH latest_supplier_prices AS (
+    SELECT 
+        spl.item_id,
+        spl.supplier_id,
+        strftime('%Y-%m-%d', spl.last_updated) as date,  -- Format date consistently
+        ROW_NUMBER() OVER (PARTITION BY spl.item_id, spl.supplier_id ORDER BY spl.last_updated DESC) as rn
+    FROM supplier_price_list spl
+    WHERE spl.item_id = ?
+),
+supplier_responses AS (
     SELECT 
         sr.item_id,
         sr.supplier_id,
-        sr.response_date as date,
-        ROW_NUMBER() OVER (PARTITION BY sr.item_id, sr.supplier_id ORDER BY sr.response_date DESC) as rn
+        strftime('%Y-%m-%d', sr.response_date) as date  -- Format date consistently
     FROM supplier_response sr
-    WHERE sr.status = 'active'
+    WHERE sr.item_id = ?
 ),
 all_prices AS (
     -- Current prices
     SELECT 
-        sr.item_id,
-        sr.supplier_id,
-        sr.date
-    FROM latest_supplier_responses sr
-    WHERE sr.rn = 1 AND sr.item_id = ?
+        spl.item_id,
+        spl.supplier_id,
+        spl.date
+    FROM latest_supplier_prices spl
+    WHERE spl.rn = 1
 
     UNION ALL
 
-    -- Historical prices
+    -- Response prices
     SELECT 
-        ph.item_id,
-        ph.supplier_id,
-        ph.effective_date as date
-    FROM price_history ph
-    WHERE ph.item_id = ?
+        sr.item_id,
+        sr.supplier_id,
+        sr.date
+    FROM supplier_responses sr
 )
 SELECT COUNT(*) as total
 FROM all_prices
 WHERE 
-    (?1 IS NULL OR date >= ?1)
-    AND (?2 IS NULL OR supplier_id = ?2);
+    (? IS NULL OR date >= ?)  -- fromDate parameter
+    AND (? IS NULL OR supplier_id = ?);  -- supplierId parameter
 `;
 
 module.exports = {

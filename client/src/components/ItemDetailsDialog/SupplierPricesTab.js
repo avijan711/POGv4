@@ -34,8 +34,8 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
       typeof price === 'object' && 
       price.supplier_name && 
       typeof price.supplier_name === 'string' &&
-      'price_quoted' in price &&
-      typeof price.price_quoted === 'number'
+      'price_eur' in price &&  // Changed from price_quoted
+      typeof price.price_eur === 'number'  // Changed from price_quoted
     );
   }, [supplierPrices]);
 
@@ -46,7 +46,7 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
         if (a.status === 'active' && b.status !== 'active') return -1;
         if (b.status === 'active' && a.status !== 'active') return 1;
         // Then by date
-        return new Date(b.response_date) - new Date(a.response_date);
+        return new Date(b.date) - new Date(a.date);  // Changed from response_date to date
       });
   }, [validSupplierPrices]);
 
@@ -54,7 +54,7 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
     const activePrices = sortedPrices.filter(p => p.status === 'active');
     if (!activePrices.length) return null;
 
-    const prices = activePrices.map(p => p.price_quoted);
+    const prices = activePrices.map(p => p.price_eur);  // Changed from price_quoted
     return {
       lowest: Math.min(...prices),
       highest: Math.max(...prices),
@@ -169,12 +169,12 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
               </TableHead>
               <TableBody>
                 {sortedPrices.map((price, index) => {
-                  const marginInfo = getMarginInfo(price.price_quoted);
-                  const ilsPrice = calculateIlsPrice(price.price_quoted);
+                  const marginInfo = getMarginInfo(price.price_eur);  // Changed from price_quoted
+                  const ilsPrice = calculateIlsPrice(price.price_eur);  // Changed from price_quoted
 
                   return (
                     <TableRow 
-                      key={`${price.supplier_name}-${index}`}
+                      key={`${price.supplier_id}-${price.date}-${index}`}  // Better unique key
                       sx={price.is_promotion ? { bgcolor: 'warning.lighter' } : undefined}
                     >
                       <TableCell>
@@ -187,7 +187,7 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
                           )}
                         </Stack>
                       </TableCell>
-                      <TableCell align="right">€{price.price_quoted.toFixed(2)}</TableCell>
+                      <TableCell align="right">€{price.price_eur.toFixed(2)}</TableCell>
                       <TableCell align="right">{formatIlsPrice(ilsPrice)}</TableCell>
                       <TableCell align="right">
                         {marginInfo && (
@@ -207,7 +207,7 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
                         {getPriceChangeDisplay(price.price_change)}
                       </TableCell>
                       <TableCell>
-                        {price.response_date ? new Date(price.response_date).toLocaleDateString() : 'N/A'}
+                        {price.date ? new Date(price.date).toLocaleDateString() : 'N/A'}
                       </TableCell>
                       <TableCell>
                         {price.is_promotion && (
