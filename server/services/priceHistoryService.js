@@ -16,19 +16,6 @@ class PriceHistoryService extends BaseModel {
         });
 
         return await this.executeTransaction(async () => {
-            // Add to price history
-            const historyResult = await this.executeRun(`
-                INSERT INTO price_history (
-                    item_id,
-                    supplier_id,
-                    price,
-                    effective_date,
-                    source_type,
-                    source_id,
-                    notes
-                ) VALUES (?, ?, ?, date('now'), ?, ?, ?)
-            `, [itemId, supplierId, price, sourceType, sourceId, notes]);
-
             // Update supplier price list
             const priceListResult = await this.executeRun(`
                 INSERT INTO supplier_price_list (
@@ -37,14 +24,15 @@ class PriceHistoryService extends BaseModel {
                     current_price,
                     is_promotion,
                     promotion_id,
-                    notes
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    notes,
+                    last_updated
+                ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(item_id, supplier_id) DO UPDATE SET
                     current_price = excluded.current_price,
                     is_promotion = excluded.is_promotion,
                     promotion_id = excluded.promotion_id,
-                    last_updated = CURRENT_TIMESTAMP,
-                    notes = excluded.notes
+                    notes = excluded.notes,
+                    last_updated = excluded.last_updated;
             `, [
                 itemId,
                 supplierId,
@@ -54,9 +42,23 @@ class PriceHistoryService extends BaseModel {
                 notes
             ]);
 
+            // Only update retail price history if it's not a promotion
+            if (sourceType !== 'promotion') {
+                await this.executeRun(`
+                    INSERT INTO price_history (
+                        item_id,
+                        ils_retail_price,
+                        date
+                    ) VALUES (?, ?, CURRENT_TIMESTAMP)
+                `, [
+                    itemId,
+                    price
+                ]);
+            }
+
             return {
                 success: true,
-                historyId: historyResult.lastID,
+                changes: priceListResult.changes,
                 message: 'Price recorded successfully'
             };
         });
@@ -65,25 +67,23 @@ class PriceHistoryService extends BaseModel {
     async getPriceHistory(itemId, supplierId, dateRange = null) {
         let sql = `
             SELECT 
-                ph.*,
+                spl.*,
                 CASE 
-                    WHEN ph.source_type = 'inquiry' THEN i.name
-                    WHEN ph.source_type = 'promotion' THEN p.name
+                    WHEN spl.is_promotion = 1 THEN p.name
                     ELSE NULL
                 END as source_name
-            FROM price_history ph
-            LEFT JOIN inquiry i ON ph.source_type = 'inquiry' AND ph.source_id = i.inquiry_id
-            LEFT JOIN promotion p ON ph.source_type = 'promotion' AND ph.source_id = p.promotion_id
-            WHERE ph.item_id = ? AND ph.supplier_id = ?
+            FROM supplier_price_list spl
+            LEFT JOIN promotion p ON spl.is_promotion = 1 AND spl.promotion_id = p.promotion_id
+            WHERE spl.item_id = ? AND spl.supplier_id = ?
         `;
         const params = [itemId, supplierId];
 
         if (dateRange) {
-            sql += ` AND ph.effective_date BETWEEN ? AND ?`;
+            sql += ` AND spl.last_updated BETWEEN ? AND ?`;
             params.push(dateRange.start, dateRange.end);
         }
 
-        sql += ` ORDER BY ph.effective_date DESC, ph.created_at DESC`;
+        sql += ` ORDER BY spl.last_updated DESC`;
 
         return await this.executeQuery(sql, params);
     }

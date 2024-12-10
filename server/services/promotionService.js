@@ -122,34 +122,6 @@ class PromotionService extends BaseModel {
                         last_updated = excluded.last_updated;
                 `, [supplierId, promotionId]);
 
-                // Update price history for matched items
-                const matchedItems = await this.executeQuery(`
-                    SELECT item_id, price
-                    FROM promotion_staging s
-                    WHERE EXISTS (
-                        SELECT 1 FROM item i WHERE i.item_id = s.item_id
-                    );
-                `);
-
-                for (const item of matchedItems) {
-                    await this.executeRun(`
-                        INSERT INTO price_history (
-                            item_id,
-                            price,
-                            effective_date,
-                            source_type,
-                            source_id,
-                            notes
-                        ) VALUES (?, ?, ?, 'promotion', ?, ?)
-                    `, [
-                        item.item_id,
-                        item.price,
-                        startDate,
-                        promotionId,
-                        `Promotion: ${name}`
-                    ]);
-                }
-
                 debug.log(`Processing completed:`, { total: totalCount, matchedCount });
 
                 return {
@@ -216,18 +188,18 @@ class PromotionService extends BaseModel {
         try {
             const sql = `
                 SELECT 
-                    ph.item_id,
-                    ph.price,
+                    spl.item_id,
+                    spl.current_price as price,
                     p.name as promotion_name,
-                    ph.supplier_id,
+                    spl.supplier_id,
                     s.name as supplier_name,
-                    ph.effective_date as created_at
-                FROM price_history ph
-                JOIN supplier s ON s.supplier_id = ph.supplier_id
-                LEFT JOIN promotion p ON p.promotion_id = ph.source_id
-                WHERE ph.source_type = 'promotion'
-                AND ph.item_id = ?
-                ORDER BY ph.effective_date DESC
+                    spl.last_updated as created_at
+                FROM supplier_price_list spl
+                JOIN supplier s ON s.supplier_id = spl.supplier_id
+                JOIN promotion p ON p.promotion_id = spl.promotion_id
+                WHERE spl.is_promotion = 1
+                AND spl.item_id = ?
+                ORDER BY spl.last_updated DESC
             `;
             return await this.executeQuery(sql, [itemId]);
         } catch (err) {
@@ -259,37 +231,6 @@ class PromotionService extends BaseModel {
                         SELECT 1 FROM promotion_item pi 
                         WHERE pi.promotion_id = spl.promotion_id 
                         AND pi.item_id = spl.item_id
-                    );
-                `);
-
-                // Update price history for newly matched items
-                await this.executeRun(`
-                    INSERT INTO price_history (
-                        item_id,
-                        price,
-                        effective_date,
-                        source_type,
-                        source_id,
-                        notes
-                    )
-                    SELECT 
-                        spl.item_id,
-                        spl.current_price,
-                        p.start_date,
-                        'promotion',
-                        p.promotion_id,
-                        'Synced from promotion: ' || p.name
-                    FROM supplier_price_list spl
-                    JOIN promotion p ON p.promotion_id = spl.promotion_id
-                    WHERE spl.is_promotion = 1
-                    AND EXISTS (
-                        SELECT 1 FROM item i WHERE i.item_id = spl.item_id
-                    )
-                    AND NOT EXISTS (
-                        SELECT 1 FROM price_history ph
-                        WHERE ph.item_id = spl.item_id
-                        AND ph.source_type = 'promotion'
-                        AND ph.source_id = p.promotion_id
                     );
                 `);
 
