@@ -1,10 +1,12 @@
 const BaseModel = require('./BaseModel');
 const debug = require('../utils/debug');
 const { getInquiriesQuery, getInquiryByIdQuery } = require('./queries/inquiries');
+const InquiryItemModel = require('./inquiry/item');
 
 class InquiryModel extends BaseModel {
     constructor(db) {
         super(db);
+        this.inquiryItemModel = new InquiryItemModel(db);
     }
 
     async createInquiry({ inquiryNumber, items }) {

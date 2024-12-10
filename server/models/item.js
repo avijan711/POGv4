@@ -1,5 +1,6 @@
 const BaseModel = require('./BaseModel');
 const debug = require('../utils/debug');
+const { cleanItemId } = require('../utils/itemIdCleaner');
 
 class ItemModel extends BaseModel {
     constructor(db) {
@@ -31,6 +32,7 @@ class ItemModel extends BaseModel {
     }
 
     async getItemById(itemId) {
+        const cleanedId = cleanItemId(itemId);
         const sql = `
             SELECT 
                 i.*,
@@ -51,10 +53,11 @@ class ItemModel extends BaseModel {
             ) p ON i.item_id = p.item_id
             WHERE i.item_id = ?
         `;
-        return await this.executeQuerySingle(sql, [itemId]);
+        return await this.executeQuerySingle(sql, [cleanedId]);
     }
 
     async getPriceHistory(itemId) {
+        const cleanedId = cleanItemId(itemId);
         const sql = `
             SELECT 
                 date,
@@ -66,10 +69,11 @@ class ItemModel extends BaseModel {
             WHERE item_id = ?
             ORDER BY date DESC
         `;
-        return await this.executeQuery(sql, [itemId]);
+        return await this.executeQuery(sql, [cleanedId]);
     }
 
     async getSupplierPrices(itemId) {
+        const cleanedId = cleanItemId(itemId);
         const sql = `
             SELECT 
                 s.name as supplier_name,
@@ -83,10 +87,11 @@ class ItemModel extends BaseModel {
             WHERE sr.item_id = ?
             ORDER BY sr.response_date DESC
         `;
-        return await this.executeQuery(sql, [itemId]);
+        return await this.executeQuery(sql, [cleanedId]);
     }
 
     async getReferenceChanges(itemId) {
+        const cleanedId = cleanItemId(itemId);
         const sql = `
             SELECT 
                 rc.original_item_id,
@@ -104,20 +109,22 @@ class ItemModel extends BaseModel {
             WHERE rc.original_item_id = ? OR rc.new_reference_id = ?
             ORDER BY rc.change_date DESC
         `;
-        return await this.executeQuery(sql, [itemId, itemId]);
+        return await this.executeQuery(sql, [cleanedId, cleanedId]);
     }
 
     async getItemFiles(itemId) {
+        const cleanedId = cleanItemId(itemId);
         const sql = `
             SELECT id, file_path, file_type, upload_date, description
             FROM item_files
             WHERE item_id = ?
             ORDER BY upload_date DESC
         `;
-        return await this.executeQuery(sql, [itemId]);
+        return await this.executeQuery(sql, [cleanedId]);
     }
 
     async addItemFiles(itemId, files) {
+        const cleanedId = cleanItemId(itemId);
         const sql = `
             INSERT INTO item_files (item_id, file_path, file_type, description)
             VALUES (?, ?, ?, ?)
@@ -127,7 +134,7 @@ class ItemModel extends BaseModel {
             const results = [];
             for (const file of files) {
                 const result = await this.executeRun(sql, [
-                    itemId,
+                    cleanedId,
                     file.filename,
                     file.mimetype,
                     file.originalname
@@ -139,62 +146,90 @@ class ItemModel extends BaseModel {
     }
 
     async deleteItemFile(itemId, fileId) {
+        const cleanedId = cleanItemId(itemId);
         const sql = `
             DELETE FROM item_files
             WHERE id = ? AND item_id = ?
         `;
-        return await this.executeRun(sql, [fileId, itemId]);
+        return await this.executeRun(sql, [fileId, cleanedId]);
     }
 
     async createItem(itemData) {
-        return await this.executeTransaction(async () => {
-            const {
-                itemID,
-                hebrewDescription,
-                englishDescription,
-                importMarkup,
-                hsCode,
-                image,
-                qtyInStock,
-                soldThisYear,
-                soldLastYear,
-                retailPrice,
-                notes
-            } = itemData;
+        try {
+            // Clean item ID
+            const cleanedItemId = cleanItemId(itemData.itemID);
+            
+            // Check if item already exists
+            const existingItem = await this.executeQuerySingle(
+                'SELECT item_id FROM item WHERE item_id = ?',
+                [cleanedItemId]
+            );
 
-            // Insert into item table
-            const itemSql = `
-                INSERT INTO item (
-                    item_id, hebrew_description, english_description, 
-                    import_markup, hs_code, image, notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            `;
-            await this.executeRun(itemSql, [
-                itemID, hebrewDescription, englishDescription,
-                importMarkup, hsCode, image, notes
-            ]);
-
-            // Insert initial price history
-            if (retailPrice !== null || qtyInStock !== null || 
-                soldThisYear !== null || soldLastYear !== null) {
-                const priceSql = `
-                    INSERT INTO price_history (
-                        item_id, ils_retail_price, qty_in_stock,
-                        sold_this_year, sold_last_year
-                    ) VALUES (?, ?, ?, ?, ?)
-                `;
-                await this.executeRun(priceSql, [
-                    itemID, retailPrice, qtyInStock,
-                    soldThisYear, soldLastYear
-                ]);
+            if (existingItem) {
+                const error = new Error('Item already exists');
+                error.code = 'DUPLICATE_ITEM';
+                throw error;
             }
 
-            // Return the created item
-            return await this.getItemById(itemID);
-        });
+            return await this.executeTransaction(async () => {
+                const {
+                    hebrewDescription,
+                    englishDescription,
+                    importMarkup,
+                    hsCode,
+                    image,
+                    qtyInStock,
+                    soldThisYear,
+                    soldLastYear,
+                    retailPrice,
+                    notes
+                } = itemData;
+
+                // Insert into item table
+                const itemSql = `
+                    INSERT INTO item (
+                        item_id, hebrew_description, english_description, 
+                        import_markup, hs_code, image, notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                `;
+                await this.executeRun(itemSql, [
+                    cleanedItemId, hebrewDescription, englishDescription,
+                    importMarkup, hsCode, image, notes
+                ]);
+
+                // Insert initial price history
+                if (retailPrice !== null || qtyInStock !== null || 
+                    soldThisYear !== null || soldLastYear !== null) {
+                    const priceSql = `
+                        INSERT INTO price_history (
+                            item_id, ils_retail_price, qty_in_stock,
+                            sold_this_year, sold_last_year
+                        ) VALUES (?, ?, ?, ?, ?)
+                    `;
+                    await this.executeRun(priceSql, [
+                        cleanedItemId, retailPrice, qtyInStock,
+                        soldThisYear, soldLastYear
+                    ]);
+                }
+
+                // Return the created item
+                return await this.getItemById(cleanedItemId);
+            });
+        } catch (error) {
+            if (error.code === 'DUPLICATE_ITEM') {
+                throw error;
+            }
+            if (error.message.includes('UNIQUE constraint failed')) {
+                const duplicateError = new Error('Item already exists');
+                duplicateError.code = 'DUPLICATE_ITEM';
+                throw duplicateError;
+            }
+            throw error;
+        }
     }
 
     async updateItem(itemId, updateData) {
+        const cleanedId = cleanItemId(itemId);
         return await this.executeTransaction(async () => {
             const {
                 hebrewDescription,
@@ -228,7 +263,7 @@ class ItemModel extends BaseModel {
                 notes
             ];
             if (image) itemParams.push(image);
-            itemParams.push(itemId);
+            itemParams.push(cleanedId);
             
             await this.executeRun(itemSql, itemParams);
 
@@ -242,7 +277,7 @@ class ItemModel extends BaseModel {
                     ) VALUES (?, ?, ?, ?, ?)
                 `;
                 await this.executeRun(priceSql, [
-                    itemId, retailPrice, qtyInStock,
+                    cleanedId, retailPrice, qtyInStock,
                     soldThisYear, soldLastYear
                 ]);
             }
@@ -250,21 +285,25 @@ class ItemModel extends BaseModel {
     }
 
     async updateNotes(itemId, notes) {
+        const cleanedId = cleanItemId(itemId);
         const sql = `
             UPDATE item 
             SET notes = ?
             WHERE item_id = ?
         `;
-        await this.executeRun(sql, [notes, itemId]);
-        return await this.getItemById(itemId);
+        await this.executeRun(sql, [notes, cleanedId]);
+        return await this.getItemById(cleanedId);
     }
 
     async deleteItem(itemId) {
+        const cleanedId = cleanItemId(itemId);
         const sql = 'DELETE FROM item WHERE item_id = ?';
-        await this.executeRun(sql, [itemId]);
+        await this.executeRun(sql, [cleanedId]);
     }
 
     async addReferenceChange(originalItemId, newReferenceId, supplierId, notes) {
+        const cleanedOriginalId = cleanItemId(originalItemId);
+        const cleanedRefId = cleanItemId(newReferenceId);
         const sql = `
             INSERT INTO item_reference_change (
                 original_item_id, new_reference_id, supplier_id,
@@ -272,8 +311,8 @@ class ItemModel extends BaseModel {
             ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         `;
         await this.executeRun(sql, [
-            originalItemId,
-            newReferenceId,
+            cleanedOriginalId,
+            cleanedRefId,
             supplierId || null,
             supplierId ? 0 : 1,
             notes
