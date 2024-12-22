@@ -253,7 +253,7 @@ class PromotionService extends BaseModel {
                 `, [supplierId]);
                 debug.log('Existing supplier prices:', existingPrices[0].count);
 
-                // Insert ALL items into supplier_price_list, even if they don't exist in item table yet
+                // Insert only existing items into supplier_price_list
                 const priceListResult = await this.executeRun(`
                     INSERT OR REPLACE INTO supplier_price_list (
                         item_id,
@@ -263,14 +263,17 @@ class PromotionService extends BaseModel {
                         promotion_id,
                         last_updated
                     )
-                    SELECT 
+                    SELECT
                         s.item_id,
                         ?,
                         s.price,
                         1,
                         ?,
                         CURRENT_TIMESTAMP
-                    FROM promotion_staging s;
+                    FROM promotion_staging s
+                    WHERE EXISTS (
+                        SELECT 1 FROM item i WHERE i.item_id = s.item_id
+                    );
                 `, [supplierId, promotionId]);
 
                 debug.log('Updated supplier_price_list:', priceListResult.changes);
