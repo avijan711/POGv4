@@ -16,6 +16,8 @@ export function useSupplierPrices(itemId) {
         fromDate: '',
         supplierId: ''
     });
+    const [updating, setUpdating] = useState(false);
+    const [updateError, setUpdateError] = useState(null);
 
     const loadPrices = useCallback(async (reset = false) => {
         if (!itemId) return;
@@ -163,6 +165,61 @@ export function useSupplierPrices(itemId) {
         }
     }, [loading, hasMore, loadPrices]);
 
+    const updatePrice = useCallback(async (supplierId, price, sourceType = 'manual') => {
+        if (!itemId || !supplierId) return;
+
+        try {
+            setUpdating(true);
+            setUpdateError(null);
+
+            dataDebug.log('Updating price:', {
+                itemId,
+                supplierId,
+                price,
+                sourceType
+            });
+
+            // Call the price update API
+            await axios.post(`${API_BASE_URL}/api/prices/update/${supplierId}`, {
+                items: [{
+                    item_id: itemId,
+                    price: price
+                }],
+                source_type: sourceType
+            });
+
+            // Optimistically update the local state
+            setPrices(prevPrices =>
+                prevPrices.map(p =>
+                    p.supplier_id === supplierId
+                        ? {
+                            ...p,
+                            price_eur: price,
+                            date: new Date().toISOString()
+                        }
+                        : p
+                )
+            );
+
+            // Reload prices to ensure consistency
+            await loadPrices(true);
+
+            dataDebug.log('Price updated successfully');
+            return true;
+        } catch (err) {
+            dataDebug.error('Error updating price:', {
+                error: err,
+                response: err.response,
+                itemId,
+                supplierId
+            });
+            setUpdateError(err.message);
+            return false;
+        } finally {
+            setUpdating(false);
+        }
+    }, [itemId, loadPrices]);
+
     return {
         prices,
         suppliers,
@@ -171,6 +228,9 @@ export function useSupplierPrices(itemId) {
         hasMore,
         loadMore,
         updateFilters,
-        filters
+        filters,
+        updatePrice,
+        updating,
+        updateError
     };
 }

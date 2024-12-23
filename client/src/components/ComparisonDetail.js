@@ -11,6 +11,7 @@ import ComparisonToolbar from './ComparisonToolbar';
 import { useSupplierManagement } from '../hooks/useSupplierManagement';
 import { useSupplierResponses } from '../hooks/useSupplierResponses';
 import { useSettings } from '../hooks/useSettings';
+import { useSupplierPrices } from '../hooks/useSupplierPrices';
 import { 
   isWinningPrice, 
   getDisplayPrice,
@@ -33,6 +34,14 @@ function ComparisonDetail() {
   const [replacementItems, setReplacementItems] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedItemId, setSelectedItemId] = useState(null);
+
+  // Use the supplier prices hook at component level
+  const {
+    updatePrice,
+    updating,
+    updateError
+  } = useSupplierPrices(selectedItemId);
   const [replacementsError, setReplacementsError] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [itemDetailsOpen, setItemDetailsOpen] = useState(false);
@@ -250,12 +259,45 @@ function ComparisonDetail() {
     }));
   };
 
-  const handlePriceChange = (itemId, supplierKey, value) => {
+  // Extract supplierId from supplierKey (format: "supplierId-regular" or "supplierId-promotionId")
+  const extractSupplierId = (supplierKey) => {
+    return supplierKey.split('-')[0];
+  };
+
+  const handlePriceChange = async (itemId, supplierKey, value) => {
     const priceKey = `${itemId}-${supplierKey}`;
+    const newPrice = parseFloat(value) || 0;
+    const supplierId = extractSupplierId(supplierKey);
+
+    // Set the selected item ID for the hook
+    setSelectedItemId(itemId);
+
+    // First update local state for immediate UI feedback
     setTemporaryPrices(prev => ({
       ...prev,
-      [priceKey]: parseFloat(value) || 0
+      [priceKey]: newPrice
     }));
+
+    try {
+      const success = await updatePrice(supplierId, newPrice);
+
+      if (!success) {
+        // If update failed, revert the temporary price
+        setTemporaryPrices(prev => ({
+          ...prev,
+          [priceKey]: prev[priceKey] || 0
+        }));
+        setError('Failed to update price. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error updating price:', err);
+      setError(err.message || 'Failed to update price. Please try again.');
+      // Revert the temporary price on error
+      setTemporaryPrices(prev => ({
+        ...prev,
+        [priceKey]: prev[priceKey] || 0
+      }));
+    }
   };
 
   const shouldShowItem = (itemId) => {
@@ -395,6 +437,8 @@ function ComparisonDetail() {
           handleItemClick={handleItemClick}
           eurToIls={eurToIls}
           replacementItems={replacementItems}
+          updating={updating}
+          updateError={updateError}
         />
       ) : (
         <SuppliersView

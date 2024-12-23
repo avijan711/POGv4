@@ -40,7 +40,9 @@ const ItemsView = ({
   handlePriceChange,
   handleItemClick,
   eurToIls,
-  replacementItems
+  replacementItems,
+  updating,
+  updateError
 }) => {
   const getSourceIcon = (source) => {
     if (source === 'supplier') return <StoreIcon fontSize="small" color="warning" />;
@@ -223,25 +225,47 @@ const ItemsView = ({
                         {supplierItem ? (
                           <Box>
                             {editingPrice === priceKey ? (
-                              <TextField
-                                size="small"
-                                type="number"
-                                value={displayPrice || ''}
-                                onChange={(e) => handlePriceChange(itemId, key, e.target.value)}
-                                onBlur={() => setEditingPrice(null)}
-                                autoFocus
-                                inputProps={{ step: "0.01" }}
-                                sx={{ width: '100px' }}
-                              />
-                            ) : (
-                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-                                €{displayPrice?.toFixed(2) || 'N/A'}
-                                <IconButton 
+                              <Box>
+                                <TextField
                                   size="small"
-                                  onClick={() => setEditingPrice(priceKey)}
-                                >
-                                  <EditIcon fontSize="small" />
-                                </IconButton>
+                                  type="number"
+                                  value={displayPrice || ''}
+                                  onChange={(e) => handlePriceChange(itemId, key, e.target.value)}
+                                  onBlur={() => setEditingPrice(null)}
+                                  autoFocus
+                                  disabled={updating}
+                                  error={!!updateError}
+                                  inputProps={{ step: "0.01" }}
+                                  sx={{ width: '100px' }}
+                                />
+                                {updating && (
+                                  <Typography variant="caption" color="text.secondary" display="block" align="right">
+                                    Updating...
+                                  </Typography>
+                                )}
+                                {updateError && (
+                                  <Typography variant="caption" color="error" display="block" align="right">
+                                    {updateError}
+                                  </Typography>
+                                )}
+                              </Box>
+                            ) : (
+                              <Box>
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                                  €{displayPrice?.toFixed(2) || 'N/A'}
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => setEditingPrice(priceKey)}
+                                    disabled={updating}
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Box>
+                                {updateError && (
+                                  <Typography variant="caption" color="error" display="block" align="right">
+                                    {updateError}
+                                  </Typography>
+                                )}
                               </Box>
                             )}
                             <Typography variant="caption" display="block" color="text.secondary">

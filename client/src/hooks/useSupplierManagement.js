@@ -4,8 +4,11 @@ import { isWinningPrice } from '../utils/priceUtils';
 export const useSupplierManagement = (prices) => {
   const [selectedSuppliers, setSelectedSuppliers] = useState({});
 
-  const allSuppliers = prices?.reduce((acc, item) => {
-    const key = item.IsPromotion 
+  // Filter out items without supplier data
+  const validPrices = prices?.filter(item => item.SupplierID != null) || [];
+
+  const allSuppliers = validPrices.reduce((acc, item) => {
+    const key = item.IsPromotion
       ? `${item.SupplierID}-${item.PromotionGroupID}`
       : `${item.SupplierID}-regular`;
 
@@ -21,8 +24,8 @@ export const useSupplierManagement = (prices) => {
     return acc;
   }, {});
 
-  const supplierGroups = prices?.reduce((groups, item) => {
-    const key = item.IsPromotion 
+  const supplierGroups = validPrices.reduce((groups, item) => {
+    const key = item.IsPromotion
       ? `${item.SupplierID}-${item.PromotionGroupID}`
       : `${item.SupplierID}-regular`;
 
@@ -45,7 +48,7 @@ export const useSupplierManagement = (prices) => {
       }), {});
       setSelectedSuppliers(initial);
     }
-  }, [prices]); // Only depend on prices
+  }, [prices, supplierGroups]); // Include supplierGroups in dependencies
 
   const handleSupplierToggle = (key) => {
     setSelectedSuppliers(prev => ({
