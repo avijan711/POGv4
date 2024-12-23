@@ -14,10 +14,10 @@ class ItemModel extends BaseModel {
                     item_id,
                     ils_retail_price,
                     qty_in_stock,
-                    sold_this_year,
-                    sold_last_year,
+                    qty_sold_this_year,
+                    qty_sold_last_year,
                     date,
-                    ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY date DESC, history_id DESC) as rn
+                    ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY date DESC, id DESC) as rn
                 FROM price_history
             ),
             ReferenceChanges AS (
@@ -46,8 +46,8 @@ class ItemModel extends BaseModel {
                 i.*,
                 p.ils_retail_price as retail_price,
                 p.qty_in_stock,
-                p.sold_this_year,
-                p.sold_last_year,
+                p.qty_sold_this_year,
+                p.qty_sold_last_year,
                 p.date as last_price_update,
                 CASE 
                     WHEN rc.original_item_id IS NOT NULL THEN json_object(
@@ -93,10 +93,10 @@ class ItemModel extends BaseModel {
                     item_id,
                     ils_retail_price,
                     qty_in_stock,
-                    sold_this_year,
-                    sold_last_year,
+                    qty_sold_this_year,
+                    qty_sold_last_year,
                     date,
-                    ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY date DESC, history_id DESC) as rn
+                    ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY date DESC, id DESC) as rn
                 FROM price_history
             ),
             ReferenceChanges AS (
@@ -125,8 +125,8 @@ class ItemModel extends BaseModel {
                 i.*,
                 p.ils_retail_price as retail_price,
                 p.qty_in_stock,
-                p.sold_this_year,
-                p.sold_last_year,
+                p.qty_sold_this_year,
+                p.qty_sold_last_year,
                 p.date as last_price_update,
                 CASE 
                     WHEN rc.original_item_id IS NOT NULL THEN json_object(
@@ -170,8 +170,8 @@ class ItemModel extends BaseModel {
                 date,
                 ils_retail_price,
                 qty_in_stock,
-                sold_this_year,
-                sold_last_year
+                qty_sold_this_year,
+                qty_sold_last_year
             FROM price_history
             WHERE item_id = ?
             ORDER BY date DESC
@@ -317,7 +317,7 @@ class ItemModel extends BaseModel {
                     const priceSql = `
                         INSERT INTO price_history (
                             item_id, ils_retail_price, qty_in_stock,
-                            sold_this_year, sold_last_year
+                            qty_sold_this_year, qty_sold_last_year
                         ) VALUES (?, ?, ?, ?, ?)
                     `;
                     await this.executeRun(priceSql, [
@@ -387,7 +387,7 @@ class ItemModel extends BaseModel {
                 const priceSql = `
                     INSERT INTO price_history (
                         item_id, ils_retail_price, qty_in_stock,
-                        sold_this_year, sold_last_year
+                        qty_sold_this_year, qty_sold_last_year
                     ) VALUES (?, ?, ?, ?, ?)
                 `;
                 await this.executeRun(priceSql, [

@@ -35,7 +35,3 @@ SELECT
     p.date as last_price_update
 FROM item i
 LEFT JOIN latest_price p ON i.item_id = p.item_id AND p.rn = 1;
-
--- Verify the view was created correctly
-SELECT 'Verifying view...';
-SELECT sql FROM sqlite_master WHERE type='view' AND name='item_details';

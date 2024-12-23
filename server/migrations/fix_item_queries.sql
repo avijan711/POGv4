@@ -3,20 +3,42 @@
 -- First, remove any items with invalid IDs
 DELETE FROM item WHERE trim(item_id) = '' OR item_id IS NULL;
 
--- Create a function to validate item IDs
-CREATE TRIGGER IF NOT EXISTS validate_item_id_format
+-- Drop existing triggers
+DROP TRIGGER IF EXISTS validate_item_id_null;
+DROP TRIGGER IF EXISTS validate_item_id_empty;
+DROP TRIGGER IF EXISTS validate_item_id_spaces;
+DROP TRIGGER IF EXISTS validate_item_id_case;
+
+-- Create trigger to validate null item_id
+CREATE TRIGGER validate_item_id_null
 BEFORE INSERT ON item
+WHEN NEW.item_id IS NULL
 BEGIN
-    SELECT CASE
-        WHEN NEW.item_id IS NULL THEN
-            RAISE(ABORT, 'item_id cannot be null')
-        WHEN trim(NEW.item_id) = '' THEN
-            RAISE(ABORT, 'item_id cannot be empty')
-        WHEN NEW.item_id != trim(NEW.item_id) THEN
-            RAISE(ABORT, 'item_id cannot have leading or trailing spaces')
-        WHEN NEW.item_id != upper(NEW.item_id) THEN
-            RAISE(ABORT, 'item_id must be uppercase')
-    END;
+    SELECT RAISE(ABORT, 'item_id cannot be null');
+END;
+
+-- Create trigger to validate empty item_id
+CREATE TRIGGER validate_item_id_empty
+BEFORE INSERT ON item
+WHEN trim(NEW.item_id) = ''
+BEGIN
+    SELECT RAISE(ABORT, 'item_id cannot be empty');
+END;
+
+-- Create trigger to validate item_id spaces
+CREATE TRIGGER validate_item_id_spaces
+BEFORE INSERT ON item
+WHEN NEW.item_id != trim(NEW.item_id)
+BEGIN
+    SELECT RAISE(ABORT, 'item_id cannot have leading or trailing spaces');
+END;
+
+-- Create trigger to validate item_id case
+CREATE TRIGGER validate_item_id_case
+BEFORE INSERT ON item
+WHEN NEW.item_id != upper(NEW.item_id)
+BEGIN
+    SELECT RAISE(ABORT, 'item_id must be uppercase');
 END;
 
 -- Create a view that only returns valid items
@@ -90,16 +112,3 @@ LEFT JOIN (
 ) ri ON i.item_id = ri.item_id
 WHERE trim(i.item_id) != '' AND i.item_id IS NOT NULL
 ORDER BY i.item_id;
-
--- Verify the changes
-SELECT 'Verifying empty items...';
-SELECT COUNT(*) as empty_items FROM item WHERE trim(item_id) = '' OR item_id IS NULL;
-
-SELECT 'Verifying view...';
-SELECT COUNT(*) as valid_items FROM valid_items;
-
--- Note: This migration:
--- 1. Removes any existing items with invalid IDs
--- 2. Adds a trigger to prevent invalid IDs
--- 3. Creates a view that only returns valid items
--- 4. The view can be used in place of the current getAllItems query

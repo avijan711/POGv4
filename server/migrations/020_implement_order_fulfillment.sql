@@ -1,3 +1,16 @@
+-- Create order_fulfillment table
+CREATE TABLE IF NOT EXISTS order_fulfillment (
+    fulfillment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
+    order_item_id INTEGER NOT NULL,
+    quantity_supplied INTEGER NOT NULL CHECK (quantity_supplied > 0),
+    fulfillment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES "order"(order_id) ON DELETE CASCADE,
+    FOREIGN KEY (order_item_id) REFERENCES order_item(order_item_id) ON DELETE CASCADE
+);
+
 -- Add new columns to order_item table
 ALTER TABLE order_item
 ADD COLUMN supplied_quantity INTEGER NOT NULL DEFAULT 0
@@ -10,19 +23,6 @@ CHECK (remaining_quantity >= 0);
 ALTER TABLE order_item
 ADD COLUMN fulfillment_status TEXT NOT NULL DEFAULT 'pending'
 CHECK (fulfillment_status IN ('pending', 'partial', 'fulfilled', 'cancelled'));
-
--- Create order_fulfillment table
-CREATE TABLE order_fulfillment (
-    fulfillment_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    order_id INTEGER NOT NULL,
-    order_item_id INTEGER NOT NULL,
-    quantity_supplied INTEGER NOT NULL CHECK (quantity_supplied > 0),
-    fulfillment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-    notes TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (order_id) REFERENCES "order"(order_id) ON DELETE CASCADE,
-    FOREIGN KEY (order_item_id) REFERENCES order_item(order_item_id) ON DELETE CASCADE
-);
 
 -- Create indexes for performance
 CREATE INDEX idx_order_fulfillment_order ON order_fulfillment(order_id);
@@ -57,18 +57,16 @@ END;
 CREATE TRIGGER prevent_over_fulfillment
 BEFORE INSERT ON order_fulfillment
 BEGIN
-    SELECT CASE
-        WHEN (
-            SELECT supplied_quantity + NEW.quantity_supplied
-            FROM order_item
-            WHERE order_item_id = NEW.order_item_id
-        ) > (
-            SELECT quantity
-            FROM order_item
-            WHERE order_item_id = NEW.order_item_id
-        )
-        THEN RAISE(ABORT, 'Cannot supply more than ordered quantity')
-    END;
+    SELECT RAISE(ABORT, 'Cannot supply more than ordered quantity')
+    WHERE (
+        SELECT supplied_quantity + NEW.quantity_supplied
+        FROM order_item
+        WHERE order_item_id = NEW.order_item_id
+    ) > (
+        SELECT quantity
+        FROM order_item
+        WHERE order_item_id = NEW.order_item_id
+    );
 END;
 
 -- Create view for order fulfillment status

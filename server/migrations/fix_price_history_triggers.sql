@@ -57,15 +57,3 @@ BEGIN
         (SELECT date FROM inquiry WHERE inquiry_id = NEW.inquiry_id)
     );
 END;
-
--- Verify the triggers were created correctly
-SELECT 'Verifying triggers...';
-SELECT name, sql FROM sqlite_master 
-WHERE type='trigger' 
-AND name IN ('update_price_history_on_inquiry', 'update_price_history_on_inquiry_update');
-
--- Note: This migration fixes the following issues:
--- 1. Missing commas in column lists and VALUES clauses
--- 2. Incorrect column names (sold_this_year -> qty_sold_this_year)
--- 3. Improper handling of NULL values
--- 4. Malformed trigger syntax causing 500 errors during Excel uploads

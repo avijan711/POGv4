@@ -1,11 +1,5 @@
 -- Description: This migration adds ON DELETE CASCADE to price_history and fixes foreign key constraints
 
--- Enable foreign keys
-PRAGMA foreign_keys = ON;
-
--- Begin transaction for safety
-BEGIN TRANSACTION;
-
 -- First, drop any existing views that reference price_history
 DROP VIEW IF EXISTS item_details;
 DROP VIEW IF EXISTS valid_items;
@@ -105,26 +99,3 @@ SELECT
     p.date as last_price_update
 FROM item i
 LEFT JOIN latest_price p ON i.item_id = p.item_id AND p.rn = 1;
-
--- Commit the transaction
-COMMIT;
-
--- Verify the changes
-SELECT 'Verifying price_history table...';
-SELECT sql FROM sqlite_master WHERE type='table' AND name='price_history';
-
-SELECT 'Verifying triggers...';
-SELECT name, sql FROM sqlite_master 
-WHERE type='trigger' AND name LIKE '%price_history%';
-
-SELECT 'Verifying views...';
-SELECT name, sql FROM sqlite_master
-WHERE type='view' AND name IN ('item_details', 'valid_items');
-
--- Note: This migration:
--- 1. Enables foreign keys
--- 2. Drops existing views and triggers first
--- 3. Creates price_history table with ON DELETE CASCADE if it doesn't exist
--- 4. Adds appropriate indexes for performance
--- 5. Recreates triggers with proper syntax
--- 6. Recreates views

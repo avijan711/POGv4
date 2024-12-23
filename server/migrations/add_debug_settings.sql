@@ -1,8 +1,5 @@
 -- Description: This migration adds debug settings support
 
--- Begin transaction for safety
-BEGIN TRANSACTION;
-
 -- Create settings table if it doesn't exist
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -36,18 +33,3 @@ BEGIN
     SET updated_at = CURRENT_TIMESTAMP
     WHERE key = NEW.key;
 END;
-
--- Commit the transaction
-COMMIT;
-
--- Verify the changes
-SELECT 'Verifying settings table...';
-SELECT sql FROM sqlite_master WHERE type='table' AND name='settings';
-
-SELECT 'Verifying debug settings...';
-SELECT * FROM settings WHERE key = 'debug';
-
--- Note: This migration:
--- 1. Creates settings table if it doesn't exist
--- 2. Adds default debug settings
--- 3. Creates trigger for timestamp updates

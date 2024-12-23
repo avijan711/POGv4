@@ -253,7 +253,7 @@ class PromotionService extends BaseModel {
                 `, [supplierId]);
                 debug.log('Existing supplier prices:', existingPrices[0].count);
 
-                // Insert only existing items into supplier_price_list
+                // Insert ALL items into supplier_price_list (including future items)
                 const priceListResult = await this.executeRun(`
                     INSERT OR REPLACE INTO supplier_price_list (
                         item_id,
@@ -270,13 +270,23 @@ class PromotionService extends BaseModel {
                         1,
                         ?,
                         CURRENT_TIMESTAMP
-                    FROM promotion_staging s
-                    WHERE EXISTS (
-                        SELECT 1 FROM item i WHERE i.item_id = s.item_id
-                    );
+                    FROM promotion_staging s;
                 `, [supplierId, promotionId]);
 
-                debug.log('Updated supplier_price_list:', priceListResult.changes);
+                // Count items that don't exist yet
+                const nonExistingItems = await this.executeQuery(`
+                    SELECT COUNT(*) as count
+                    FROM supplier_price_list spl
+                    WHERE spl.promotion_id = ?
+                    AND NOT EXISTS (
+                        SELECT 1 FROM item i WHERE i.item_id = spl.item_id
+                    )
+                `, [promotionId]);
+
+                debug.log('Updated supplier_price_list:', {
+                    totalUpdated: priceListResult.changes,
+                    nonExistingItems: nonExistingItems[0].count
+                });
 
                 // Debug: Check final counts
                 const finalPrices = await this.executeQuery(`

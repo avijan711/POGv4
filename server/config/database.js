@@ -2,6 +2,7 @@ const sqlite3 = require('sqlite3');
 const path = require('path');
 const fs = require('fs');
 const debug = require('../utils/debug');
+const MigrationManager = require('./migrationManager');
 
 // Create verbose sqlite3 database instance
 const verbose = sqlite3.verbose();
@@ -184,6 +185,7 @@ async function initializeDatabase() {
             debug.log('Connected to SQLite database');
             
             try {
+                // Configure SQLite pragmas
                 await db.getAsync("PRAGMA query_only = 0;");
                 await db.runAsync("PRAGMA journal_mode = WAL;");
                 await db.runAsync("PRAGMA synchronous = NORMAL;");
@@ -194,6 +196,7 @@ async function initializeDatabase() {
                 await db.runAsync("PRAGMA locking_mode = NORMAL;");
                 await db.runAsync("PRAGMA mmap_size = 268435456;");
 
+                // Check JSON1 extension
                 try {
                     await db.getAsync("SELECT json_group_array(1) as test");
                 } catch (e) {
@@ -203,32 +206,50 @@ async function initializeDatabase() {
                     debug.error('Error checking JSON1 extension:', e);
                 }
 
-                const row = await db.getAsync('SELECT COUNT(*) as count FROM sqlite_master WHERE type="table" AND name="item"');
-                const needsInit = !row || row.count === 0;
-
-                if (needsInit) {
-                    debug.log('Database needs initialization, creating tables...');
-                    const schema = fs.readFileSync(schemaPath, 'utf8');
-                    const cleanSchema = schema
-                        .split('\n')
-                        .filter(line => !line.trim().toLowerCase().startsWith('drop'))
-                        .join('\n');
-                    
-                    try {
-                        await db.execAsync(cleanSchema);
-                        debug.log('Database schema initialized successfully');
-                    } catch (error) {
-                        debug.error('Error during database initialization:', error);
-                        reject(error);
-                        return;
-                    }
-                } else {
-                    debug.log('Database already initialized, skipping schema creation');
-                }
-
                 // Create DAL instance
                 const dal = new DatabaseAccessLayer(db);
-                resolve(dal);
+
+                // Initialize migration manager
+                const migrationManager = new MigrationManager(dal);
+                
+                try {
+                    // Initialize migrations table
+                    await migrationManager.initialize();
+
+                    // Check if this is a new database
+                    const row = await db.getAsync('SELECT COUNT(*) as count FROM sqlite_master WHERE type="table" AND name="item"');
+                    const needsInit = !row || row.count === 0;
+
+                    if (needsInit) {
+                        debug.log('New database detected, applying base schema...');
+                        const schema = fs.readFileSync(schemaPath, 'utf8');
+                        const cleanSchema = schema
+                            .split('\n')
+                            .filter(line => !line.trim().toLowerCase().startsWith('drop'))
+                            .join('\n');
+                        
+                        await db.execAsync(cleanSchema);
+                        debug.log('Base schema applied successfully');
+                    }
+
+                    // Apply any pending migrations
+                    debug.log('Checking for pending migrations...');
+                    const results = await migrationManager.applyPendingMigrations();
+                    
+                    if (results.length > 0) {
+                        debug.log('Applied migrations:', results);
+                    }
+
+                    // Verify schema integrity
+                    await migrationManager.verifySchema();
+                    
+                    debug.log('Database initialization and migrations completed successfully');
+                    resolve(dal);
+                } catch (error) {
+                    debug.error('Error during database initialization or migration:', error);
+                    reject(error);
+                    return;
+                }
             } catch (error) {
                 debug.error('Error initializing database:', error);
                 reject(error);
