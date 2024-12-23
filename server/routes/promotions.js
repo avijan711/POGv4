@@ -85,6 +85,7 @@ function createRouter({ db, promotionModel }) {
 
     // Get columns from Excel file
     router.post('/columns', upload.single('file'), validateUpload, async function(req, res, next) {
+        let processingComplete = false;
         try {
             debug.log('Processing Excel columns request:', {
                 originalname: req.file.originalname,
@@ -93,6 +94,8 @@ function createRouter({ db, promotionModel }) {
             });
 
             const columns = await promotionService.getExcelColumns(req.file);
+            processingComplete = true;
+
             res.json({
                 success: true,
                 data: {
@@ -101,13 +104,24 @@ function createRouter({ db, promotionModel }) {
                 }
             });
 
-            // Clean up file after response is sent
+            // Clean up file after successful response
             if (req.file?.path) {
                 cleanupFile(req.file.path);
             }
         } catch (error) {
-            // Let error middleware handle cleanup
-            next(error);
+            debug.error('Error processing columns:', error);
+            
+            // Clean up file if processing failed
+            if (!processingComplete && req.file?.path) {
+                cleanupFile(req.file.path);
+            }
+
+            // Send error response
+            res.status(400).json({
+                error: 'Failed to process Excel file',
+                message: error.message,
+                code: 'EXCEL_PROCESSING_ERROR'
+            });
         }
     });
 

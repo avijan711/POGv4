@@ -167,8 +167,8 @@ function SupplierPricingTile({
               <TableRow>
                 <TableCell>Supplier</TableCell>
                 <TableCell align="right">Price</TableCell>
-                <TableCell align="right">Margin</TableCell>
                 <TableCell align="right">Discount</TableCell>
+                <TableCell align="right">Delta</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Info</TableCell>
               </TableRow>
@@ -177,20 +177,20 @@ function SupplierPricingTile({
               {sortedPrices.map((price, index) => {
                 const priceEur = Number(price.price_eur || price.price_quoted || 0);
                 const ilsPrice = price.cost_ils || calculateIlsPrice(priceEur, item.import_markup, eurToIls);
-                const marginInfo = getMarginInfo(
-                  priceEur,
-                  item.retail_price,
-                  item.import_markup,
-                  eurToIls
-                );
                 const isWinningPrice = priceEur === winningPrice && price.status === 'active';
+                
+                // Calculate delta with next supplier's discount
+                const nextPrice = sortedPrices[index + 1];
+                const delta = nextPrice ?
+                  (price.discount_percentage - nextPrice.discount_percentage).toFixed(1) :
+                  null;
 
                 return (
-                  <TableRow 
+                  <TableRow
                     key={`${price.supplier_id}-${price.date}-${index}`}
                     sx={{
                       ...(price.is_promotion && { bgcolor: 'warning.lighter' }),
-                      ...(isWinningPrice && { 
+                      ...(isWinningPrice && {
                         bgcolor: 'success.lighter',
                         '& > td': { fontWeight: 'bold' }
                       })
@@ -201,9 +201,9 @@ function SupplierPricingTile({
                         <BusinessIcon fontSize="small" color="action" />
                         <Typography>{price.supplier_name}</Typography>
                         {isWinningPrice && (
-                          <Chip 
-                            label="Best Price" 
-                            color="success" 
+                          <Chip
+                            label="Best Price"
+                            color="success"
                             size="small"
                             variant="outlined"
                           />
@@ -211,9 +211,9 @@ function SupplierPricingTile({
                       </Box>
                     </TableCell>
                     <TableCell align="right">
-                      <Box 
+                      <Box
                         onClick={() => handlePriceClick(price)}
-                        sx={{ 
+                        sx={{
                           cursor: 'pointer',
                           '&:hover': {
                             bgcolor: 'action.hover',
@@ -231,16 +231,16 @@ function SupplierPricingTile({
                       </Box>
                     </TableCell>
                     <TableCell align="right">
-                      {marginInfo && (
-                        <Typography color={`${marginInfo.color}.main`}>
-                          {marginInfo.margin.toFixed(1)}%
+                      {price.discount_percentage > 0 && (
+                        <Typography color="success.main">
+                          {price.discount_percentage.toFixed(1)}%
                         </Typography>
                       )}
                     </TableCell>
                     <TableCell align="right">
-                      {price.discount_percentage > 0 && (
-                        <Typography color="success.main">
-                          {price.discount_percentage.toFixed(1)}%
+                      {delta && (
+                        <Typography color="info.main">
+                          {delta}%
                         </Typography>
                       )}
                     </TableCell>

@@ -181,24 +181,51 @@ class PromotionProcessor {
      * @returns {string[]} Array of column names
      */
     static async getColumns(filePath) {
+        let workbook = null;
         try {
             debug.log('Getting columns from file:', filePath);
 
-            const workbook = XLSX.readFile(filePath, {
-                sheetRows: 1, // Only read first row
-                cellNF: false,
-                cellHTML: false
-            });
+            // First validate the file
+            const { validateFileType } = require('../excelProcessor/validator');
+            await validateFileType(filePath);
+
+            // Use a try-catch specifically for XLSX operations
+            try {
+                workbook = XLSX.readFile(filePath, {
+                    sheetRows: 1, // Only read first row
+                    cellNF: false,
+                    cellHTML: false,
+                    WTF: true // Return errors instead of throwing
+                });
+            } catch (xlsxError) {
+                debug.error('XLSX read error:', xlsxError);
+                throw new Error(`Failed to read Excel file: ${xlsxError.message}`);
+            }
+
+            if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+                throw new Error('Invalid Excel file format');
+            }
+
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
 
-            // Get headers from first row
-            const headers = XLSX.utils.sheet_to_json(worksheet, {
-                header: 1,
-                range: 0,
-                raw: true,
-                defval: null
-            })[0];
+            if (!worksheet) {
+                throw new Error('Excel file contains no worksheets');
+            }
+
+            // Get headers with error handling
+            let headers;
+            try {
+                headers = XLSX.utils.sheet_to_json(worksheet, {
+                    header: 1,
+                    range: 0,
+                    raw: true,
+                    defval: null
+                })[0];
+            } catch (headerError) {
+                debug.error('Header extraction error:', headerError);
+                throw new Error('Failed to read column headers');
+            }
 
             if (!headers || headers.length === 0) {
                 throw new Error('No columns found in Excel file');

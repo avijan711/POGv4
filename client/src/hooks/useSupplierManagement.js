@@ -4,10 +4,9 @@ import { isWinningPrice } from '../utils/priceUtils';
 export const useSupplierManagement = (prices) => {
   const [selectedSuppliers, setSelectedSuppliers] = useState({});
 
-  // Filter out items without supplier data
-  const validPrices = prices?.filter(item => item.SupplierID != null) || [];
-
-  const allSuppliers = validPrices.reduce((acc, item) => {
+  // Get all unique suppliers from prices that have them
+  const allSuppliers = (prices || []).reduce((acc, item) => {
+    if (!item.SupplierID) return acc;
     const key = item.IsPromotion
       ? `${item.SupplierID}-${item.PromotionGroupID}`
       : `${item.SupplierID}-regular`;
@@ -24,20 +23,36 @@ export const useSupplierManagement = (prices) => {
     return acc;
   }, {});
 
-  const supplierGroups = validPrices.reduce((groups, item) => {
-    const key = item.IsPromotion
-      ? `${item.SupplierID}-${item.PromotionGroupID}`
-      : `${item.SupplierID}-regular`;
+  const supplierGroups = Object.entries(allSuppliers).reduce((groups, [key, supplier]) => {
+    groups[key] = {
+      ...supplier,
+      items: []
+    };
 
-    if (!groups[key]) {
-      groups[key] = {
-        ...allSuppliers[key],
-        items: []
-      };
-    }
-    groups[key].items.push(item);
+    // Add all items to this supplier group
+    (prices || []).forEach(item => {
+      // If item has this supplier's price, use it
+      if (item.SupplierID === supplier.supplierId &&
+          ((!item.IsPromotion && !supplier.isPromotion) ||
+           (item.IsPromotion && item.PromotionGroupID === supplier.promotionGroupId))) {
+        groups[key].items.push(item);
+      }
+      // If item has no price for this supplier, add it with minimal data
+      else if (!item.SupplierID || item.SupplierID !== supplier.supplierId) {
+        groups[key].items.push({
+          ...item,
+          SupplierID: supplier.supplierId,
+          SupplierName: supplier.supplierName,
+          IsPromotion: supplier.isPromotion,
+          PromotionName: supplier.promotionName,
+          PromotionGroupID: supplier.promotionGroupId,
+          PriceQuoted: null
+        });
+      }
+    });
+
     return groups;
-  }, {}) || {};
+  }, {});
 
   // Only update selected suppliers when prices change
   useEffect(() => {

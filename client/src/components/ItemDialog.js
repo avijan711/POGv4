@@ -246,11 +246,25 @@ function ItemDialog({ open, onClose, item, onSave, mode, error }) {
       }
     });
 
+    // Sort suppliers by discount percentage
     const discounts = Object.entries(supplierDiscounts)
       .sort(([, a], [, b]) => b - a);
     const bestSupplier = discounts[0]?.[0];
-    const delta = discounts[0] && discounts[1] ? 
-      (discounts[0][1] - discounts[1][1]).toFixed(1) : null;
+
+    // Create a map of deltas between adjacent suppliers
+    const deltas = {};
+    for (let i = 0; i < discounts.length - 1; i++) {
+      const currentSupplier = discounts[i][0];
+      const nextSupplier = discounts[i + 1][0];
+      deltas[currentSupplier] = (discounts[i][1] - discounts[i + 1][1]).toFixed(1);
+    }
+
+    // Sort supplier prices by discount percentage
+    const sortedPrices = [...itemData.supplierPrices].sort((a, b) => {
+      const discountA = supplierDiscounts[a.supplier_name] || 0;
+      const discountB = supplierDiscounts[b.supplier_name] || 0;
+      return discountB - discountA;
+    });
 
     return (
       <Box sx={{ mt: 2 }}>
@@ -268,12 +282,13 @@ function ItemDialog({ open, onClose, item, onSave, mode, error }) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {itemData.supplierPrices.map((price, index) => {
+            {sortedPrices.map((price, index) => {
               const isBestSupplier = price.supplier_name === bestSupplier;
               const discount = supplierDiscounts[price.supplier_name];
+              const delta = deltas[price.supplier_name];
               
               return (
-                <TableRow 
+                <TableRow
                   key={index}
                   sx={isBestSupplier ? { backgroundColor: '#f0fff0' } : {}}
                 >
@@ -288,7 +303,7 @@ function ItemDialog({ open, onClose, item, onSave, mode, error }) {
                   </TableCell>
                   <TableCell>{discount?.toFixed(1)}%</TableCell>
                   <TableCell>
-                    {isBestSupplier && delta ? `${delta}%` : ''}
+                    {delta ? `${delta}%` : ''}
                   </TableCell>
                 </TableRow>
               );

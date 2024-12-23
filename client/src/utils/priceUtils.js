@@ -81,9 +81,16 @@ export const calculateDiscount = (priceEUR, importMarkup, retailPrice, eurToIls 
 
 export const getDisplayPrice = (itemId, supplierKey, originalPrice, temporaryPrices) => {
   const priceKey = `${itemId}-${supplierKey}`;
-  return temporaryPrices.hasOwnProperty(priceKey) 
-    ? temporaryPrices[priceKey] 
-    : originalPrice;
+  const tempPrice = temporaryPrices.hasOwnProperty(priceKey) ? temporaryPrices[priceKey] : null;
+  
+  // If we have a temporary price, use it
+  if (tempPrice !== null) return tempPrice;
+  
+  // If we have an original price, use it
+  if (originalPrice !== null && originalPrice !== undefined) return originalPrice;
+  
+  // No price available
+  return null;
 };
 
 export const getBestPriceForItem = (itemId, supplierGroups, selectedSuppliers, temporaryPrices) => {

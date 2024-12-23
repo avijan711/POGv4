@@ -222,57 +222,58 @@ const ItemsView = ({
                           transition: 'background-color 0.2s'
                         }}
                       >
-                        {supplierItem ? (
-                          <Box>
-                            {editingPrice === priceKey ? (
-                              <Box>
-                                <TextField
+                        <Box>
+                          {editingPrice === priceKey ? (
+                            <Box>
+                              <TextField
+                                size="small"
+                                type="number"
+                                value={displayPrice || ''}
+                                onChange={(e) => handlePriceChange(itemId, key, e.target.value)}
+                                onBlur={() => setEditingPrice(null)}
+                                autoFocus
+                                disabled={updating}
+                                error={!!updateError}
+                                inputProps={{ step: "0.01" }}
+                                sx={{ width: '100px' }}
+                                placeholder="Enter price"
+                              />
+                              {updating && (
+                                <Typography variant="caption" color="text.secondary" display="block" align="right">
+                                  Updating...
+                                </Typography>
+                              )}
+                              {updateError && (
+                                <Typography variant="caption" color="error" display="block" align="right">
+                                  {updateError}
+                                </Typography>
+                              )}
+                            </Box>
+                          ) : (
+                            <Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                                {supplierItem?.PriceQuoted ? `€${displayPrice?.toFixed(2)}` : '-'}
+                                <IconButton
                                   size="small"
-                                  type="number"
-                                  value={displayPrice || ''}
-                                  onChange={(e) => handlePriceChange(itemId, key, e.target.value)}
-                                  onBlur={() => setEditingPrice(null)}
-                                  autoFocus
+                                  onClick={() => setEditingPrice(priceKey)}
                                   disabled={updating}
-                                  error={!!updateError}
-                                  inputProps={{ step: "0.01" }}
-                                  sx={{ width: '100px' }}
-                                />
-                                {updating && (
-                                  <Typography variant="caption" color="text.secondary" display="block" align="right">
-                                    Updating...
-                                  </Typography>
-                                )}
-                                {updateError && (
-                                  <Typography variant="caption" color="error" display="block" align="right">
-                                    {updateError}
-                                  </Typography>
-                                )}
+                                >
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
                               </Box>
-                            ) : (
-                              <Box>
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-                                  €{displayPrice?.toFixed(2) || 'N/A'}
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => setEditingPrice(priceKey)}
-                                    disabled={updating}
-                                  >
-                                    <EditIcon fontSize="small" />
-                                  </IconButton>
-                                </Box>
-                                {updateError && (
-                                  <Typography variant="caption" color="error" display="block" align="right">
-                                    {updateError}
-                                  </Typography>
-                                )}
-                              </Box>
-                            )}
+                              {updateError && (
+                                <Typography variant="caption" color="error" display="block" align="right">
+                                  {updateError}
+                                </Typography>
+                              )}
+                            </Box>
+                          )}
+                          {discount !== null && (
                             <Typography variant="caption" display="block" color="text.secondary">
-                              {discount !== null ? `${discount.toFixed(1)}%` : ''}
+                              {discount.toFixed(1)}%
                             </Typography>
-                          </Box>
-                        ) : '-'}
+                          )}
+                        </Box>
                       </TableCell>
                     );
                   })}
