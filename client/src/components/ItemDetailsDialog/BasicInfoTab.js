@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -17,7 +17,7 @@ import {
   DialogActions,
   Link,
   Alert,
-  useTheme
+  useTheme,
 } from '@mui/material';
 import {
   TrendingUp as TrendingUpIcon,
@@ -31,13 +31,20 @@ import {
   SwapHoriz as SwapHorizIcon,
   Store as StoreIcon,
   Person as PersonIcon,
-  ArrowForward as ArrowForwardIcon
+  ArrowForward as ArrowForwardIcon,
 } from '@mui/icons-material';
 import { formatIlsPrice } from '../../utils/priceUtils';
 import { API_BASE_URL } from '../../config';
 
 function NoteDialog({ open, onClose, onSave, initialNote = '' }) {
   const [note, setNote] = useState(initialNote);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [open]);
 
   const handleSave = () => {
     onSave(note);
@@ -51,7 +58,7 @@ function NoteDialog({ open, onClose, onSave, initialNote = '' }) {
       </DialogTitle>
       <DialogContent>
         <TextField
-          autoFocus
+          inputRef={inputRef}
           multiline
           rows={4}
           fullWidth
@@ -93,13 +100,13 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
   if (!itemDetails) return null;
 
   const salesTrend = itemDetails.soldThisYear > itemDetails.soldLastYear ? 'up' :
-                    itemDetails.soldThisYear < itemDetails.soldLastYear ? 'down' : 'same';
+    itemDetails.soldThisYear < itemDetails.soldLastYear ? 'down' : 'same';
 
   const getTrendIcon = () => {
     switch(salesTrend) {
-      case 'up': return <TrendingUpIcon color="success" />;
-      case 'down': return <TrendingDownIcon color="error" />;
-      default: return <NoChangeIcon color="action" />;
+    case 'up': return <TrendingUpIcon color="success" />;
+    case 'down': return <TrendingDownIcon color="error" />;
+    default: return <NoChangeIcon color="action" />;
     }
   };
 
@@ -109,7 +116,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
     if (itemDetails.soldLastYear === 0) return `${itemDetails.soldThisYear > 0 ? '+' : ''}${itemDetails.soldThisYear}`;
     const percentChange = ((diff / itemDetails.soldLastYear) * 100).toFixed(1);
     return diff === 0 ? 'No Change' : 
-           `${diff > 0 ? '+' : ''}${percentChange}% vs Last Year`;
+      `${diff > 0 ? '+' : ''}${percentChange}% vs Last Year`;
   };
 
   const handleAddNote = () => {
@@ -134,14 +141,14 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
       updatedNotes = notes.map(note => 
         note.id === editingNote.id 
           ? { ...note, text: noteText, lastModified: new Date().toISOString() }
-          : note
+          : note,
       );
     } else {
       const newNote = {
         id: Date.now(),
         text: noteText,
         created: new Date().toISOString(),
-        lastModified: new Date().toISOString()
+        lastModified: new Date().toISOString(),
       };
       updatedNotes = [...notes, newNote];
     }
@@ -200,7 +207,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
               borderColor: referenceChange ? 'warning.main' : 'success.main',
               borderRadius: 2,
               position: 'relative',
-              overflow: 'hidden'
+              overflow: 'hidden',
             }}
           >
             {/* Background Pattern */}
@@ -217,7 +224,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                 transparent 10px,
                 rgba(0,0,0,0.1) 10px,
                 rgba(0,0,0,0.1) 20px
-              )`
+              )`,
             }} />
 
             <Stack spacing={2}>
@@ -227,12 +234,12 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                   variant="h6" 
                   sx={{ 
                     fontWeight: 'bold',
-                    color: referenceChange ? theme.palette.warning.main : theme.palette.success.main
+                    color: referenceChange ? theme.palette.warning.main : theme.palette.success.main,
                   }}
                 >
                   {referenceChange ? 'Item Replacement Information' : 'New Reference Item'}
                 </Typography>
-                <SwapHorizIcon color={referenceChange ? "warning" : "success"} fontSize="large" />
+                <SwapHorizIcon color={referenceChange ? 'warning' : 'success'} fontSize="large" />
               </Stack>
 
               {/* Connection Visual */}
@@ -242,7 +249,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                   p: 2,
                   bgcolor: 'rgba(255,255,255,0.9)',
                   border: '1px solid rgba(0,0,0,0.1)',
-                  borderRadius: 2
+                  borderRadius: 2,
                 }}
               >
                 {referenceChange && (
@@ -255,7 +262,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                           bgcolor: 'background.paper',
                           border: '1px solid',
                           borderColor: 'warning.light',
-                          borderRadius: 1
+                          borderRadius: 1,
                         }}>
                           <Typography variant="h6" color="warning.dark">
                             {itemDetails.item_id}
@@ -283,7 +290,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                             borderRadius: 1,
                             textAlign: 'left',
                             textTransform: 'none',
-                            minWidth: 200
+                            minWidth: 200,
                           }}
                         >
                           <Typography variant="h6" color="warning.dark">
@@ -320,7 +327,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                           p: 1,
                           bgcolor: 'background.paper',
                           borderRadius: 1,
-                          fontStyle: 'italic'
+                          fontStyle: 'italic',
                         }}
                       >
                         {referenceChange.notes}
@@ -365,7 +372,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                   p: 2,
                   bgcolor: 'background.default',
                   border: '1px solid rgba(0,0,0,0.1)',
-                  borderRadius: 2
+                  borderRadius: 2,
                 }}
               >
                 <Typography variant="subtitle2" color="text.secondary">Stock Information</Typography>
@@ -395,7 +402,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                   p: 2,
                   bgcolor: 'background.default',
                   border: '1px solid rgba(0,0,0,0.1)',
-                  borderRadius: 2
+                  borderRadius: 2,
                 }}
               >
                 <Typography variant="subtitle2" color="text.secondary">Sales Information</Typography>
@@ -426,7 +433,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                     p: 2,
                     bgcolor: 'background.default',
                     border: '1px solid rgba(0,0,0,0.1)',
-                    borderRadius: 2
+                    borderRadius: 2,
                   }}
                 >
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -440,7 +447,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                       width: '100%',
                       height: 200,
                       objectFit: 'contain',
-                      mt: 1
+                      mt: 1,
                     }}
                   />
                 </Paper>
@@ -457,7 +464,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                   p: 2,
                   bgcolor: 'background.default',
                   border: '1px solid rgba(0,0,0,0.1)',
-                  borderRadius: 2
+                  borderRadius: 2,
                 }}
               >
                 <Typography variant="subtitle2" color="text.secondary">Current Price</Typography>
@@ -479,7 +486,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                   p: 2,
                   bgcolor: 'background.default',
                   border: '1px solid rgba(0,0,0,0.1)',
-                  borderRadius: 2
+                  borderRadius: 2,
                 }}
               >
                 <Typography variant="subtitle2" color="text.secondary">Import Markup</Typography>
@@ -501,7 +508,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                   bgcolor: 'background.default',
                   border: '1px solid rgba(0,0,0,0.1)',
                   borderRadius: 2,
-                  minHeight: '200px'
+                  minHeight: '200px',
                 }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
@@ -530,7 +537,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                           p: 2,
                           bgcolor: '#f8f9fa',
                           border: '1px solid rgba(0,0,0,0.05)',
-                          borderRadius: 1
+                          borderRadius: 1,
                         }}
                       >
                         <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
@@ -540,7 +547,7 @@ function BasicInfoTab({ itemDetails, onUpdateNotes, onItemClick }) {
                           display: 'flex', 
                           justifyContent: 'space-between',
                           alignItems: 'center',
-                          mt: 1 
+                          mt: 1, 
                         }}>
                           <Typography variant="caption" color="text.secondary">
                             Last modified: {new Date(note.lastModified).toLocaleDateString()}

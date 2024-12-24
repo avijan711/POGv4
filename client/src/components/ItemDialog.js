@@ -25,7 +25,7 @@ import {
   Tab,
   CircularProgress,
   Tooltip,
-  Alert
+  Alert,
 } from '@mui/material';
 import { Image as ImageIcon, Info as InfoIcon } from '@mui/icons-material';
 import { format } from 'date-fns';
@@ -52,7 +52,7 @@ function ItemDialog({ open, onClose, item, onSave, mode, error }) {
     itemData,
     isLoading,
     hasError,
-    hookError
+    hookError,
   } = useItemDetails(item, open, mode);
 
   const defaultFormData = useMemo(() => ({
@@ -66,7 +66,7 @@ function ItemDialog({ open, onClose, item, onSave, mode, error }) {
     sold_this_year: '0',
     sold_last_year: '0',
     retail_price: '',
-    reference_id: '' // Using snake_case consistently
+    reference_id: '', // Using snake_case consistently
   }), []);
 
   const [formData, setFormData] = useState(defaultFormData);
@@ -91,7 +91,7 @@ function ItemDialog({ open, onClose, item, onSave, mode, error }) {
           sold_this_year: itemData.sold_this_year?.toString() || '0',
           sold_last_year: itemData.sold_last_year?.toString() || '0',
           image: itemData.image || null,
-          reference_id: itemData.reference_id || ''
+          reference_id: itemData.reference_id || '',
         });
         
         if (itemData.image) {
@@ -162,7 +162,7 @@ function ItemDialog({ open, onClose, item, onSave, mode, error }) {
     dataDebug.log('Form data updated:', {
       field,
       value,
-      currentData: formData
+      currentData: formData,
     });
   };
 
@@ -459,7 +459,7 @@ function ItemDialog({ open, onClose, item, onSave, mode, error }) {
               helperText="Enter value between 1.00 and 2.00 (e.g., 1.30 for 30% markup)"
               inputProps={{
                 inputMode: 'decimal',
-                pattern: '[1-2].[0-9]*'
+                pattern: '[1-2].[0-9]*',
               }}
             />
             <TextField
@@ -474,7 +474,7 @@ function ItemDialog({ open, onClose, item, onSave, mode, error }) {
               value={formData.qty_in_stock}
               onChange={handleChange('qty_in_stock')}
               type="number"
-              inputProps={{ min: "0" }}
+              inputProps={{ min: '0' }}
             />
             <TextField
               label="Sold This Year"
@@ -482,7 +482,7 @@ function ItemDialog({ open, onClose, item, onSave, mode, error }) {
               value={formData.sold_this_year}
               onChange={handleChange('sold_this_year')}
               type="number"
-              inputProps={{ min: "0" }}
+              inputProps={{ min: '0' }}
             />
             <TextField
               label="Sold Last Year"
@@ -490,7 +490,7 @@ function ItemDialog({ open, onClose, item, onSave, mode, error }) {
               value={formData.sold_last_year}
               onChange={handleChange('sold_last_year')}
               type="number"
-              inputProps={{ min: "0" }}
+              inputProps={{ min: '0' }}
             />
             <TextField
               label="Retail Price (ILS)"
@@ -498,7 +498,7 @@ function ItemDialog({ open, onClose, item, onSave, mode, error }) {
               value={formData.retail_price}
               onChange={handleChange('retail_price')}
               type="number"
-              inputProps={{ min: "0.01" }}
+              inputProps={{ min: '0.01' }}
               error={!!retailPriceError}
               helperText={retailPriceError || 'Leave empty if price is not set'}
             />

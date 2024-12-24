@@ -10,7 +10,7 @@ import {
   Typography,
   Box,
   CircularProgress,
-  Alert
+  Alert,
 } from '@mui/material';
 
 function PriceHistoryTable({ data = [], loading = false, error = null }) {

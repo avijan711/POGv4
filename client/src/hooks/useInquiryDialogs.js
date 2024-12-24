@@ -36,7 +36,7 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
           price.supplier_name && 
           typeof price.supplier_name === 'string' &&
           'price_quoted' in price &&
-          typeof price.price_quoted === 'number'
+          typeof price.price_quoted === 'number',
         )
         .map(price => ({
           supplier_name: price.supplier_name,
@@ -45,7 +45,7 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
           status: price.status || 'unknown',
           is_promotion: Boolean(price.is_promotion),
           promotion_name: price.promotion_name || '',
-          price_change: price.price_change || 0
+          price_change: price.price_change || 0,
         }));
     } catch (e) {
       console.error('Error processing supplier prices:', e);
@@ -102,7 +102,7 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
       // Process supplier prices before setting in state
       const processedItem = {
         ...item,
-        supplier_prices: processSupplierPrices(item.supplier_prices)
+        supplier_prices: processSupplierPrices(item.supplier_prices),
       };
 
       // Log the processed item for debugging
@@ -200,6 +200,6 @@ export const useInquiryDialogs = (inquiryId, onRefresh) => {
     handleDeleteInquiry,
     getChangeSource,
     resetDialogs,
-    setError
+    setError,
   };
 };

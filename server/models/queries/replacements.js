@@ -107,8 +107,8 @@ const checkItemReferencesQuery = `
 `;
 
 module.exports = {
-    getReplacementsQuery,
-    debugItemReferencesQuery,
-    checkInquiryExistsQuery,
-    checkItemReferencesQuery
+  getReplacementsQuery,
+  debugItemReferencesQuery,
+  checkInquiryExistsQuery,
+  checkItemReferencesQuery,
 };

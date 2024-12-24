@@ -9,7 +9,7 @@ describe('SupplierResponseList Dialog Interactions', () => {
       supplier: {
         name: 'Test Supplier',
         contact_name: 'John Doe',
-        email: 'john@test.com'
+        email: 'john@test.com',
       },
       status: 'pending',
       total_items: 10,
@@ -23,8 +23,8 @@ describe('SupplierResponseList Dialog Interactions', () => {
           english_description: 'Test Item 1 EN',
           requested_qty: 5,
           supplier_price: 100,
-          updated_at: '2023-01-01'
-        }
+          updated_at: '2023-01-01',
+        },
       ],
       missing_items_data: [
         {
@@ -33,10 +33,10 @@ describe('SupplierResponseList Dialog Interactions', () => {
           hebrew_description: 'Test Item 2',
           english_description: 'Test Item 2 EN',
           requested_qty: 3,
-          updated_at: '2023-01-01'
-        }
-      ]
-    }
+          updated_at: '2023-01-01',
+        },
+      ],
+    },
   ];
 
   it('opens covered items dialog when clicking covered button', () => {
@@ -76,7 +76,7 @@ describe('SupplierResponseList Dialog Interactions', () => {
     const noItemsResponse = [{
       ...mockResponses[0],
       covered_items: 0,
-      covered_items_data: []
+      covered_items_data: [],
     }];
     
     render(<SupplierResponseList responses={noItemsResponse} />);
@@ -89,7 +89,7 @@ describe('SupplierResponseList Dialog Interactions', () => {
     const noItemsResponse = [{
       ...mockResponses[0],
       missing_items: 0,
-      missing_items_data: []
+      missing_items_data: [],
     }];
     
     render(<SupplierResponseList responses={noItemsResponse} />);

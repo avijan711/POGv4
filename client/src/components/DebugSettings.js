@@ -19,28 +19,28 @@ import { API_BASE_URL } from '../config';
 const debugTypes = {
   general: {
     label: 'General Logs',
-    description: 'Basic application logs and information'
+    description: 'Basic application logs and information',
   },
   errors: {
     label: 'Error Logs',
-    description: 'Application errors and stack traces'
+    description: 'Application errors and stack traces',
   },
   database: {
     label: 'Database Logs',
-    description: 'SQL queries and database operations'
+    description: 'SQL queries and database operations',
   },
   performance: {
     label: 'Performance Logs',
-    description: 'Timing and performance measurements'
+    description: 'Timing and performance measurements',
   },
   routes: {
     label: 'Route Logs',
-    description: 'API route registrations and access'
+    description: 'API route registrations and access',
   },
   middleware: {
     label: 'Middleware Logs',
-    description: 'Middleware execution and processing'
-  }
+    description: 'Middleware execution and processing',
+  },
 };
 
 function DebugSettings() {
@@ -75,13 +75,13 @@ function DebugSettings() {
       const newValue = !settings[type];
       const response = await axios.post(`${API_BASE_URL}/api/settings/debug`, {
         type,
-        enabled: newValue
+        enabled: newValue,
       });
       
       if (response.data?.success) {
         setSettings(prev => ({
           ...prev,
-          [type]: newValue
+          [type]: newValue,
         }));
       } else {
         throw new Error(response.data?.message || 'Failed to update setting');

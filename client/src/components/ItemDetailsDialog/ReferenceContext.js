@@ -1,7 +1,7 @@
 import React, { createContext, useContext } from 'react';
 import {
   Store as StoreIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
 } from '@mui/icons-material';
 import { Tooltip } from '@mui/material';
 
@@ -14,7 +14,7 @@ export function ReferenceProvider({ children, value }) {
     referenceChange,
     referencingItems,
     onItemClick,
-    itemDetails
+    itemDetails,
   } = value;
 
   const contextValue = {
@@ -74,10 +74,10 @@ export function ReferenceProvider({ children, value }) {
         bgcolor: hasReferenceChange ? '#fff3e0' : isReferencedBy ? '#e8f5e9' : 'transparent',
         borderBottom: theme => `3px solid ${
           hasReferenceChange ? theme.palette.warning.main : 
-          isReferencedBy ? theme.palette.success.main : 
-          theme.palette.divider
+            isReferencedBy ? theme.palette.success.main : 
+              theme.palette.divider
         }`,
-        position: 'relative'
+        position: 'relative',
       },
       itemBox: {
         p: 1.5,
@@ -85,14 +85,14 @@ export function ReferenceProvider({ children, value }) {
         border: '1px solid',
         borderColor: hasReferenceChange ? 'warning.light' : isReferencedBy ? 'success.light' : 'grey.300',
         borderRadius: 1,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
       },
       headerText: {
         fontWeight: 'bold',
         color: theme => hasReferenceChange ? theme.palette.warning.dark : 
-               isReferencedBy ? theme.palette.success.dark : 
-               theme.palette.text.primary,
-        letterSpacing: '0.5px'
+          isReferencedBy ? theme.palette.success.dark : 
+            theme.palette.text.primary,
+        letterSpacing: '0.5px',
       },
       backgroundPattern: {
         content: '""',
@@ -109,9 +109,9 @@ export function ReferenceProvider({ children, value }) {
           transparent 10px,
           rgba(0,0,0,0.1) 10px,
           rgba(0,0,0,0.1) 20px
-        )`
-      }
-    }
+        )`,
+      },
+    },
   };
 
   return (

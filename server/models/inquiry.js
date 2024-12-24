@@ -4,113 +4,113 @@ const { getInquiriesQuery, getInquiryByIdQuery } = require('./queries/inquiries'
 const InquiryItemModel = require('./inquiry/item');
 
 class InquiryModel extends BaseModel {
-    constructor(db) {
-        super(db);
-        this.inquiryItemModel = new InquiryItemModel(db);
-    }
+  constructor(db) {
+    super(db);
+    this.inquiryItemModel = new InquiryItemModel(db);
+  }
 
-    async createInquiry({ inquiryNumber, items }) {
-        return await this.executeTransaction(async () => {
-            debug.log('Starting inquiry creation:', { inquiryNumber, itemCount: items.length });
+  async createInquiry({ inquiryNumber, items }) {
+    return await this.executeTransaction(async () => {
+      debug.log('Starting inquiry creation:', { inquiryNumber, itemCount: items.length });
 
-            // Insert inquiry
-            const inquirySql = `INSERT INTO inquiry (inquiry_number) VALUES (?)`;
-            const inquiryResult = await this.executeRun(inquirySql, [inquiryNumber]);
-            const inquiryId = inquiryResult.lastID;
+      // Insert inquiry
+      const inquirySql = 'INSERT INTO inquiry (inquiry_number) VALUES (?)';
+      const inquiryResult = await this.executeRun(inquirySql, [inquiryNumber]);
+      const inquiryId = inquiryResult.lastID;
 
-            // First pass: Create all items and referenced items
-            for (const item of items) {
-                // Skip if no item_id
-                if (!item.item_id) {
-                    debug.log('Skipping item with no item_id');
-                    continue;
-                }
+      // First pass: Create all items and referenced items
+      for (const item of items) {
+        // Skip if no item_id
+        if (!item.item_id) {
+          debug.log('Skipping item with no item_id');
+          continue;
+        }
 
-                // Check and create the main item if it doesn't exist
-                const existingItem = await this.executeQuerySingle(
-                    'SELECT item_id FROM item WHERE item_id = ?',
-                    [item.item_id]
-                );
+        // Check and create the main item if it doesn't exist
+        const existingItem = await this.executeQuerySingle(
+          'SELECT item_id FROM item WHERE item_id = ?',
+          [item.item_id],
+        );
 
-                if (!existingItem) {
-                    debug.log('Creating new item:', item.item_id);
-                    // Create the item first
-                    const itemSql = `
+        if (!existingItem) {
+          debug.log('Creating new item:', item.item_id);
+          // Create the item first
+          const itemSql = `
                         INSERT INTO item (
                             item_id, hebrew_description, english_description,
                             import_markup, hs_code, origin
                         ) VALUES (?, ?, ?, ?, ?, ?)
                     `;
-                    await this.executeRun(itemSql, [
-                        item.item_id,
-                        item.hebrew_description,
-                        item.english_description || '',
-                        item.import_markup || 1.30,
-                        item.hs_code || '',
-                        item.origin || ''
-                    ]);
-                }
+          await this.executeRun(itemSql, [
+            item.item_id,
+            item.hebrew_description,
+            item.english_description || '',
+            item.import_markup || 1.30,
+            item.hs_code || '',
+            item.origin || '',
+          ]);
+        }
 
-                // If there's a new_reference_id, check and create that item too
-                if (item.new_reference_id && item.new_reference_id !== item.item_id) {
-                    const existingRefItem = await this.executeQuerySingle(
-                        'SELECT item_id FROM item WHERE item_id = ?',
-                        [item.new_reference_id]
-                    );
+        // If there's a new_reference_id, check and create that item too
+        if (item.new_reference_id && item.new_reference_id !== item.item_id) {
+          const existingRefItem = await this.executeQuerySingle(
+            'SELECT item_id FROM item WHERE item_id = ?',
+            [item.new_reference_id],
+          );
 
-                    if (!existingRefItem) {
-                        debug.log('Creating referenced item:', item.new_reference_id);
-                        // Create the referenced item with minimal information
-                        const refItemSql = `
+          if (!existingRefItem) {
+            debug.log('Creating referenced item:', item.new_reference_id);
+            // Create the referenced item with minimal information
+            const refItemSql = `
                             INSERT INTO item (
                                 item_id, hebrew_description, english_description,
                                 import_markup
                             ) VALUES (?, ?, ?, ?)
                         `;
-                        await this.executeRun(refItemSql, [
-                            item.new_reference_id,
-                            `Referenced item for ${item.item_id}`, // Temporary description
-                            '',
-                            1.30 // Default markup
-                        ]);
-                    }
+            await this.executeRun(refItemSql, [
+              item.new_reference_id,
+              `Referenced item for ${item.item_id}`, // Temporary description
+              '',
+              1.30, // Default markup
+            ]);
+          }
 
-                    // Create reference change entry
-                    const existingRefChange = await this.executeQuerySingle(
-                        'SELECT change_id FROM item_reference_change WHERE original_item_id = ? AND new_reference_id = ?',
-                        [item.item_id, item.new_reference_id]
-                    );
+          // Create reference change entry
+          const existingRefChange = await this.executeQuerySingle(
+            'SELECT change_id FROM item_reference_change WHERE original_item_id = ? AND new_reference_id = ?',
+            [item.item_id, item.new_reference_id],
+          );
 
-                    if (!existingRefChange) {
-                        debug.log('Creating reference change:', {
-                            from: item.item_id,
-                            to: item.new_reference_id
-                        });
-                        const refChangeSql = `
+          if (!existingRefChange) {
+            debug.log('Creating reference change:', {
+              from: item.item_id,
+              to: item.new_reference_id,
+            });
+            const refChangeSql = `
                             INSERT INTO item_reference_change (
                                 original_item_id, new_reference_id,
                                 changed_by_user, notes
                             ) VALUES (?, ?, ?, ?)
                         `;
-                        await this.executeRun(refChangeSql, [
-                            item.item_id,
-                            item.new_reference_id,
-                            1, // changed_by_user = true
-                            item.reference_notes || 'Created from inquiry upload'
-                        ]);
-                    }
-                }
-            }
+            await this.executeRun(refChangeSql, [
+              item.item_id,
+              item.new_reference_id,
+              1, // changed_by_user = true
+              item.reference_notes || 'Created from inquiry upload',
+            ]);
+          }
+        }
+      }
 
-            // Second pass: Insert inquiry items now that all referenced items exist
-            for (const item of items) {
-                // Skip if no item_id
-                if (!item.item_id) {
-                    debug.log('Skipping inquiry item with no item_id');
-                    continue;
-                }
+      // Second pass: Insert inquiry items now that all referenced items exist
+      for (const item of items) {
+        // Skip if no item_id
+        if (!item.item_id) {
+          debug.log('Skipping inquiry item with no item_id');
+          continue;
+        }
 
-                const inquiryItemSql = `
+        const inquiryItemSql = `
                     INSERT INTO inquiry_item (
                         inquiry_id, item_id, requested_qty,
                         hebrew_description, english_description,
@@ -121,44 +121,44 @@ class InquiryModel extends BaseModel {
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `;
 
-                // Ensure numeric fields are non-negative
-                const ensureNonNegative = (value, defaultValue = 0) => {
-                    if (value === null || value === undefined) return defaultValue;
-                    const num = typeof value === 'number' ? value : Number(value);
-                    return !isNaN(num) ? Math.max(0, num) : defaultValue;
-                };
+        // Ensure numeric fields are non-negative
+        const ensureNonNegative = (value, defaultValue = 0) => {
+          if (value === null || value === undefined) return defaultValue;
+          const num = typeof value === 'number' ? value : Number(value);
+          return !isNaN(num) ? Math.max(0, num) : defaultValue;
+        };
 
-                const requestedQty = ensureNonNegative(item.requested_qty);
-                const qtyInStock = ensureNonNegative(item.qty_in_stock);
-                const soldThisYear = ensureNonNegative(item.sold_this_year);
-                const soldLastYear = ensureNonNegative(item.sold_last_year);
+        const requestedQty = ensureNonNegative(item.requested_qty);
+        const qtyInStock = ensureNonNegative(item.qty_in_stock);
+        const soldThisYear = ensureNonNegative(item.sold_this_year);
+        const soldLastYear = ensureNonNegative(item.sold_last_year);
 
-                await this.executeRun(inquiryItemSql, [
-                    inquiryId,
-                    item.item_id,
-                    requestedQty,
-                    item.hebrew_description,
-                    item.english_description || null,
-                    item.hs_code || null,
-                    item.import_markup || 1.30,
-                    qtyInStock,
-                    item.retail_price || null,
-                    soldThisYear,
-                    soldLastYear,
-                    item.original_item_id || item.item_id,
-                    item.new_reference_id || null,
-                    item.reference_notes || null,
-                    item.origin || ''
-                ]);
-            }
+        await this.executeRun(inquiryItemSql, [
+          inquiryId,
+          item.item_id,
+          requestedQty,
+          item.hebrew_description,
+          item.english_description || null,
+          item.hs_code || null,
+          item.import_markup || 1.30,
+          qtyInStock,
+          item.retail_price || null,
+          soldThisYear,
+          soldLastYear,
+          item.original_item_id || item.item_id,
+          item.new_reference_id || null,
+          item.reference_notes || null,
+          item.origin || '',
+        ]);
+      }
 
-            debug.log('Inquiry creation completed:', { inquiryId });
-            return { id: inquiryId };
-        });
-    }
+      debug.log('Inquiry creation completed:', { inquiryId });
+      return { id: inquiryId };
+    });
+  }
 
-    async getAllInquiries() {
-        const sql = `
+  async getAllInquiries() {
+    const sql = `
             SELECT 
                 i.inquiry_id,
                 i.inquiry_number as custom_number,
@@ -174,28 +174,28 @@ class InquiryModel extends BaseModel {
             GROUP BY i.inquiry_id, i.inquiry_number, i.status, i.date
             ORDER BY i.date DESC
         `;
-        return await this.executeQuery(sql);
-    }
+    return await this.executeQuery(sql);
+  }
 
-    async getInquiryById(inquiryId) {
-        const sql = getInquiryByIdQuery();
-        const result = await this.executeQuerySingle(sql, [inquiryId, inquiryId, inquiryId, inquiryId]);
+  async getInquiryById(inquiryId) {
+    const sql = getInquiryByIdQuery();
+    const result = await this.executeQuerySingle(sql, [inquiryId, inquiryId, inquiryId, inquiryId]);
         
-        if (!result) return null;
+    if (!result) return null;
 
-        // Parse the JSON strings
-        try {
-            const inquiry = JSON.parse(result.inquiry);
-            const items = JSON.parse(result.items);
-            return { inquiry, items };
-        } catch (error) {
-            debug.error('Error parsing inquiry result:', error);
-            throw new Error('Failed to parse inquiry data');
-        }
+    // Parse the JSON strings
+    try {
+      const inquiry = JSON.parse(result.inquiry);
+      const items = JSON.parse(result.items);
+      return { inquiry, items };
+    } catch (error) {
+      debug.error('Error parsing inquiry result:', error);
+      throw new Error('Failed to parse inquiry data');
     }
+  }
 
-    async getInquiryItems(inquiryId) {
-        const sql = `
+  async getInquiryItems(inquiryId) {
+    const sql = `
             WITH ReferenceInfo AS (
                 SELECT 
                     rc.original_item_id,
@@ -263,41 +263,41 @@ class InquiryModel extends BaseModel {
             WHERE ii.inquiry_id = ?
             ORDER BY ii.inquiry_item_id
         `;
-        return await this.executeQuery(sql, [inquiryId]);
-    }
+    return await this.executeQuery(sql, [inquiryId]);
+  }
 
-    async updateInquiry(inquiryId, updateData) {
-        const { status } = updateData;
-        const sql = `
+  async updateInquiry(inquiryId, updateData) {
+    const { status } = updateData;
+    const sql = `
             UPDATE inquiry 
             SET status = ?
             WHERE inquiry_id = ?
         `;
-        await this.executeRun(sql, [status, inquiryId]);
-        return await this.getInquiryById(inquiryId);
-    }
+    await this.executeRun(sql, [status, inquiryId]);
+    return await this.getInquiryById(inquiryId);
+  }
 
-    async deleteInquiry(inquiryId) {
-        return await this.executeTransaction(async () => {
-            debug.log('Starting inquiry deletion transaction:', { inquiryId });
+  async deleteInquiry(inquiryId) {
+    return await this.executeTransaction(async () => {
+      debug.log('Starting inquiry deletion transaction:', { inquiryId });
 
-            // First delete all supplier responses (which will cascade delete supplier_response_items)
-            const deleteResponsesSql = 'DELETE FROM supplier_response WHERE inquiry_id = ?';
-            await this.executeRun(deleteResponsesSql, [inquiryId]);
-            debug.log('Deleted supplier responses');
+      // First delete all supplier responses (which will cascade delete supplier_response_items)
+      const deleteResponsesSql = 'DELETE FROM supplier_response WHERE inquiry_id = ?';
+      await this.executeRun(deleteResponsesSql, [inquiryId]);
+      debug.log('Deleted supplier responses');
 
-            // Then delete the inquiry (which will cascade delete inquiry_items)
-            const deleteInquirySql = 'DELETE FROM inquiry WHERE inquiry_id = ?';
-            const result = await this.executeRun(deleteInquirySql, [inquiryId]);
+      // Then delete the inquiry (which will cascade delete inquiry_items)
+      const deleteInquirySql = 'DELETE FROM inquiry WHERE inquiry_id = ?';
+      const result = await this.executeRun(deleteInquirySql, [inquiryId]);
             
-            if (result.changes === 0) {
-                throw new Error('Inquiry not found');
-            }
+      if (result.changes === 0) {
+        throw new Error('Inquiry not found');
+      }
 
-            debug.log('Inquiry deletion completed');
-            return result;
-        });
-    }
+      debug.log('Inquiry deletion completed');
+      return result;
+    });
+  }
 }
 
 module.exports = InquiryModel;

@@ -4,7 +4,7 @@
  * @returns {string} SQL query for missing items
  */
 function getMissingItemsQuery() {
-    return `
+  return `
     WITH inquiry_items AS (
         SELECT 
             ii.item_id,
@@ -50,5 +50,5 @@ function getMissingItemsQuery() {
 }
 
 module.exports = {
-    getMissingItemsQuery
+  getMissingItemsQuery,
 };

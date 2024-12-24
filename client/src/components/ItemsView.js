@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -14,14 +14,14 @@ import {
   Link,
   Chip,
   Tooltip,
-  Stack
+  Stack,
 } from '@mui/material';
 import { 
   Edit as EditIcon, 
   SwapHoriz as SwapHorizIcon,
   Store as StoreIcon,
   Person as PersonIcon,
-  ArrowForward as ArrowForwardIcon
+  ArrowForward as ArrowForwardIcon,
 } from '@mui/icons-material';
 import { getDisplayPrice, calculateDiscount, isWinningPrice } from '../utils/priceUtils';
 
@@ -42,8 +42,25 @@ const ItemsView = ({
   eurToIls,
   replacementItems,
   updating,
-  updateError
+  updateError,
 }) => {
+  const qtyInputRef = useRef(null);
+  const priceInputRef = useRef(null);
+
+  // Handle focus for quantity editing
+  useEffect(() => {
+    if (editingQty && qtyInputRef.current) {
+      qtyInputRef.current.focus();
+    }
+  }, [editingQty]);
+
+  // Handle focus for price editing
+  useEffect(() => {
+    if (editingPrice && priceInputRef.current) {
+      priceInputRef.current.focus();
+    }
+  }, [editingPrice]);
+
   const getSourceIcon = (source) => {
     if (source === 'supplier') return <StoreIcon fontSize="small" color="warning" />;
     if (source === 'user') return <PersonIcon fontSize="small" color="warning" />;
@@ -63,7 +80,7 @@ const ItemsView = ({
   console.log('ItemsView props:', {
     filteredItems,
     replacementItems,
-    prices: prices?.slice(0, 3)
+    prices: prices?.slice(0, 3),
   });
 
   return (
@@ -93,7 +110,7 @@ const ItemsView = ({
             console.log(`Processing item ${itemId}:`, {
               hasReplacement,
               replacement,
-              firstItem
+              firstItem,
             });
 
             return (
@@ -102,8 +119,8 @@ const ItemsView = ({
                 sx={hasReplacement ? { 
                   backgroundColor: 'rgba(255, 243, 224, 0.9)',
                   '&:hover': {
-                    backgroundColor: 'rgba(255, 243, 224, 1)'
-                  }
+                    backgroundColor: 'rgba(255, 243, 224, 1)',
+                  },
                 } : {}}
               >
                 <TableCell>
@@ -167,12 +184,12 @@ const ItemsView = ({
                 <TableCell align="right">
                   {editingQty === itemId ? (
                     <TextField
+                      inputRef={qtyInputRef}
                       size="small"
                       type="number"
                       value={quantities[itemId] || firstItem?.RequestedQty}
                       onChange={(e) => handleQuantityChange(itemId, e.target.value)}
                       onBlur={() => setEditingQty(null)}
-                      autoFocus
                     />
                   ) : (
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
@@ -196,7 +213,7 @@ const ItemsView = ({
                       itemId,
                       supplierGroups,
                       selectedSuppliers,
-                      temporaryPrices
+                      temporaryPrices,
                     );
                     const priceKey = `${itemId}-${key}`;
                     
@@ -209,7 +226,7 @@ const ItemsView = ({
                         displayPrice,
                         parsedMarkup,
                         parsedRetail,
-                        eurToIls
+                        eurToIls,
                       );
                     }
 
@@ -219,22 +236,22 @@ const ItemsView = ({
                         align="right"
                         sx={{
                           backgroundColor: isWinner ? '#4caf5066' : 'inherit',
-                          transition: 'background-color 0.2s'
+                          transition: 'background-color 0.2s',
                         }}
                       >
                         <Box>
                           {editingPrice === priceKey ? (
                             <Box>
                               <TextField
+                                inputRef={priceInputRef}
                                 size="small"
                                 type="number"
                                 value={displayPrice || ''}
                                 onChange={(e) => handlePriceChange(itemId, key, e.target.value)}
                                 onBlur={() => setEditingPrice(null)}
-                                autoFocus
                                 disabled={updating}
                                 error={!!updateError}
-                                inputProps={{ step: "0.01" }}
+                                inputProps={{ step: '0.01' }}
                                 sx={{ width: '100px' }}
                                 placeholder="Enter price"
                               />

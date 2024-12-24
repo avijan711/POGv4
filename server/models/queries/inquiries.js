@@ -207,6 +207,6 @@ const getInquiryByIdQuery = () => `
     GROUP BY id.inquiry_id, id.inquiry_number, id.status, id.date`;
 
 module.exports = {
-    getInquiriesQuery,
-    getInquiryByIdQuery
+  getInquiriesQuery,
+  getInquiryByIdQuery,
 };

@@ -13,18 +13,21 @@ import {
   Chip,
   IconButton,
   Tooltip,
-  Grid
+  Grid,
 } from '@mui/material';
 import {
   TrendingUp as TrendingUpIcon,
   TrendingDown as TrendingDownIcon,
   RemoveCircleOutline as NoChangeIcon,
   LocalOffer as PromotionIcon,
-  Info as InfoIcon
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import { formatIlsPrice } from '../../utils/priceUtils';
+import { useSettings } from '../../hooks/useSettings';
 
 function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
+  const { getSettingValue } = useSettings();
+  const eurToIls = getSettingValue('eur_ils_rate', 3.95);
   // Ensure we have a valid array of supplier prices
   const validSupplierPrices = useMemo(() => {
     if (!Array.isArray(supplierPrices)) return [];
@@ -35,7 +38,7 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
       price.supplier_name && 
       typeof price.supplier_name === 'string' &&
       'price_eur' in price &&  // Changed from price_quoted
-      typeof price.price_eur === 'number'  // Changed from price_quoted
+      typeof price.price_eur === 'number',  // Changed from price_quoted
     );
   }, [supplierPrices]);
 
@@ -58,16 +61,16 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
     return {
       lowest: Math.min(...prices),
       highest: Math.max(...prices),
-      average: prices.reduce((a, b) => a + b, 0) / prices.length
+      average: prices.reduce((a, b) => a + b, 0) / prices.length,
     };
   }, [sortedPrices]);
 
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
-      case 'active': return 'success';
-      case 'pending': return 'warning';
-      case 'rejected': return 'error';
-      default: return 'default';
+    case 'active': return 'success';
+    case 'pending': return 'warning';
+    case 'rejected': return 'error';
+    default: return 'default';
     }
   };
 
@@ -75,12 +78,12 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
     if (!change) return null;
     
     const Icon = change > 0 ? TrendingUpIcon : 
-                change < 0 ? TrendingDownIcon : 
-                NoChangeIcon;
+      change < 0 ? TrendingDownIcon : 
+        NoChangeIcon;
     
     const color = change > 0 ? 'error' : 
-                 change < 0 ? 'success' : 
-                 'action';
+      change < 0 ? 'success' : 
+        'action';
 
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -98,7 +101,7 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
 
   const calculateIlsPrice = (eurPrice) => {
     if (!eurPrice || !itemDetails?.importMarkup) return null;
-    return eurPrice * 4.1 * itemDetails.importMarkup;
+    return eurPrice * eurToIls * itemDetails.importMarkup;
   };
 
   const getMarginInfo = (eurPrice) => {
@@ -112,8 +115,8 @@ function SupplierPricesTab({ supplierPrices = [], itemDetails }) {
     return {
       margin,
       color: margin < 20 ? 'error' : 
-             margin < 30 ? 'warning' : 
-             'success'
+        margin < 30 ? 'warning' : 
+          'success',
     };
   };
 

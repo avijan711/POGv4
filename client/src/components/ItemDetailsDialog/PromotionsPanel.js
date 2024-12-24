@@ -8,7 +8,7 @@ import {
   Chip,
   Box,
   Typography,
-  Tooltip
+  Tooltip,
 } from '@mui/material';
 import { LocalOffer as PromotionIcon } from '@mui/icons-material';
 import { formatEurPrice } from '../../utils/priceUtils';
@@ -41,7 +41,7 @@ function PromotionsPanel({ promotions }) {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     }).format(date);
   };
 
@@ -93,8 +93,8 @@ function PromotionsPanel({ promotions }) {
               sx={{ 
                 backgroundColor: 'rgba(156, 39, 176, 0.08)',
                 '&:hover': {
-                  backgroundColor: 'rgba(156, 39, 176, 0.12)'
-                }
+                  backgroundColor: 'rgba(156, 39, 176, 0.12)',
+                },
               }}
             >
               <TableCell>{promo.supplierName}</TableCell>
@@ -138,8 +138,8 @@ function PromotionsPanel({ promotions }) {
                     sx={{ 
                       backgroundColor: active ? 'rgba(156, 39, 176, 0.1)' : undefined,
                       '& .MuiChip-label': {
-                        fontWeight: active ? 500 : 400
-                      }
+                        fontWeight: active ? 500 : 400,
+                      },
                     }}
                   />
                 </Tooltip>

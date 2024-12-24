@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   TableRow as MuiTableRow,
   TableCell,
@@ -27,14 +27,14 @@ const styles = {
           ? 'rgba(255, 243, 224, 1)' 
           : props.isReferencedBy
             ? '#c8e6c9'
-            : 'rgba(0, 0, 0, 0.04)' 
-    }
+            : 'rgba(0, 0, 0, 0.04)', 
+    },
   },
   idContainer: {
     display: 'flex',
     alignItems: 'center',
-    gap: 1
-  }
+    gap: 1,
+  },
 };
 
 function TableRow({
@@ -49,8 +49,15 @@ function TableRow({
   onDeleteReference,
   getChangeSource,
 }) {
-  // Local state for temporary quantity value while editing
   const [tempQty, setTempQty] = useState(item.requestedQty || 0);
+  const inputRef = useRef(null);
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (editingQty === item.inquiryItemID && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [editingQty, item.inquiryItemID]);
 
   // Update tempQty when item changes or editing starts
   useEffect(() => {
@@ -94,7 +101,7 @@ function TableRow({
       sx={styles.row({ 
         isDuplicate: item.isDuplicate,
         hasReferenceChange: item.hasReferenceChange && item.referenceChange,
-        isReferencedBy: item.isReferencedBy
+        isReferencedBy: item.isReferencedBy,
       })}
     >
       <TableCell>{item.inquiryNumber || item.customNumber || (item.excelRowIndex || index) + 1}</TableCell>
@@ -125,11 +132,11 @@ function TableRow({
             onChange={handleQtyChange}
             onBlur={handleQtyBlur}
             onKeyDown={handleQtyKeyPress}
-            autoFocus
+            inputRef={inputRef}
             sx={{ width: '80px' }}
             inputProps={{
               min: 0,
-              style: { textAlign: 'right' }
+              style: { textAlign: 'right' },
             }}
           />
         ) : (
@@ -138,7 +145,7 @@ function TableRow({
             sx={{ 
               cursor: 'text',
               padding: '8px',
-              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' }
+              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
             }}
           >
             {item.requestedQty || 0}

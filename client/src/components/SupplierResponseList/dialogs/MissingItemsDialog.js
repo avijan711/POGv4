@@ -32,7 +32,7 @@ export function MissingItemsDialog({ open, onClose, items = [], supplierName = '
       items_length: items?.length,
       raw_items: items,
       first_item: Array.isArray(items) && items.length > 0 ? items[0] : null,
-      all_items: items
+      all_items: items,
     });
   }, [open, items, supplierName]);
 
@@ -46,7 +46,7 @@ export function MissingItemsDialog({ open, onClose, items = [], supplierName = '
         isArray: Array.isArray(items),
         items_length: items?.length,
         raw_items: items,
-        first_item: Array.isArray(items) && items.length > 0 ? items[0] : null
+        first_item: Array.isArray(items) && items.length > 0 ? items[0] : null,
       });
 
       // Ensure items is an array
@@ -72,7 +72,7 @@ export function MissingItemsDialog({ open, onClose, items = [], supplierName = '
       console.log('Processed valid items:', {
         original_length: items.length,
         valid_length: validItems.length,
-        first_valid_item: validItems[0]
+        first_valid_item: validItems[0],
       });
 
       return validItems;
@@ -89,7 +89,7 @@ export function MissingItemsDialog({ open, onClose, items = [], supplierName = '
     console.log('MissingItemsDialog final parsed items:', {
       length: parsedItems.length,
       items: parsedItems,
-      first_item: parsedItems[0]
+      first_item: parsedItems[0],
     });
   }, [parsedItems]);
 
@@ -99,7 +99,7 @@ export function MissingItemsDialog({ open, onClose, items = [], supplierName = '
       console.log('Exporting missing items:', {
         url: `${API_BASE_URL}/api/supplier-responses/export-missing-items`,
         itemCount: parsedItems.length,
-        supplierName
+        supplierName,
       });
 
       const response = await fetch(`${API_BASE_URL}/api/supplier-responses/export-missing-items`, {
@@ -182,7 +182,7 @@ export function MissingItemsDialog({ open, onClose, items = [], supplierName = '
                       sx={{
                         '&:hover': {
                           backgroundColor: 'action.hover',
-                        }
+                        },
                       }}
                     >
                       <TableCell>{item.item_id}</TableCell>

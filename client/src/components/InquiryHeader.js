@@ -64,7 +64,7 @@ function InquiryHeader({
         flexDirection: 'column',
         justifyContent: 'space-between',
         position: 'relative',
-        overflow: 'hidden'
+        overflow: 'hidden',
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 1 }}>
@@ -75,7 +75,7 @@ function InquiryHeader({
             p: 1,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
           }}
         >
           <Icon sx={{ 
@@ -96,7 +96,7 @@ function InquiryHeader({
             color={`${color}.main`} 
             sx={{ 
               fontWeight: 600,
-              lineHeight: 1.2
+              lineHeight: 1.2,
             }}
           >
             {value}
@@ -109,14 +109,14 @@ function InquiryHeader({
             display: 'flex', 
             justifyContent: 'flex-end', 
             alignItems: 'center',
-            mb: 1
+            mb: 1,
           }}>
             <Typography 
               variant="caption" 
               color={`${color}.700`}
               sx={{
                 fontWeight: 600,
-                fontSize: '0.75rem'
+                fontSize: '0.75rem',
               }}
             >
               {Math.round(progress)}%
@@ -132,8 +132,8 @@ function InquiryHeader({
               backgroundColor: `${color}.100`,
               '& .MuiLinearProgress-bar': {
                 borderRadius: 4,
-                transition: 'transform 0.4s ease'
-              }
+                transition: 'transform 0.4s ease',
+              },
             }}
           />
         </Box>

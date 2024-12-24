@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Table, TableBody, TableContainer, TableRow, TableCell } from '@mui/material';
+import { Table, TableBody, TableContainer, TableRow as MuiTableRow, TableCell } from '@mui/material';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
 import TableHeader from './TableHeader';
-import TableRow from './TableRow';
+import CustomTableRow from './TableRow';
 import DeleteDialog from './DeleteDialog';
 
 function InquiryItemsTable({
@@ -41,7 +41,7 @@ function InquiryItemsTable({
         if (itemToDelete.referenceChange?.source === 'inquiry_item') {
           await axios.put(`${API_BASE_URL}/api/inquiries/inquiry-items/${itemToDelete.inquiryItemID}/reference`, {
             newReferenceId: null,
-            referenceNotes: null
+            referenceNotes: null,
           });
         } else if (itemToDelete.referenceChange?.changeId) {
           await axios.delete(`${API_BASE_URL}/api/supplier-responses/reference/${itemToDelete.referenceChange.changeId}`);
@@ -76,14 +76,14 @@ function InquiryItemsTable({
           <TableHeader sortConfig={sortConfig} onSort={onSort} />
           <TableBody>
             {sortedItems.length === 0 ? (
-              <TableRow>
+              <MuiTableRow>
                 <TableCell colSpan={11} align="center">
                   No items found
                 </TableCell>
-              </TableRow>
+              </MuiTableRow>
             ) : (
               sortedItems.map((item, index) => (
-                <TableRow
+                <CustomTableRow
                   key={item.inquiryItemID}
                   item={item}
                   index={index}

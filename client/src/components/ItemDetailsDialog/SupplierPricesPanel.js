@@ -9,7 +9,7 @@ import {
   Box,
   Typography,
   Popover,
-  Chip
+  Chip,
 } from '@mui/material';
 import { History as HistoryIcon, LocalOffer as PromotionIcon } from '@mui/icons-material';
 import { formatEurPrice, formatPercentage } from '../../utils/priceUtils';
@@ -45,7 +45,7 @@ function SupplierPricesPanel({ supplierPrices = [], itemDetails }) {
       date: price.date || price.lastUpdated,
       price: price.price || price.priceQuoted,
       is_promotion: price.is_promotion || price.isPromotion || false,
-      promotion_name: price.promotion_name || price.promotionName
+      promotion_name: price.promotion_name || price.promotionName,
     }));
   }, [supplierPrices]);
 
@@ -68,7 +68,7 @@ function SupplierPricesPanel({ supplierPrices = [], itemDetails }) {
       const discount = calculateDiscount(
         price.price,
         parseFloat(itemDetails?.import_markup),
-        parseFloat(itemDetails?.retail_price)
+        parseFloat(itemDetails?.retail_price),
       );
       if (discount !== null && (!discounts[price.supplier_name] || discount > discounts[price.supplier_name])) {
         discounts[price.supplier_name] = discount;
@@ -135,7 +135,7 @@ function SupplierPricesPanel({ supplierPrices = [], itemDetails }) {
             const discount = calculateDiscount(
               price.price,
               parseFloat(itemDetails?.import_markup),
-              parseFloat(itemDetails?.retail_price)
+              parseFloat(itemDetails?.retail_price),
             );
             const isBestSupplier = price.supplier_name === bestSupplier;
             
@@ -143,9 +143,9 @@ function SupplierPricesPanel({ supplierPrices = [], itemDetails }) {
               <TableRow 
                 key={index}
                 sx={price.is_promotion ? { 
-                  backgroundColor: 'rgba(156, 39, 176, 0.08)'
+                  backgroundColor: 'rgba(156, 39, 176, 0.08)',
                 } : isBestSupplier ? { 
-                  backgroundColor: 'rgba(76, 175, 80, 0.08)' 
+                  backgroundColor: 'rgba(76, 175, 80, 0.08)', 
                 } : undefined}
               >
                 <TableCell>{price.supplier_name}</TableCell>
@@ -168,7 +168,7 @@ function SupplierPricesPanel({ supplierPrices = [], itemDetails }) {
                       sx={{ 
                         height: 24,
                         '& .MuiChip-label': { px: 1 },
-                        '& .MuiChip-icon': { fontSize: 16 }
+                        '& .MuiChip-icon': { fontSize: 16 },
                       }}
                     />
                   ) : (
@@ -179,7 +179,7 @@ function SupplierPricesPanel({ supplierPrices = [], itemDetails }) {
                   align="right"
                   sx={{ 
                     color: price.change > 0 ? 'success.main' : 
-                           price.change < 0 ? 'error.main' : 'text.primary'
+                      price.change < 0 ? 'error.main' : 'text.primary',
                   }}
                 >
                   {price.change !== null ? formatPercentage(price.change) : '-'}
@@ -241,7 +241,7 @@ function SupplierPricesPanel({ supplierPrices = [], itemDetails }) {
                     align="right"
                     sx={{ 
                       color: price.change > 0 ? 'success.main' : 
-                             price.change < 0 ? 'error.main' : 'text.primary'
+                        price.change < 0 ? 'error.main' : 'text.primary',
                     }}
                   >
                     {price.change !== null ? formatPercentage(price.change) : '-'}

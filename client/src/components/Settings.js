@@ -11,27 +11,26 @@ import {
 } from '@mui/material';
 import { useSettings } from '../hooks/useSettings';
 
-const EXCHANGE_RATE_KEY = 'eur_ils_rate';
-const DEFAULT_RATE = '3.95';
+import { EXCHANGE_RATE_KEY, DEFAULT_EXCHANGE_RATE } from '../constants';
 
 function Settings() {
-  const { 
-    settings, 
-    loading, 
-    error: settingsError, 
-    updateSetting, 
-    getSettingValue 
+  const {
+    settings,
+    loading,
+    error: settingsError,
+    updateSetting,
+    getSettingValue,
   } = useSettings();
 
-  const [eurToIls, setEurToIls] = useState(DEFAULT_RATE);
+  const [eurToIls, setEurToIls] = useState(DEFAULT_EXCHANGE_RATE);
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState(null);
 
   // Load initial value from settings
   useEffect(() => {
-    const currentRate = getSettingValue(EXCHANGE_RATE_KEY, DEFAULT_RATE);
-    setEurToIls(String(currentRate));
+    const currentRate = parseFloat(getSettingValue(EXCHANGE_RATE_KEY, DEFAULT_EXCHANGE_RATE));
+    setEurToIls(currentRate);
   }, [getSettingValue]);
 
   const handleSave = async () => {
@@ -42,7 +41,7 @@ function Settings() {
       const success = await updateSetting(
         EXCHANGE_RATE_KEY, 
         parseFloat(eurToIls),
-        'EUR to ILS exchange rate'
+        'EUR to ILS exchange rate',
       );
 
       if (success) {
@@ -79,9 +78,9 @@ function Settings() {
           onChange={(e) => setEurToIls(e.target.value)}
           InputProps={{
             inputProps: { 
-              step: "0.01",
-              min: "0"
-            }
+              step: '0.01',
+              min: '0',
+            },
           }}
           sx={{ width: '200px' }}
           disabled={saving}

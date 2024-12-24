@@ -141,7 +141,7 @@ function Dashboard() {
         // Show success message and reload after a short delay
         setError({ 
           severity: 'success', 
-          message: 'Database reset to clean state successfully. Reloading...' 
+          message: 'Database reset to clean state successfully. Reloading...', 
         });
         setTimeout(() => {
           window.location.reload();
@@ -174,8 +174,8 @@ function Dashboard() {
         <ButtonGroup variant="outlined">
           <Tooltip title="Simple Dialog View">
             <Button
-              color={!showReferenceDetails ? "primary" : "inherit"}
-              variant={!showReferenceDetails ? "contained" : "outlined"}
+              color={!showReferenceDetails ? 'primary' : 'inherit'}
+              variant={!showReferenceDetails ? 'contained' : 'outlined'}
               onClick={() => setShowReferenceDetails(false)}
               startIcon={<ViewListIcon />}
             >
@@ -184,8 +184,8 @@ function Dashboard() {
           </Tooltip>
           <Tooltip title="Advanced Dialog View">
             <Button
-              color={showReferenceDetails ? "primary" : "inherit"}
-              variant={showReferenceDetails ? "contained" : "outlined"}
+              color={showReferenceDetails ? 'primary' : 'inherit'}
+              variant={showReferenceDetails ? 'contained' : 'outlined'}
               onClick={() => setShowReferenceDetails(true)}
               startIcon={<ViewModuleIcon />}
             >
@@ -252,7 +252,6 @@ function Dashboard() {
             variant="contained"
             disabled={reinitializing}
             startIcon={reinitializing ? <CircularProgress size={20} /> : <DeleteForeverIcon />}
-            autoFocus
           >
             {reinitializing ? 'Resetting App...' : 'Reset Application'}
           </Button>

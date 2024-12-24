@@ -16,7 +16,7 @@ import {
 
 const SUPPLIER_RESPONSE_REQUIRED_FIELDS = [
   { field: 'item_id', label: 'Item ID', description: 'Unique identifier for each item', hebrewLabels: ['קוד פריט', 'מספר פריט'] },
-  { field: 'price_quoted', label: 'Price', description: 'Price quoted by supplier', hebrewLabels: ['מחיר', 'מחירון'] }
+  { field: 'price_quoted', label: 'Price', description: 'Price quoted by supplier', hebrewLabels: ['מחיר', 'מחירון'] },
 ];
 
 const SUPPLIER_RESPONSE_OPTIONAL_FIELDS = [
@@ -25,13 +25,13 @@ const SUPPLIER_RESPONSE_OPTIONAL_FIELDS = [
   { field: 'hs_code', label: 'HS Code', description: 'Harmonized System code', hebrewLabels: ['קוד יצרן'] },
   { field: 'new_reference_id', label: 'New Reference ID', description: 'ID of the replacement item' },
   { field: 'notes', label: 'Notes', description: 'Additional notes', hebrewLabels: ['הערות'] },
-  { field: 'origin', label: 'Origin', description: 'Item origin or source', hebrewLabels: ['מקור', 'ארץ מקור'] }
+  { field: 'origin', label: 'Origin', description: 'Item origin or source', hebrewLabels: ['מקור', 'ארץ מקור'] },
 ];
 
 const INVENTORY_REQUIRED_FIELDS = [
   { field: 'item_id', label: 'Item ID', description: 'Unique identifier for each item', hebrewLabels: ['קוד פריט', 'מספר פריט'] },
   { field: 'hebrew_description', label: 'Hebrew Description', description: 'Item description in Hebrew', hebrewLabels: ['שם פריט'] },
-  { field: 'requested_qty', label: 'Requested Quantity', description: 'Number of items being requested', hebrewLabels: ['כמות', 'כמות שהוזמנה'] }
+  { field: 'requested_qty', label: 'Requested Quantity', description: 'Number of items being requested', hebrewLabels: ['כמות', 'כמות שהוזמנה'] },
 ];
 
 const INVENTORY_OPTIONAL_FIELDS = [
@@ -45,7 +45,7 @@ const INVENTORY_OPTIONAL_FIELDS = [
   { field: 'new_reference_id', label: 'New Reference ID', description: 'ID of the replacement item' },
   { field: 'reference_notes', label: 'Reference Notes', description: 'Additional reference information' },
   { field: 'notes', label: 'Notes', description: 'General notes about the item', hebrewLabels: ['הערות'] },
-  { field: 'origin', label: 'Origin', description: 'Item origin or source', hebrewLabels: ['מקור', 'ארץ מקור'] }
+  { field: 'origin', label: 'Origin', description: 'Item origin or source', hebrewLabels: ['מקור', 'ארץ מקור'] },
 ];
 
 function ColumnMappingDialog({ open, onClose, columns = [], onConfirm, uploadType = 'inventory' }) {
@@ -66,7 +66,7 @@ function ColumnMappingDialog({ open, onClose, columns = [], onConfirm, uploadTyp
       .filter(col => col != null)
       .map((col, index) => ({
         id: `col-${index}`,
-        value: String(col).trim()
+        value: String(col).trim(),
       }))
       .filter(col => col.value.length > 0);
   }, [columns]);
@@ -85,7 +85,7 @@ function ColumnMappingDialog({ open, onClose, columns = [], onConfirm, uploadTyp
               const normalizedCol = col.value.trim();
               const normalizedLabel = hebrewLabel.trim();
               return normalizedCol === normalizedLabel || normalizedCol.includes(normalizedLabel);
-            })
+            }),
           );
           
           if (matchingColumn) {
@@ -146,7 +146,7 @@ function ColumnMappingDialog({ open, onClose, columns = [], onConfirm, uploadTyp
       console.log('Column mapping:', {
         original: mapping,
         final: finalMapping,
-        processedColumns
+        processedColumns,
       });
 
       onConfirm(finalMapping);
@@ -156,7 +156,7 @@ function ColumnMappingDialog({ open, onClose, columns = [], onConfirm, uploadTyp
   const handleFieldChange = (field, columnId) => {
     setMapping(prev => ({
       ...prev,
-      [field]: columnId
+      [field]: columnId,
     }));
   };
 
@@ -174,9 +174,9 @@ function ColumnMappingDialog({ open, onClose, columns = [], onConfirm, uploadTyp
           MenuProps={{
             PaperProps: {
               style: {
-                maxHeight: 300
-              }
-            }
+                maxHeight: 300,
+              },
+            },
           }}
         >
           <MenuItem value="">
@@ -208,8 +208,8 @@ function ColumnMappingDialog({ open, onClose, columns = [], onConfirm, uploadTyp
       fullWidth
       PaperProps={{
         style: {
-          maxHeight: '90vh'
-        }
+          maxHeight: '90vh',
+        },
       }}
     >
       <DialogTitle>Map Excel Columns</DialogTitle>

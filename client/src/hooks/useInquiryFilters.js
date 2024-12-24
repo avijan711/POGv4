@@ -19,7 +19,7 @@ export const useInquiryFilters = (items = []) => {
   const handleSort = (field) => {
     setSortConfig(prev => ({
       field,
-      direction: prev.field === field && prev.direction === 'asc' ? 'desc' : 'asc'
+      direction: prev.field === field && prev.direction === 'asc' ? 'desc' : 'asc',
     }));
   };
 
@@ -120,6 +120,6 @@ export const useInquiryFilters = (items = []) => {
     toggleDuplicates,
     toggleReplacements,
     handleSort,
-    filteredAndSortedItems
+    filteredAndSortedItems,
   };
 };

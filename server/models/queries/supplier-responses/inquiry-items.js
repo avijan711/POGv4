@@ -1,5 +1,5 @@
 function getInquiryItemsQuery() {
-    return `inquiry_items AS (
+  return `inquiry_items AS (
         WITH ReferenceInfo AS (
             SELECT 
                 rc.original_item_id,
@@ -104,5 +104,5 @@ function getInquiryItemsQuery() {
 }
 
 module.exports = {
-    getInquiryItemsQuery
+  getInquiryItemsQuery,
 };

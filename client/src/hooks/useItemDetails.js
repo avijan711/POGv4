@@ -35,7 +35,7 @@ export const useItemDetails = (item, open, mode = 'view') => {
           price.supplier_name && 
           typeof price.supplier_name === 'string' &&
           'price_quoted' in price &&
-          typeof price.price_quoted === 'number'
+          typeof price.price_quoted === 'number',
         )
         .map(price => ({
           supplier_name: price.supplier_name,
@@ -44,7 +44,7 @@ export const useItemDetails = (item, open, mode = 'view') => {
           status: price.status || 'unknown',
           is_promotion: Boolean(price.is_promotion),
           promotion_name: price.promotion_name || '',
-          price_change: price.price_change || 0
+          price_change: price.price_change || 0,
         }));
     } catch (e) {
       console.error('Error processing supplier prices:', e);
@@ -69,7 +69,7 @@ export const useItemDetails = (item, open, mode = 'view') => {
         changed_by_user: Boolean(parsed.changed_by_user),
         source: parsed.supplier_name ? 'supplier' : 'user',
         new_description: parsed.new_description || '',
-        new_english_description: parsed.new_english_description || ''
+        new_english_description: parsed.new_english_description || '',
       };
     } catch (e) {
       console.error('Error processing reference change:', e);
@@ -101,12 +101,12 @@ export const useItemDetails = (item, open, mode = 'view') => {
         itemDetailsResponse,
         priceHistoryResponse,
         supplierPricesResponse,
-        referenceChangesResponse
+        referenceChangesResponse,
       ] = await Promise.all([
         axiosInstance.get(`/api/items/${item.item_id}`),
         axiosInstance.get(`/api/items/${item.item_id}/price-history`),
         axiosInstance.get(`/api/items/${item.item_id}/supplier-prices`),
-        axiosInstance.get(`/api/items/${item.item_id}/reference-changes`)
+        axiosInstance.get(`/api/items/${item.item_id}/reference-changes`),
       ]);
 
       // Process supplier prices immediately when setting full item data
@@ -116,7 +116,7 @@ export const useItemDetails = (item, open, mode = 'view') => {
         details: itemDetailsResponse.data,
         priceHistory: priceHistoryResponse.data,
         supplierPrices: processedSupplierPrices,
-        referenceChanges: referenceChangesResponse.data
+        referenceChanges: referenceChangesResponse.data,
       });
 
       setError(null);
@@ -175,7 +175,7 @@ export const useItemDetails = (item, open, mode = 'view') => {
         reference_change: referenceChange,
         referencing_items: referencingItems,
         has_reference_change: hasReferenceChange,
-        is_referenced_by: isReferencedBy
+        is_referenced_by: isReferencedBy,
       };
 
       // Process price history
@@ -186,7 +186,7 @@ export const useItemDetails = (item, open, mode = 'view') => {
           retail_price: record.ils_retail_price,
           qty_in_stock: record.qty_in_stock,
           sold_this_year: record.sold_this_year,
-          sold_last_year: record.sold_last_year
+          sold_last_year: record.sold_last_year,
         }));
 
       // Process reference changes - Keep snake_case to match API response
@@ -203,14 +203,14 @@ export const useItemDetails = (item, open, mode = 'view') => {
           change_date: change.change_date ? new Date(change.change_date) : new Date(),
           notes: change.notes || '',
           changed_by_user: Boolean(change.changed_by_user),
-          source: change.supplier_name ? 'supplier' : 'user'
+          source: change.supplier_name ? 'supplier' : 'user',
         }));
 
       // For edit mode, return form-ready data
       if (mode === 'edit') {
         return {
           ...baseDetails,
-          supplierPrices
+          supplierPrices,
         };
       }
 
@@ -223,7 +223,7 @@ export const useItemDetails = (item, open, mode = 'view') => {
         hasReferenceChange,
         isReferencedBy,
         getChangeSource: inventoryUtils.getChangeSource,
-        getBackgroundColor: () => inventoryUtils.getBackgroundColor(details)
+        getBackgroundColor: () => inventoryUtils.getBackgroundColor(details),
       };
 
     } catch (err) {
@@ -259,6 +259,6 @@ export const useItemDetails = (item, open, mode = 'view') => {
     isLoading,
     hasError,
     error,
-    refreshItemData
+    refreshItemData,
   };
 };

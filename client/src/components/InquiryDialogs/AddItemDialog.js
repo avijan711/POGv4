@@ -8,7 +8,7 @@ import {
   TextField,
   Grid,
   Typography,
-  CircularProgress
+  CircularProgress,
 } from '@mui/material';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
@@ -17,7 +17,7 @@ const AddItemDialog = ({ open, onClose, inquiryId, onSuccess }) => {
   const [formData, setFormData] = useState({
     itemName: '',
     quantity: '',
-    notes: ''
+    notes: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -26,7 +26,7 @@ const AddItemDialog = ({ open, onClose, inquiryId, onSuccess }) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
@@ -39,7 +39,7 @@ const AddItemDialog = ({ open, onClose, inquiryId, onSuccess }) => {
       const response = await axios.post(`${API_BASE_URL}/api/inquiries/${inquiryId}/items`, {
         name: formData.itemName,
         quantity: parseInt(formData.quantity, 10),
-        notes: formData.notes
+        notes: formData.notes,
       });
 
       setLoading(false);

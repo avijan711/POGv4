@@ -12,7 +12,7 @@ function SupplierPriceChip({ supplierPrice }) {
       <Chip
         icon={<AttachMoneyIcon />}
         label={`₪${supplierPrice.price_quoted}`}
-        color={supplierPrice.is_promotion ? "secondary" : "primary"}
+        color={supplierPrice.is_promotion ? 'secondary' : 'primary'}
         size="small"
         variant="outlined"
         sx={{ margin: '2px' }}

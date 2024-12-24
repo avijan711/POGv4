@@ -83,9 +83,9 @@ const validateOrderItemQuery = `
 `;
 
 module.exports = {
-    createFulfillmentQuery,
-    getFulfillmentsByOrderQuery,
-    getFulfillmentsByOrderItemQuery,
-    getOrderFulfillmentStatusQuery,
-    validateOrderItemQuery
+  createFulfillmentQuery,
+  getFulfillmentsByOrderQuery,
+  getFulfillmentsByOrderItemQuery,
+  getOrderFulfillmentStatusQuery,
+  validateOrderItemQuery,
 };

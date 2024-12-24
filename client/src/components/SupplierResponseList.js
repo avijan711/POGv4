@@ -38,7 +38,7 @@ function SupplierResponseList({ inquiryId }) {
     stats,
     fetchResponses,
     deleteResponse,
-    deleteBulkResponses
+    deleteBulkResponses,
   } = useSupplierResponses(inquiryId);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
@@ -60,31 +60,31 @@ function SupplierResponseList({ inquiryId }) {
     if (!itemToDelete) return;
 
     try {
-        console.log('Deleting individual response:', {
-            responseId: itemToDelete.supplier_response_id,
-            itemId: itemToDelete.item_id
-        });
+      console.log('Deleting individual response:', {
+        responseId: itemToDelete.supplier_response_id,
+        itemId: itemToDelete.item_id,
+      });
 
-        const success = await deleteResponse(itemToDelete.supplier_response_id);
-        if (success) {
-            setSnackbar({
-                open: true,
-                message: 'Response deleted successfully',
-                severity: 'success'
-            });
-            await fetchResponses(); // Refresh the list
-        } else {
-            throw new Error('Failed to delete response');
-        }
-        setDeleteDialogOpen(false);
-        setItemToDelete(null);
-    } catch (error) {
-        console.error('Error deleting response:', error);
+      const success = await deleteResponse(itemToDelete.supplier_response_id);
+      if (success) {
         setSnackbar({
-            open: true,
-            message: `Failed to delete response: ${error.message}`,
-            severity: 'error'
+          open: true,
+          message: 'Response deleted successfully',
+          severity: 'success',
         });
+        await fetchResponses(); // Refresh the list
+      } else {
+        throw new Error('Failed to delete response');
+      }
+      setDeleteDialogOpen(false);
+      setItemToDelete(null);
+    } catch (error) {
+      console.error('Error deleting response:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to delete response: ${error.message}`,
+        severity: 'error',
+      });
     }
   };
 
@@ -92,83 +92,83 @@ function SupplierResponseList({ inquiryId }) {
     if (!supplierToDelete) return;
 
     try {
-        if (!supplierToDelete.supplier_id) {
-            throw new Error('Missing supplier ID');
-        }
+      if (!supplierToDelete.supplier_id) {
+        throw new Error('Missing supplier ID');
+      }
 
-        if (!supplierToDelete.latest_response) {
-            throw new Error('No response date found');
-        }
+      if (!supplierToDelete.latest_response) {
+        throw new Error('No response date found');
+      }
 
-        const date = supplierToDelete.latest_response ? 
-            new Date(supplierToDelete.latest_response) : 
-            new Date();
+      const date = supplierToDelete.latest_response ? 
+        new Date(supplierToDelete.latest_response) : 
+        new Date();
 
-        const formattedDate = date.getFullYear() + '-' + 
+      const formattedDate = date.getFullYear() + '-' + 
             String(date.getMonth() + 1).padStart(2, '0') + '-' + 
             String(date.getDate()).padStart(2, '0');
 
-        console.log('Bulk delete params:', {
-            date: formattedDate,
-            supplierId: supplierToDelete.supplier_id,
-            latest_response: supplierToDelete.latest_response,
-            itemCount: supplierToDelete.item_count,
-            supplierName: supplierToDelete.supplier_name
-        });
+      console.log('Bulk delete params:', {
+        date: formattedDate,
+        supplierId: supplierToDelete.supplier_id,
+        latest_response: supplierToDelete.latest_response,
+        itemCount: supplierToDelete.item_count,
+        supplierName: supplierToDelete.supplier_name,
+      });
 
-        const supplierId = parseInt(supplierToDelete.supplier_id, 10);
-        if (isNaN(supplierId)) {
-            throw new Error('Invalid supplier ID format');
-        }
+      const supplierId = parseInt(supplierToDelete.supplier_id, 10);
+      if (isNaN(supplierId)) {
+        throw new Error('Invalid supplier ID format');
+      }
 
-        const success = await deleteBulkResponses(formattedDate, supplierId);
+      const success = await deleteBulkResponses(formattedDate, supplierId);
         
-        if (success) {
-            setSnackbar({
-                open: true,
-                message: `Successfully deleted ${supplierToDelete.item_count} responses for ${supplierToDelete.supplier_name}`,
-                severity: 'success'
-            });
-            await fetchResponses();
-        } else {
-            throw new Error('Failed to delete responses');
-        }
-        
-        setBulkDeleteDialogOpen(false);
-        setSupplierToDelete(null);
-    } catch (error) {
-        console.error('Error in bulk delete:', error);
+      if (success) {
         setSnackbar({
-            open: true,
-            message: `Failed to delete responses: ${error.message}`,
-            severity: 'error'
+          open: true,
+          message: `Successfully deleted ${supplierToDelete.item_count} responses for ${supplierToDelete.supplier_name}`,
+          severity: 'success',
         });
+        await fetchResponses();
+      } else {
+        throw new Error('Failed to delete responses');
+      }
+        
+      setBulkDeleteDialogOpen(false);
+      setSupplierToDelete(null);
+    } catch (error) {
+      console.error('Error in bulk delete:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to delete responses: ${error.message}`,
+        severity: 'error',
+      });
     }
   };
 
   const handleShowMissingItems = (supplier) => {
     // Enhanced debug logging
     console.log('handleShowMissingItems called with:', {
-        supplier_name: supplier.supplier_name,
-        missing_items_type: typeof supplier.missing_items,
-        isArray: Array.isArray(supplier.missing_items),
-        missing_items_length: supplier.missing_items?.length,
-        missing_count: supplier.missing_count,
-        raw_missing_items: supplier.missing_items
+      supplier_name: supplier.supplier_name,
+      missing_items_type: typeof supplier.missing_items,
+      isArray: Array.isArray(supplier.missing_items),
+      missing_items_length: supplier.missing_items?.length,
+      missing_count: supplier.missing_count,
+      raw_missing_items: supplier.missing_items,
     });
 
     // Create a clean copy of the supplier data to prevent reference issues
     const supplierData = {
-        ...supplier,
-        missing_items: Array.isArray(supplier.missing_items) 
-            ? [...supplier.missing_items]
-            : []
+      ...supplier,
+      missing_items: Array.isArray(supplier.missing_items) 
+        ? [...supplier.missing_items]
+        : [],
     };
 
     console.log('Setting selectedSupplier with:', {
-        supplier_name: supplierData.supplier_name,
-        missing_items_length: supplierData.missing_items.length,
-        first_item: supplierData.missing_items[0]
+      supplier_name: supplierData.supplier_name,
+      missing_items_length: supplierData.missing_items.length,
+      first_item: supplierData.missing_items[0],
     });
 
     setSelectedSupplier(supplierData);

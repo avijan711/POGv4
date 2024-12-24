@@ -19,7 +19,7 @@ function TableRowContent({
   onEditItem,
   onDeleteItem,
   onDeleteReference,
-  processSupplierPrices
+  processSupplierPrices,
 }) {
   const supplierPrices = processSupplierPrices(item);
   const isReplacement = item.is_referenced_by === 1;
@@ -54,7 +54,7 @@ function TableRowContent({
                 ? '#c8e6c9'
                 : item.promotion_id
                   ? 'rgba(156, 39, 176, 0.2)'
-                  : 'rgba(0, 0, 0, 0.04)' 
+                  : 'rgba(0, 0, 0, 0.04)', 
         },
         cursor: editingQty === item.inquiry_item_id ? 'default' : 'pointer',
       }}
@@ -122,7 +122,7 @@ function TableRowContent({
                         '& .MuiChip-label': {
                           fontSize: '0.75rem',
                           px: 1,
-                        }
+                        },
                       }}
                     />
                   </Tooltip>
@@ -151,7 +151,7 @@ function TableRowContent({
                       '& .MuiChip-label': {
                         fontSize: '0.75rem',
                         px: 1,
-                      }
+                      },
                     }}
                   />
                 </Tooltip>

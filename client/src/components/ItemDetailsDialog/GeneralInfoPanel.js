@@ -10,7 +10,7 @@ import {
   Alert,
   Tooltip,
   Button,
-  Grid
+  Grid,
 } from '@mui/material';
 import {
   Store as StoreIcon,
@@ -19,7 +19,7 @@ import {
   Description as DescriptionIcon,
   ArrowForward as ArrowForwardIcon,
   ArrowBack as ArrowBackIcon,
-  Info as InfoIcon
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import { formatIlsPrice } from '../../utils/priceUtils';
 import { API_BASE_URL } from '../../config';
@@ -34,7 +34,7 @@ function ReplacementPanel({
   changeDate,
   description,
   connectedDescription,
-  onItemClick
+  onItemClick,
 }) {
   const getSourceIcon = () => {
     if (source === 'supplier') {
@@ -64,7 +64,7 @@ function ReplacementPanel({
         backgroundColor: isReplacement ? '#fff3e0' : '#e8f5e9',
         border: theme => `1px solid ${isReplacement ? theme.palette.warning.light : theme.palette.success.light}`,
         position: 'relative',
-        overflow: 'hidden'
+        overflow: 'hidden',
       }}
     >
       {/* Background Pattern */}
@@ -81,7 +81,7 @@ function ReplacementPanel({
           transparent 10px,
           rgba(0,0,0,0.1) 10px,
           rgba(0,0,0,0.1) 20px
-        )`
+        )`,
       }} />
 
       <Stack spacing={2}>
@@ -89,12 +89,12 @@ function ReplacementPanel({
         <Stack direction="row" spacing={2} alignItems="center">
           <Typography 
             variant="subtitle1" 
-            color={isReplacement ? "warning.dark" : "success.dark"} 
+            color={isReplacement ? 'warning.dark' : 'success.dark'} 
             sx={{ fontWeight: 'medium' }}
           >
             {isReplacement ? 'Replacement Information' : 'Original Item Reference'}
           </Typography>
-          <SwapHorizIcon color={isReplacement ? "warning" : "success"} />
+          <SwapHorizIcon color={isReplacement ? 'warning' : 'success'} />
         </Stack>
 
         {/* Connection Visual */}
@@ -103,7 +103,7 @@ function ReplacementPanel({
           sx={{ 
             p: 1.5,
             backgroundColor: 'rgba(255,255,255,0.7)',
-            border: '1px solid rgba(0,0,0,0.1)'
+            border: '1px solid rgba(0,0,0,0.1)',
           }}
         >
           <Stack spacing={1}>
@@ -111,7 +111,7 @@ function ReplacementPanel({
               <Stack>
                 <Button
                   variant="outlined"
-                  color={isReplacement ? "warning" : "success"}
+                  color={isReplacement ? 'warning' : 'success'}
                   onClick={() => onItemClick(mainItemId)}
                   startIcon={isReplacement ? <ArrowBackIcon /> : null}
                   endIcon={!isReplacement ? <ArrowForwardIcon /> : null}
@@ -124,11 +124,11 @@ function ReplacementPanel({
                   </Typography>
                 )}
               </Stack>
-              <SwapHorizIcon color={isReplacement ? "warning" : "success"} />
+              <SwapHorizIcon color={isReplacement ? 'warning' : 'success'} />
               <Stack>
                 <Button
                   variant="contained"
-                  color={isReplacement ? "warning" : "success"}
+                  color={isReplacement ? 'warning' : 'success'}
                   onClick={() => onItemClick(connectedItemId)}
                   startIcon={!isReplacement ? <ArrowBackIcon /> : null}
                   endIcon={isReplacement ? <ArrowForwardIcon /> : null}
@@ -150,7 +150,7 @@ function ReplacementPanel({
           <Chip
             icon={getSourceIcon()}
             label={source === 'supplier' ? `Changed by ${supplierName || 'supplier'}` : 'Changed by user'}
-            color={isReplacement ? "warning" : "success"}
+            color={isReplacement ? 'warning' : 'success'}
             variant="outlined"
             size="small"
           />
@@ -158,7 +158,7 @@ function ReplacementPanel({
             <Chip
               icon={<InfoIcon />}
               label={`Changed on ${new Date(changeDate).toLocaleDateString()}`}
-              color={isReplacement ? "warning" : "success"}
+              color={isReplacement ? 'warning' : 'success'}
               variant="outlined"
               size="small"
             />
@@ -175,7 +175,7 @@ function GeneralInfoPanel({
   isReferencedBy, 
   referenceChange,
   referencingItems,
-  onItemClick
+  onItemClick,
 }) {
   const formatImportMarkup = (markup) => {
     if (markup === null || markup === undefined) return 'N/A';
@@ -259,7 +259,7 @@ function GeneralInfoPanel({
                 sx={{ 
                   p: 2,
                   bgcolor: 'background.default',
-                  border: '1px solid rgba(0,0,0,0.1)'
+                  border: '1px solid rgba(0,0,0,0.1)',
                 }}
               >
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -296,7 +296,7 @@ function GeneralInfoPanel({
                 sx={{ 
                   p: 2,
                   bgcolor: 'background.default',
-                  border: '1px solid rgba(0,0,0,0.1)'
+                  border: '1px solid rgba(0,0,0,0.1)',
                 }}
               >
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -336,7 +336,7 @@ function GeneralInfoPanel({
                 sx={{ 
                   p: 2,
                   bgcolor: 'background.default',
-                  border: '1px solid rgba(0,0,0,0.1)'
+                  border: '1px solid rgba(0,0,0,0.1)',
                 }}
               >
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -374,7 +374,7 @@ function GeneralInfoPanel({
                   sx={{ 
                     p: 2,
                     bgcolor: 'background.default',
-                    border: '1px solid rgba(0,0,0,0.1)'
+                    border: '1px solid rgba(0,0,0,0.1)',
                   }}
                 >
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -388,7 +388,7 @@ function GeneralInfoPanel({
                       width: '100%',
                       height: 200,
                       objectFit: 'contain',
-                      mt: 1
+                      mt: 1,
                     }}
                   />
                 </Paper>

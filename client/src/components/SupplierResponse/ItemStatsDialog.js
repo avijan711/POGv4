@@ -15,7 +15,7 @@ import {
   Typography,
   Box,
   Alert,
-  CircularProgress
+  CircularProgress,
 } from '@mui/material';
 import { InfoOutlined as InfoIcon } from '@mui/icons-material';
 
@@ -24,7 +24,7 @@ const ItemStatsDialog = memo(({
   onClose, 
   title, 
   items = [], 
-  type 
+  type, 
 }) => {
   // Validate and process items
   const processedItems = useMemo(() => {
@@ -79,8 +79,8 @@ const ItemStatsDialog = memo(({
       fullWidth
       PaperProps={{
         sx: {
-          maxHeight: '90vh'
-        }
+          maxHeight: '90vh',
+        },
       }}
     >
       <DialogTitle>
@@ -99,7 +99,7 @@ const ItemStatsDialog = memo(({
             alignItems: 'center', 
             justifyContent: 'center',
             flexDirection: 'column',
-            gap: 1
+            gap: 1,
           }}>
             <InfoIcon color="action" sx={{ fontSize: 40 }} />
             <Typography color="text.secondary">
@@ -165,9 +165,9 @@ ItemStatsDialog.propTypes = {
     hebrewDescription: PropTypes.string,
     englishDescription: PropTypes.string,
     requestedQty: PropTypes.number,
-    retailPrice: PropTypes.number
+    retailPrice: PropTypes.number,
   })),
-  type: PropTypes.oneOf(['extra', 'missing', 'replacements']).isRequired
+  type: PropTypes.oneOf(['extra', 'missing', 'replacements']).isRequired,
 };
 
 ItemStatsDialog.displayName = 'ItemStatsDialog';

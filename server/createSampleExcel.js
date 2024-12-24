@@ -16,7 +16,7 @@ const data = [
     'Retail Price': 249.99,
     'Requested Quantity': 30,
     'New Reference ID': 'BRK001-NEW',
-    'Reference Notes': 'Updated version with improved material'
+    'Reference Notes': 'Updated version with improved material',
   },
   {
     'Item ID': 'FLT002',
@@ -30,7 +30,7 @@ const data = [
     'Retail Price': 49.99,
     'Requested Quantity': 100,
     'New Reference ID': '',
-    'Reference Notes': ''
+    'Reference Notes': '',
   },
   {
     'Item ID': 'BAT003',
@@ -44,7 +44,7 @@ const data = [
     'Retail Price': 599.99,
     'Requested Quantity': 20,
     'New Reference ID': 'BAT003-PLUS',
-    'Reference Notes': 'Upgraded to higher capacity battery'
+    'Reference Notes': 'Upgraded to higher capacity battery',
   },
   {
     'Item ID': 'SPK004',
@@ -58,7 +58,7 @@ const data = [
     'Retail Price': 129.99,
     'Requested Quantity': 50,
     'New Reference ID': '',
-    'Reference Notes': ''
+    'Reference Notes': '',
   },
   {
     'Item ID': 'BLT005',
@@ -72,8 +72,8 @@ const data = [
     'Retail Price': 179.99,
     'Requested Quantity': 15,
     'New Reference ID': '',
-    'Reference Notes': ''
-  }
+    'Reference Notes': '',
+  },
 ];
 
 function createSampleFile() {
@@ -84,8 +84,8 @@ function createSampleFile() {
   const ws_data = [
     // Header row
     ['Item ID', 'Hebrew Description', 'English Description', 'Import Markup', 'HS Code', 
-     'Current Stock', 'Sold This Year', 'Sold Last Year', 'Retail Price', 'Requested Quantity', 
-     'New Reference ID', 'Reference Notes'],
+      'Current Stock', 'Sold This Year', 'Sold Last Year', 'Retail Price', 'Requested Quantity', 
+      'New Reference ID', 'Reference Notes'],
     // Data rows
     ...data.map(row => [
       row['Item ID'],
@@ -99,8 +99,8 @@ function createSampleFile() {
       row['Retail Price'],
       row['Requested Quantity'],
       row['New Reference ID'],
-      row['Reference Notes']
-    ])
+      row['Reference Notes'],
+    ]),
   ];
 
   const worksheet = xlsx.utils.aoa_to_sheet(ws_data);
@@ -118,7 +118,7 @@ function createSampleFile() {
     { wch: 12 },  // Retail Price
     { wch: 15 },  // Requested Quantity
     { wch: 15 },  // New Reference ID
-    { wch: 30 }   // Reference Notes
+    { wch: 30 },   // Reference Notes
   ];
 
   worksheet['!cols'] = colWidths;
@@ -136,7 +136,7 @@ function createSampleFile() {
     xlsx.writeFile(workbook, filepath, {
       type: 'buffer',
       codepage: 65001, // UTF-8 encoding for Hebrew support
-      bookType: 'xlsx'
+      bookType: 'xlsx',
     });
 
     console.log(`Sample Excel file created successfully as: ${filename}`);

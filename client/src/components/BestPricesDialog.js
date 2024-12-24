@@ -23,7 +23,7 @@ function BestPricesDialog({ open, onClose, prices, onCreateOrders, loading }) {
     if (!groups[item.SupplierID]) {
       groups[item.SupplierID] = {
         supplierName: item.SupplierName,
-        items: []
+        items: [],
       };
     }
     groups[item.SupplierID].items.push(item);

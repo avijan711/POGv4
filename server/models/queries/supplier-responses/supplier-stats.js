@@ -4,7 +4,7 @@
  * @returns {string} SQL query for supplier statistics
  */
 function getSupplierStatsQuery() {
-    return `
+  return `
     WITH inquiry_items AS (
         -- Get all items in this inquiry
         SELECT 
@@ -134,5 +134,5 @@ function getSupplierStatsQuery() {
 }
 
 module.exports = {
-    getSupplierStatsQuery
+  getSupplierStatsQuery,
 };

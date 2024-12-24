@@ -8,14 +8,14 @@ import {
   Chip,
   Button,
   Link,
-  useTheme
+  useTheme,
 } from '@mui/material';
 import { 
   Close as CloseIcon,
   SwapHoriz as SwapHorizIcon,
   ContentCopy as ContentCopyIcon,
   Info as InfoIcon,
-  ArrowForward as ArrowForwardIcon
+  ArrowForward as ArrowForwardIcon,
 } from '@mui/icons-material';
 import { useReference } from './ReferenceContext';
 
@@ -31,7 +31,7 @@ function DialogHeader({ onClose, onCopyId }) {
     getStatusBackground,
     getStatusBorder,
     getStatusText,
-    styles
+    styles,
   } = useReference();
 
   // Handle both snake_case and camelCase properties
@@ -50,7 +50,7 @@ function DialogHeader({ onClose, onCopyId }) {
       pr: 6, // Make room for the close button
       borderBottom: '1px solid',
       borderColor: 'divider',
-      background: hasReferenceChange ? theme.palette.warning.main : 'linear-gradient(145deg, #ffffff 0%, #f5f5f5 100%)'
+      background: hasReferenceChange ? theme.palette.warning.main : 'linear-gradient(145deg, #ffffff 0%, #f5f5f5 100%)',
     }}>
       <Stack spacing={2}>
         {/* Top Row - ID and Status */}
@@ -65,7 +65,7 @@ function DialogHeader({ onClose, onCopyId }) {
                 p: 2, 
                 borderRadius: 2,
                 border: getStatusBorder(theme),
-                position: 'relative'
+                position: 'relative',
               }}>
                 {/* Background Pattern */}
                 {(hasReferenceChange || isReferencedBy) && (
@@ -77,7 +77,7 @@ function DialogHeader({ onClose, onCopyId }) {
                   ...styles.headerText,
                   fontSize: '1.75rem',
                   zIndex: 1,
-                  color: hasReferenceChange ? theme.palette.warning.dark : theme.palette.text.primary
+                  color: hasReferenceChange ? theme.palette.warning.dark : theme.palette.text.primary,
                 }}>
                   {itemId}
                 </Typography>
@@ -92,7 +92,7 @@ function DialogHeader({ onClose, onCopyId }) {
                   sx={{ 
                     ml: 2,
                     minWidth: 130,
-                    zIndex: 1
+                    zIndex: 1,
                   }}
                 >
                   Copy ID
@@ -110,8 +110,8 @@ function DialogHeader({ onClose, onCopyId }) {
                       zIndex: 1,
                       bgcolor: theme.palette.warning.main,
                       '&:hover': {
-                        bgcolor: theme.palette.warning.dark
-                      }
+                        bgcolor: theme.palette.warning.dark,
+                      },
                     }}
                   >
                     New ID: {newItemId}
@@ -132,8 +132,8 @@ function DialogHeader({ onClose, onCopyId }) {
                     height: 32,
                     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                     '& .MuiChip-icon': {
-                      fontSize: '1.2rem'
-                    }
+                      fontSize: '1.2rem',
+                    },
                   }}
                 />
               )}
@@ -149,8 +149,8 @@ function DialogHeader({ onClose, onCopyId }) {
                     height: 32,
                     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                     '& .MuiChip-icon': {
-                      fontSize: '1.2rem'
-                    }
+                      fontSize: '1.2rem',
+                    },
                   }}
                 />
               )}
@@ -174,14 +174,14 @@ function DialogHeader({ onClose, onCopyId }) {
             color: hasReferenceChange ? theme.palette.common.white : theme.palette.text.primary,
             fontWeight: 500,
             fontSize: '1.75rem',
-            direction: 'rtl'  // Right-to-left for Hebrew
+            direction: 'rtl',  // Right-to-left for Hebrew
           }}>
             {hebrewDesc}
           </Typography>
           {englishDesc && (
             <Typography variant="body1" sx={{ 
               mt: 1, 
-              color: hasReferenceChange ? 'rgba(255,255,255,0.9)' : theme.palette.text.secondary 
+              color: hasReferenceChange ? 'rgba(255,255,255,0.9)' : theme.palette.text.secondary, 
             }}>
               {englishDesc}
             </Typography>

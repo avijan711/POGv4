@@ -21,23 +21,23 @@ const debug = require('./debug');
  * @throws {Error} If itemId is empty or invalid
  */
 function cleanItemId(itemId) {
-    if (!itemId || (typeof itemId !== 'string' && typeof itemId !== 'number')) {
-        throw new Error('Invalid item ID: ID cannot be empty');
-    }
+  if (!itemId || (typeof itemId !== 'string' && typeof itemId !== 'number')) {
+    throw new Error('Invalid item ID: ID cannot be empty');
+  }
 
-    const stringId = itemId.toString();
-    const cleaned = stringId
-        .trim()
-        .replace(/\./g, '')
-        .replace(/\s+/g, '')
-        .replace(/^0000(?=\d)/, '')
-        .toUpperCase();
+  const stringId = itemId.toString();
+  const cleaned = stringId
+    .trim()
+    .replace(/\./g, '')
+    .replace(/\s+/g, '')
+    .replace(/^0000(?=\d)/, '')
+    .toUpperCase();
 
-    if (!cleaned) {
-        throw new Error('Invalid item ID: ID cannot be empty after cleaning');
-    }
+  if (!cleaned) {
+    throw new Error('Invalid item ID: ID cannot be empty after cleaning');
+  }
 
-    return cleaned;
+  return cleaned;
 }
 
 /**
@@ -48,11 +48,11 @@ function cleanItemId(itemId) {
  * @throws {Error} If any itemId is empty or invalid
  */
 function cleanItemIds(itemIds) {
-    if (!Array.isArray(itemIds)) {
-        throw new Error('Invalid input: expected array of item IDs');
-    }
+  if (!Array.isArray(itemIds)) {
+    throw new Error('Invalid input: expected array of item IDs');
+  }
     
-    return itemIds.map(cleanItemId);
+  return itemIds.map(cleanItemId);
 }
 
 /**
@@ -62,12 +62,12 @@ function cleanItemIds(itemIds) {
  * @returns {boolean} True if the item ID is properly cleaned
  */
 function isCleanItemId(itemId) {
-    try {
-        const cleanedId = cleanItemId(itemId);
-        return cleanedId === itemId;
-    } catch (error) {
-        return false;
-    }
+  try {
+    const cleanedId = cleanItemId(itemId);
+    return cleanedId === itemId;
+  } catch (error) {
+    return false;
+  }
 }
 
 /**
@@ -79,22 +79,22 @@ function isCleanItemId(itemId) {
  * @throws {Error} If any itemId is empty or invalid
  */
 function cleanItemIdsInObjects(items, idKey = 'item_id') {
-    if (!Array.isArray(items)) {
-        throw new Error('Invalid input: expected array of objects');
-    }
+  if (!Array.isArray(items)) {
+    throw new Error('Invalid input: expected array of objects');
+  }
     
-    return items.map(item => {
-        if (!item || typeof item !== 'object') return item;
-        return {
-            ...item,
-            [idKey]: cleanItemId(item[idKey])
-        };
-    });
+  return items.map(item => {
+    if (!item || typeof item !== 'object') return item;
+    return {
+      ...item,
+      [idKey]: cleanItemId(item[idKey]),
+    };
+  });
 }
 
 module.exports = {
-    cleanItemId,
-    cleanItemIds,
-    isCleanItemId,
-    cleanItemIdsInObjects
+  cleanItemId,
+  cleanItemIds,
+  isCleanItemId,
+  cleanItemIdsInObjects,
 };

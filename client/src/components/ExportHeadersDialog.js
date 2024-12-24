@@ -25,18 +25,18 @@ const AVAILABLE_HEADERS = [
   { key: 'stock', label: 'Stock' },
   { key: 'sold_this_year', label: 'Sold This Year' },
   { key: 'sold_last_year', label: 'Sold Last Year' },
-  { key: 'reference', label: 'Reference' }
+  { key: 'reference', label: 'Reference' },
 ];
 
 function ExportHeadersDialog({ open, onClose, onConfirm }) {
   const [selectedHeaders, setSelectedHeaders] = useState(
-    AVAILABLE_HEADERS.reduce((acc, header) => ({ ...acc, [header.key]: false }), {})
+    AVAILABLE_HEADERS.reduce((acc, header) => ({ ...acc, [header.key]: false }), {}),
   );
 
   const handleToggleHeader = (key) => {
     setSelectedHeaders(prev => ({
       ...prev,
-      [key]: !prev[key]
+      [key]: !prev[key],
     }));
   };
 
@@ -46,8 +46,8 @@ function ExportHeadersDialog({ open, onClose, onConfirm }) {
     setSelectedHeaders(
       AVAILABLE_HEADERS.reduce((acc, header) => ({
         ...acc,
-        [header.key]: newValue
-      }), {})
+        [header.key]: newValue,
+      }), {}),
     );
   };
 

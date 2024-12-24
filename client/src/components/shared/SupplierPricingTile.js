@@ -31,8 +31,7 @@ import {
 import { useSettings } from '../../hooks/useSettings';
 import SupplierPriceHistoryDialog from './SupplierPriceHistoryDialog';
 
-const EXCHANGE_RATE_KEY = 'eurToIls';
-const DEFAULT_RATE = 3.95;
+import { EXCHANGE_RATE_KEY, DEFAULT_EXCHANGE_RATE } from '../../constants';
 
 function SupplierPricingTile({
   item,
@@ -42,10 +41,10 @@ function SupplierPricingTile({
   hasMore,
   loading,
   onUpdateFilters,
-  filters
+  filters,
 }) {
   const { getSettingValue } = useSettings();
-  const eurToIls = getSettingValue(EXCHANGE_RATE_KEY, DEFAULT_RATE);
+  const eurToIls = getSettingValue(EXCHANGE_RATE_KEY, DEFAULT_EXCHANGE_RATE);
   const [selectedPrice, setSelectedPrice] = useState(null);
 
   // Calculate price analysis and winning supplier
@@ -56,7 +55,7 @@ function SupplierPricingTile({
       .map(p => ({
         ...p,
         price: Number(p.price_eur || p.price_quoted || 0),
-        ilsPrice: p.cost_ils || calculateIlsPrice(Number(p.price_eur || p.price_quoted || 0), item.import_markup, eurToIls)
+        ilsPrice: p.cost_ils || calculateIlsPrice(Number(p.price_eur || p.price_quoted || 0), item.import_markup, eurToIls),
       }))
       .filter(p => !isNaN(p.price) && p.price > 0)
       .sort((a, b) => a.price - b.price);
@@ -64,7 +63,7 @@ function SupplierPricingTile({
     if (!activePrices.length) return { 
       priceAnalysis: null, 
       winningPrice: null,
-      sortedPrices: supplierPrices
+      sortedPrices: supplierPrices,
     };
 
     const prices = activePrices.map(p => p.price);
@@ -80,7 +79,7 @@ function SupplierPricingTile({
     return {
       priceAnalysis: getPriceAnalysis(prices),
       winningPrice: lowestPrice,
-      sortedPrices: sorted
+      sortedPrices: sorted,
     };
   }, [supplierPrices, item.import_markup, eurToIls]);
 
@@ -192,8 +191,8 @@ function SupplierPricingTile({
                       ...(price.is_promotion && { bgcolor: 'warning.lighter' }),
                       ...(isWinningPrice && {
                         bgcolor: 'success.lighter',
-                        '& > td': { fontWeight: 'bold' }
-                      })
+                        '& > td': { fontWeight: 'bold' },
+                      }),
                     }}
                   >
                     <TableCell>
@@ -217,9 +216,9 @@ function SupplierPricingTile({
                           cursor: 'pointer',
                           '&:hover': {
                             bgcolor: 'action.hover',
-                            borderRadius: 1
+                            borderRadius: 1,
                           },
-                          p: 1
+                          p: 1,
                         }}
                       >
                         <Stack spacing={0.5}>

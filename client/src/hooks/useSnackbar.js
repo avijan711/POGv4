@@ -24,7 +24,7 @@ export const useSnackbar = () => {
     message,
     severity,
     showSnackbar,
-    hideSnackbar
+    hideSnackbar,
   };
 };
 

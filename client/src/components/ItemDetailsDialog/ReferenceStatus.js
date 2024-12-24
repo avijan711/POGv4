@@ -5,7 +5,7 @@ import {
   Stack,
   Button,
   Paper,
-  Divider
+  Divider,
 } from '@mui/material';
 import {
   SwapHoriz as SwapHorizIcon,
@@ -24,7 +24,7 @@ function ReferenceStatus() {
     itemDetails,
     getSourceIcon,
     getSourceLabel,
-    styles
+    styles,
   } = useReference();
 
   if (!hasReferenceChange && !isReferencedBy) {
@@ -52,8 +52,8 @@ function ReferenceStatus() {
           ${hasReferenceChange ? 'rgba(255, 152, 0, 0.05)' : 'rgba(76, 175, 80, 0.05)'} 10px,
           ${hasReferenceChange ? 'rgba(255, 152, 0, 0.05)' : 'rgba(76, 175, 80, 0.05)'} 20px
         )`,
-        pointerEvents: 'none'
-      }
+        pointerEvents: 'none',
+      },
     }}>
       <Stack spacing={2}>
         {/* Status Header */}
@@ -68,17 +68,17 @@ function ReferenceStatus() {
             borderRadius: 2,
             border: '2px solid',
             borderColor: hasReferenceChange ? 'warning.main' : 'success.main',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
           }}>
             <Typography variant="h6" sx={{ 
               fontWeight: 'bold',
               color: hasReferenceChange ? 'warning.dark' : 'success.dark',
-              letterSpacing: '0.5px'
+              letterSpacing: '0.5px',
             }}>
               {hasReferenceChange ? 'Old Item - Has Been Replaced' : 'New Item - Replaces Other Items'}
             </Typography>
             <SwapHorizIcon 
-              color={hasReferenceChange ? "warning" : "success"} 
+              color={hasReferenceChange ? 'warning' : 'success'} 
               sx={{ fontSize: 28 }}
             />
           </Box>
@@ -92,7 +92,7 @@ function ReferenceStatus() {
             bgcolor: 'rgba(255,255,255,0.9)',
             border: '1px solid',
             borderColor: hasReferenceChange ? 'warning.light' : 'success.light',
-            borderRadius: 2
+            borderRadius: 2,
           }}
         >
           {hasReferenceChange && referenceChange && (
@@ -109,7 +109,7 @@ function ReferenceStatus() {
                     borderColor: 'warning.light',
                     borderRadius: 1,
                     minWidth: 150,
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                   }}>
                     <Typography variant="subtitle2" color="text.secondary">Current Item</Typography>
                     <Typography variant="h6" color="warning.dark">
@@ -130,7 +130,7 @@ function ReferenceStatus() {
                       height: 'auto',
                       textTransform: 'none',
                       textAlign: 'left',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
                     }}
                   >
                     <Box>
@@ -175,7 +175,7 @@ function ReferenceStatus() {
                         sx={{ 
                           textTransform: 'none',
                           fontWeight: 'bold',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                         }}
                       >
                         {itemId}
@@ -188,7 +188,7 @@ function ReferenceStatus() {
                         borderColor: 'success.light',
                         borderRadius: 1,
                         minWidth: 150,
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                       }}>
                         <Typography variant="subtitle2" color="text.secondary">Current Item</Typography>
                         <Typography variant="h6" color="success.dark">

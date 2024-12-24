@@ -19,14 +19,14 @@ const REQUIRED_FIELDS = [
     field: 'itemId', 
     label: 'Item ID', 
     description: 'Unique identifier for each item', 
-    hebrewLabels: ['קוד פריט', 'מספר פריט', 'מקט'] 
+    hebrewLabels: ['קוד פריט', 'מספר פריט', 'מקט'], 
   },
   { 
     field: 'price', 
     label: 'Price (EUR)', 
     description: 'Promotion price in Euros', 
-    hebrewLabels: ['מחיר', 'מחיר מבצע', 'מחיר יורו'] 
-  }
+    hebrewLabels: ['מחיר', 'מחיר מבצע', 'מחיר יורו'], 
+  },
 ];
 
 function PromotionColumnMappingDialog({ open, onClose, excelColumns = [], onConfirm }) {
@@ -39,7 +39,7 @@ function PromotionColumnMappingDialog({ open, onClose, excelColumns = [], onConf
       .filter(col => col != null)
       .map((col, index) => ({
         id: `col-${index}`,
-        value: String(col).trim()
+        value: String(col).trim(),
       }))
       .filter(col => col.value.length > 0);
   }, [excelColumns]);
@@ -57,7 +57,7 @@ function PromotionColumnMappingDialog({ open, onClose, excelColumns = [], onConf
               const normalizedCol = col.value.trim().toLowerCase();
               const normalizedLabel = hebrewLabel.trim().toLowerCase();
               return normalizedCol === normalizedLabel || normalizedCol.includes(normalizedLabel);
-            })
+            }),
           );
           
           if (matchingColumn) {
@@ -121,7 +121,7 @@ function PromotionColumnMappingDialog({ open, onClose, excelColumns = [], onConf
   const handleFieldChange = (field, columnId) => {
     setMapping(prev => ({
       ...prev,
-      [field]: columnId
+      [field]: columnId,
     }));
   };
 

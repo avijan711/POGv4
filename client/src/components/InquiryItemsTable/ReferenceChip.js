@@ -25,7 +25,7 @@ function ReferenceChip({ reference_change, onDelete, isReplacement }) {
       display: 'flex', 
       alignItems: 'center', 
       gap: 1,
-      position: 'relative'
+      position: 'relative',
     }}>
       <Tooltip title={getTooltipText()}>
         <Chip
@@ -47,11 +47,11 @@ function ReferenceChip({ reference_change, onDelete, isReplacement }) {
             '& .MuiChip-label': { 
               px: 1,
               py: 1.5,
-              fontSize: '0.875rem'
+              fontSize: '0.875rem',
             },
             '& .MuiChip-icon': { 
               fontSize: 20,
-              color: isReplacement ? 'success.light' : 'error.light'
+              color: isReplacement ? 'success.light' : 'error.light',
             },
             fontWeight: 'bold',
             boxShadow: 1,
@@ -59,7 +59,7 @@ function ReferenceChip({ reference_change, onDelete, isReplacement }) {
             borderColor: isReplacement ? 'success.main' : 'error.main',
             '&:hover': {
               backgroundColor: isReplacement ? 'success.dark' : 'error.dark',
-            }
+            },
           }}
         />
       </Tooltip>

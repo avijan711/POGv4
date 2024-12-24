@@ -1,7 +1,4 @@
-import { API_BASE_URL } from '../config';
-import axios from 'axios';
-
-const DEFAULT_RATE = 3.95;
+import { DEFAULT_EXCHANGE_RATE } from '../constants';
 
 export const formatIlsPrice = (price) => {
   if (price === null || price === undefined || price === '') {
@@ -40,17 +37,8 @@ export const formatPercentage = (value) => {
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
 };
 
-export const calculateDiscount = (priceEUR, importMarkup, retailPrice, eurToIls = DEFAULT_RATE) => {
-  if (!retailPrice) {
-    console.log('Missing retail price (ILS)');
-    return null;
-  }
-  if (!importMarkup) {
-    console.log('Missing import markup');
-    return null;
-  }
-  if (!priceEUR) {
-    console.log('Missing EUR price');
+export const calculateDiscount = (priceEUR, importMarkup, retailPrice, eurToIls = DEFAULT_EXCHANGE_RATE) => {
+  if (!retailPrice || !importMarkup || !priceEUR) {
     return null;
   }
 
@@ -63,25 +51,13 @@ export const calculateDiscount = (priceEUR, importMarkup, retailPrice, eurToIls 
   }
 
   const supplierPriceILS = numPriceEUR * eurToIls * importMarkup;
-  console.log('Discount calculation:', {
-    priceEUR,
-    numPriceEUR,
-    importMarkup,
-    retailPrice,
-    supplierPriceILS,
-    eurToIls,
-    message: 'RetailPrice is already in ILS from query COALESCE'
-  });
-
   const discount = ((retailPrice - supplierPriceILS) / retailPrice) * 100;
-  console.log('Final discount:', discount);
-
   return Math.max(0, Math.min(100, discount));
 };
 
 export const getDisplayPrice = (itemId, supplierKey, originalPrice, temporaryPrices) => {
   const priceKey = `${itemId}-${supplierKey}`;
-  const tempPrice = temporaryPrices.hasOwnProperty(priceKey) ? temporaryPrices[priceKey] : null;
+  const tempPrice = Object.hasOwn(temporaryPrices, priceKey) ? temporaryPrices[priceKey] : null;
   
   // If we have a temporary price, use it
   if (tempPrice !== null) return tempPrice;
@@ -118,7 +94,7 @@ export const isWinningPrice = (price, itemId, supplierGroups, selectedSuppliers,
 };
 
 // New utility functions for margin calculations
-export const calculateIlsPrice = (eurPrice, importMarkup, eurToIls = DEFAULT_RATE) => {
+export const calculateIlsPrice = (eurPrice, importMarkup, eurToIls = DEFAULT_EXCHANGE_RATE) => {
   if (!eurPrice || !importMarkup) return null;
   return eurPrice * eurToIls * importMarkup;
 };
@@ -128,7 +104,7 @@ export const calculateMargin = (retailPrice, costPrice) => {
   return ((retailPrice - costPrice) / retailPrice) * 100;
 };
 
-export const getMarginInfo = (eurPrice, retailPrice, importMarkup, eurToIls = DEFAULT_RATE) => {
+export const getMarginInfo = (eurPrice, retailPrice, importMarkup, eurToIls = DEFAULT_EXCHANGE_RATE) => {
   if (!eurPrice || !retailPrice || !importMarkup) return null;
   
   const costPrice = calculateIlsPrice(eurPrice, importMarkup, eurToIls);
@@ -140,17 +116,17 @@ export const getMarginInfo = (eurPrice, retailPrice, importMarkup, eurToIls = DE
   return {
     margin,
     color: margin < 20 ? 'error' : 
-           margin < 30 ? 'warning' : 
-           'success'
+      margin < 30 ? 'warning' : 
+        'success',
   };
 };
 
 export const getStatusColor = (status) => {
   switch (status?.toLowerCase()) {
-    case 'active': return 'success';
-    case 'pending': return 'warning';
-    case 'rejected': return 'error';
-    default: return 'default';
+  case 'active': return 'success';
+  case 'pending': return 'warning';
+  case 'rejected': return 'error';
+  default: return 'default';
   }
 };
 
@@ -163,6 +139,6 @@ export const getPriceAnalysis = (prices) => {
   return {
     lowest: Math.min(...validPrices),
     highest: Math.max(...validPrices),
-    average: validPrices.reduce((a, b) => a + b, 0) / validPrices.length
+    average: validPrices.reduce((a, b) => a + b, 0) / validPrices.length,
   };
 };

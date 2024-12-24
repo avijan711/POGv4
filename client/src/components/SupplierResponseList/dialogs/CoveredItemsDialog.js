@@ -47,21 +47,21 @@ export function CoveredItemsDialog({ open, onClose, promotionId, supplierName = 
       const params = {
         page: page + 1,
         pageSize: rowsPerPage,
-        search: search.trim()
+        search: search.trim(),
       };
 
       // Log request details
       dataDebug.log('Fetching items:', {
         promotionId,
         params,
-        url: `/api/promotions/${promotionId}/items`
+        url: `/api/promotions/${promotionId}/items`,
       });
 
       // Explicitly construct query string to ensure numbers are sent correctly
       const queryString = new URLSearchParams({
         page: params.page.toString(),
         pageSize: params.pageSize.toString(),
-        search: params.search
+        search: params.search,
       }).toString();
 
       const response = await axios.get(`/api/promotions/${promotionId}/items?${queryString}`);
@@ -85,7 +85,7 @@ export function CoveredItemsDialog({ open, onClose, promotionId, supplierName = 
       setPage(0); // Reset to first page on search
       setSearching(false);
     }, 500),
-    []
+    [],
   );
 
   const handleSearchChange = (event) => {
@@ -170,7 +170,7 @@ export function CoveredItemsDialog({ open, onClose, promotionId, supplierName = 
                         sx={{
                           '&:hover': {
                             backgroundColor: 'action.hover',
-                          }
+                          },
                         }}
                       >
                         <TableCell>{item.item_id}</TableCell>

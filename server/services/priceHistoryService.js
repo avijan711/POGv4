@@ -2,22 +2,22 @@ const debug = require('../utils/debug');
 const BaseModel = require('../models/BaseModel');
 
 class PriceHistoryService extends BaseModel {
-    constructor(db) {
-        super(db);
-    }
+  constructor(db) {
+    super(db);
+  }
 
-    async recordPrice(itemId, supplierId, price, sourceType, sourceId, notes = null) {
-        debug.log('Recording price:', {
-            itemId,
-            supplierId,
-            price,
-            sourceType,
-            sourceId
-        });
+  async recordPrice(itemId, supplierId, price, sourceType, sourceId, notes = null) {
+    debug.log('Recording price:', {
+      itemId,
+      supplierId,
+      price,
+      sourceType,
+      sourceId,
+    });
 
-        return await this.executeTransaction(async () => {
-            // Update supplier price list
-            const priceListResult = await this.executeRun(`
+    return await this.executeTransaction(async () => {
+      // Update supplier price list
+      const priceListResult = await this.executeRun(`
                 INSERT INTO supplier_price_list (
                     item_id,
                     supplier_id,
@@ -34,17 +34,17 @@ class PriceHistoryService extends BaseModel {
                     notes = excluded.notes,
                     last_updated = excluded.last_updated;
             `, [
-                itemId,
-                supplierId,
-                price,
-                sourceType === 'promotion' ? 1 : 0,
-                sourceType === 'promotion' ? sourceId : null,
-                notes
-            ]);
+        itemId,
+        supplierId,
+        price,
+        sourceType === 'promotion' ? 1 : 0,
+        sourceType === 'promotion' ? sourceId : null,
+        notes,
+      ]);
 
-            // For promotions, get the latest non-promotion price history
-            if (sourceType === 'promotion') {
-                const latestHistory = await this.executeQuerySingle(`
+      // For promotions, get the latest non-promotion price history
+      if (sourceType === 'promotion') {
+        const latestHistory = await this.executeQuerySingle(`
                     SELECT ils_retail_price, qty_in_stock, qty_sold_this_year, qty_sold_last_year
                     FROM price_history
                     WHERE item_id = ?
@@ -52,7 +52,7 @@ class PriceHistoryService extends BaseModel {
                     LIMIT 1
                 `, [itemId]);
 
-                await this.executeRun(`
+        await this.executeRun(`
                     INSERT INTO price_history (
                         item_id,
                         ils_retail_price,
@@ -65,18 +65,18 @@ class PriceHistoryService extends BaseModel {
                         date
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 `, [
-                    itemId,
-                    latestHistory?.ils_retail_price || price,
-                    latestHistory?.qty_in_stock || 0,
-                    latestHistory?.qty_sold_this_year || 0,
-                    latestHistory?.qty_sold_last_year || 0,
-                    supplierId,
-                    sourceType,
-                    sourceId
-                ]);
-            } else {
-                // For non-promotions, record new price history
-                await this.executeRun(`
+          itemId,
+          latestHistory?.ils_retail_price || price,
+          latestHistory?.qty_in_stock || 0,
+          latestHistory?.qty_sold_this_year || 0,
+          latestHistory?.qty_sold_last_year || 0,
+          supplierId,
+          sourceType,
+          sourceId,
+        ]);
+      } else {
+        // For non-promotions, record new price history
+        await this.executeRun(`
                     INSERT INTO price_history (
                         item_id,
                         ils_retail_price,
@@ -86,25 +86,25 @@ class PriceHistoryService extends BaseModel {
                         date
                     ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 `, [
-                    itemId,
-                    price,
-                    supplierId,
-                    sourceType,
-                    sourceId
-                ]);
-            }
+          itemId,
+          price,
+          supplierId,
+          sourceType,
+          sourceId,
+        ]);
+      }
 
-            return {
-                success: true,
-                changes: priceListResult.changes,
-                message: 'Price recorded successfully'
-            };
-        });
-    }
+      return {
+        success: true,
+        changes: priceListResult.changes,
+        message: 'Price recorded successfully',
+      };
+    });
+  }
 
-    async getPriceHistory(itemId, supplierId, dateRange = null) {
-        // First get price history from supplier_price_list
-        let sql = `
+  async getPriceHistory(itemId, supplierId, dateRange = null) {
+    // First get price history from supplier_price_list
+    let sql = `
             WITH latest_price_history AS (
                 SELECT 
                     item_id,
@@ -160,20 +160,20 @@ class PriceHistoryService extends BaseModel {
             UNION ALL
             SELECT * FROM supplier_response_history
         `;
-        const params = [itemId, supplierId, itemId, supplierId];
+    const params = [itemId, supplierId, itemId, supplierId];
 
-        if (dateRange) {
-            sql += ` WHERE date BETWEEN ? AND ?`;
-            params.push(dateRange.start, dateRange.end);
-        }
-
-        sql += ` ORDER BY date DESC`;
-
-        return await this.executeQuery(sql, params);
+    if (dateRange) {
+      sql += ' WHERE date BETWEEN ? AND ?';
+      params.push(dateRange.start, dateRange.end);
     }
 
-    async getCurrentPrice(itemId, supplierId) {
-        const sql = `
+    sql += ' ORDER BY date DESC';
+
+    return await this.executeQuery(sql, params);
+  }
+
+  async getCurrentPrice(itemId, supplierId) {
+    const sql = `
             SELECT 
                 spl.*,
                 CASE 
@@ -188,11 +188,11 @@ class PriceHistoryService extends BaseModel {
             LEFT JOIN promotion p ON spl.promotion_id = p.promotion_id
             WHERE spl.item_id = ? AND spl.supplier_id = ?
         `;
-        return await this.executeQuerySingle(sql, [itemId, supplierId]);
-    }
+    return await this.executeQuerySingle(sql, [itemId, supplierId]);
+  }
 
-    async getSupplierPriceList(supplierId, includePromotions = true) {
-        let sql = `
+  async getSupplierPriceList(supplierId, includePromotions = true) {
+    let sql = `
             SELECT 
                 spl.*,
                 i.hebrew_description,
@@ -211,44 +211,44 @@ class PriceHistoryService extends BaseModel {
             WHERE spl.supplier_id = ?
         `;
 
-        if (!includePromotions) {
-            sql += ` AND spl.is_promotion = 0`;
-        }
-
-        sql += ` ORDER BY spl.item_id`;
-
-        return await this.executeQuery(sql, [supplierId]);
+    if (!includePromotions) {
+      sql += ' AND spl.is_promotion = 0';
     }
 
-    async updatePriceList(items, supplierId, sourceType, sourceId) {
-        debug.log('Updating price list:', {
-            itemCount: items.length,
-            supplierId,
-            sourceType,
-            sourceId
-        });
+    sql += ' ORDER BY spl.item_id';
 
-        return await this.executeTransaction(async () => {
-            for (const item of items) {
-                await this.recordPrice(
-                    item.item_id,
-                    supplierId,
-                    item.price,
-                    sourceType,
-                    sourceId,
-                    item.notes
-                );
-            }
+    return await this.executeQuery(sql, [supplierId]);
+  }
 
-            return {
-                success: true,
-                message: `Updated ${items.length} prices successfully`
-            };
-        });
-    }
+  async updatePriceList(items, supplierId, sourceType, sourceId) {
+    debug.log('Updating price list:', {
+      itemCount: items.length,
+      supplierId,
+      sourceType,
+      sourceId,
+    });
 
-    async cleanupExpiredPromotions() {
-        const sql = `
+    return await this.executeTransaction(async () => {
+      for (const item of items) {
+        await this.recordPrice(
+          item.item_id,
+          supplierId,
+          item.price,
+          sourceType,
+          sourceId,
+          item.notes,
+        );
+      }
+
+      return {
+        success: true,
+        message: `Updated ${items.length} prices successfully`,
+      };
+    });
+  }
+
+  async cleanupExpiredPromotions() {
+    const sql = `
             UPDATE supplier_price_list spl
             SET 
                 is_promotion = 0,
@@ -260,8 +260,8 @@ class PriceHistoryService extends BaseModel {
                 AND date('now') > date(p.end_date)
             )
         `;
-        return await this.executeRun(sql);
-    }
+    return await this.executeRun(sql);
+  }
 }
 
 module.exports = PriceHistoryService;

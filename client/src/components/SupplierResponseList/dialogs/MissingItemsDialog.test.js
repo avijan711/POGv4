@@ -10,7 +10,7 @@ describe('MissingItemsDialog', () => {
       hebrew_description: 'Test Item 1',
       english_description: 'Test Item 1 EN',
       requested_qty: 5,
-      updated_at: '2023-01-01'
+      updated_at: '2023-01-01',
     },
     {
       inquiry_item_id: 2,
@@ -18,8 +18,8 @@ describe('MissingItemsDialog', () => {
       hebrew_description: 'Test Item 2',
       english_description: 'Test Item 2 EN',
       requested_qty: 3,
-      updated_at: '2023-01-02'
-    }
+      updated_at: '2023-01-02',
+    },
   ];
 
   it('displays dialog title with supplier name', () => {
@@ -28,7 +28,7 @@ describe('MissingItemsDialog', () => {
         open={true}
         items={mockItems}
         supplierName="Test Supplier"
-      />
+      />,
     );
     
     expect(screen.getByText('Missing Items - Test Supplier')).toBeInTheDocument();
@@ -40,7 +40,7 @@ describe('MissingItemsDialog', () => {
         open={true}
         items={mockItems}
         supplierName="Test Supplier"
-      />
+      />,
     );
     
     expect(screen.getByText('ITEM1')).toBeInTheDocument();
@@ -62,7 +62,7 @@ describe('MissingItemsDialog', () => {
         items={mockItems}
         supplierName="Test Supplier"
         onClose={mockClose}
-      />
+      />,
     );
     
     const closeButton = screen.getByRole('button', { name: /close/i });
@@ -77,7 +77,7 @@ describe('MissingItemsDialog', () => {
         open={true}
         items={mockItems}
         supplierName="Test Supplier"
-      />
+      />,
     );
     
     // Check for formatted dates
@@ -98,7 +98,7 @@ describe('MissingItemsDialog', () => {
         open={true}
         items={[]}
         supplierName="Test Supplier"
-      />
+      />,
     );
     
     // Should still render table headers

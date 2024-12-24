@@ -21,7 +21,7 @@ function InquiryDialogs({
   onSave,
   onDelete,
   onUploadSuccess,
-  inquiryId
+  inquiryId,
 }) {
   const {
     dialogOpen,

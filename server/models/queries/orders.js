@@ -65,7 +65,7 @@ const getOrderByIdQuery = `
 const createOrderQuery = 'INSERT INTO "Order" (InquiryID, SupplierID, Status) VALUES (?, ?, ?)';
 
 const createOrderItemQuery = {
-    promotion: `
+  promotion: `
         INSERT INTO OrderItem (
             OrderID, 
             ItemID, 
@@ -76,7 +76,7 @@ const createOrderItemQuery = {
             PromotionGroupID
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
-    regular: `
+  regular: `
         WITH check_tables AS (
             SELECT EXISTS (
                 SELECT 1 FROM sqlite_master 
@@ -104,21 +104,21 @@ const createOrderItemQuery = {
                 ELSE NULL
             END
         FROM check_tables ct
-    `
+    `,
 };
 
 const updateInquiryStatusQuery = 'UPDATE Inquiry SET Status = ? WHERE InquiryID = ?';
 
 const updateOrderStatusQuery = {
-    withNotes: 'UPDATE "Order" SET Status = ?, Notes = ? WHERE OrderID = ?',
-    withoutNotes: 'UPDATE "Order" SET Status = ? WHERE OrderID = ?'
+  withNotes: 'UPDATE "Order" SET Status = ?, Notes = ? WHERE OrderID = ?',
+  withoutNotes: 'UPDATE "Order" SET Status = ? WHERE OrderID = ?',
 };
 
 module.exports = {
-    getAllOrdersQuery,
-    getOrderByIdQuery,
-    createOrderQuery,
-    createOrderItemQuery,
-    updateInquiryStatusQuery,
-    updateOrderStatusQuery
+  getAllOrdersQuery,
+  getOrderByIdQuery,
+  createOrderQuery,
+  createOrderItemQuery,
+  updateInquiryStatusQuery,
+  updateOrderStatusQuery,
 };

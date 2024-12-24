@@ -3,14 +3,14 @@ import { Box, Button, IconButton } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 
 const styles = {
   container: {
     display: 'flex',
     justifyContent: 'center',
-    gap: 1
+    gap: 1,
   },
   viewButton: {
     minWidth: '100px',
@@ -24,21 +24,21 @@ const styles = {
   },
   editButton: {
     '&:hover': { 
-      backgroundColor: 'rgba(0, 0, 0, 0.1)' 
-    }
+      backgroundColor: 'rgba(0, 0, 0, 0.1)', 
+    },
   },
   deleteButton: {
     '&:hover': { 
       backgroundColor: 'rgba(211, 47, 47, 0.1)',
       color: 'error.main',
-    }
-  }
+    },
+  },
 };
 
 function ActionButtons({
   onView,
   onEdit,
-  onDelete
+  onDelete,
 }) {
   const handleClick = (handler) => (e) => {
     e.stopPropagation();

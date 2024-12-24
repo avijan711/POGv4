@@ -1,4 +1,15 @@
-const handleRowClick = useCallback(async (item) => {
+import React, { useCallback, useState } from 'react';
+import axios from 'axios';
+import { API_BASE_URL } from '../../config';
+import { uiDebug } from '../../utils/debug';
+
+const InventoryList = () => {
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [error, setError] = useState('');
+  const [itemDetails, setItemDetails] = useState(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
+  const handleRowClick = useCallback(async (item) => {
     try {
       uiDebug.log('Opening item details for:', item.itemID);
       
@@ -42,21 +53,21 @@ const handleRowClick = useCallback(async (item) => {
           lastUpdated: data.lastUpdated,
           hasReferenceChange: data.referenceChange !== null,
           isReferencedBy: data.referencedBy !== null,
-          referencingItems: data.referencingItems || []
+          referencingItems: data.referencingItems || [],
         },
         priceHistory: priceHistory.map(ph => ({
           date: ph.date,
           price: parseFloat(ph.price),
           qtyInStock: parseInt(ph.qtyInStock) || 0,
           soldThisYear: parseInt(ph.soldThisYear) || 0,
-          soldLastYear: parseInt(ph.soldLastYear) || 0
+          soldLastYear: parseInt(ph.soldLastYear) || 0,
         })),
         supplierPrices,
         promotions,
         hasReferenceChange: data.referenceChange !== null,
         isReferencedBy: data.referencedBy !== null,
         referenceChange: data.referenceChange,
-        referencingItems: data.referencingItems || []
+        referencingItems: data.referencingItems || [],
       };
 
       console.log('Processed item data:', JSON.stringify(processedData, null, 2));
@@ -73,3 +84,12 @@ const handleRowClick = useCallback(async (item) => {
       setLoadingDetails(false);
     }
   }, []);
+
+  return (
+    <div>
+      {/* Component rendering logic will go here */}
+    </div>
+  );
+};
+
+export default InventoryList;

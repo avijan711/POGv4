@@ -11,7 +11,7 @@ import {
   Paper,
   Link,
   Button,
-  CircularProgress
+  CircularProgress,
 } from '@mui/material';
 import { Warning as WarningIcon } from '@mui/icons-material';
 import { getDisplayPrice, calculateDiscount } from '../utils/priceUtils';
@@ -29,7 +29,7 @@ const parseMissingItems = (missingItemsData) => {
   console.log('Parsing missing items:', {
     type: typeof missingItemsData,
     isArray: Array.isArray(missingItemsData),
-    raw: missingItemsData
+    raw: missingItemsData,
   });
 
   // If it's already an array of objects with the right structure, return it
@@ -56,7 +56,7 @@ const parseMissingItems = (missingItemsData) => {
               english_description,
               requested_qty,
               retail_price,
-              origin
+              origin,
             ] = item.split('|').map(field => field?.trim());
 
             return {
@@ -65,14 +65,14 @@ const parseMissingItems = (missingItemsData) => {
               english_description: english_description || '',
               requested_qty: parseInt(requested_qty, 10) || 0,
               retail_price: parseFloat(retail_price) || 0,
-              origin: origin || ''
+              origin: origin || '',
             };
           }
         });
 
       console.log('Parsed items from string:', {
         count: items.length,
-        first: items[0]
+        first: items[0],
       });
 
       return items;
@@ -97,7 +97,7 @@ const SuppliersView = ({
   eurToIls,
   responses,
   fetchMissingItems,
-  prices = []
+  prices = [],
 }) => {
   const [missingItemsDialogOpen, setMissingItemsDialogOpen] = useState(false);
   const [currentMissingItems, setCurrentMissingItems] = useState([]);
@@ -127,19 +127,19 @@ const SuppliersView = ({
       supplierGroups: {
         count: Object.keys(supplierGroups).length,
         keys: Object.keys(supplierGroups),
-        sample: supplierGroups[Object.keys(supplierGroups)[0]]
+        sample: supplierGroups[Object.keys(supplierGroups)[0]],
       },
       selectedSuppliers: {
         count: Object.keys(selectedSuppliers).length,
         selected: Object.entries(selectedSuppliers)
           .filter(([_, selected]) => selected)
-          .map(([key]) => key)
+          .map(([key]) => key),
       },
       responses: {
         count: Object.keys(responses || {}).length,
         keys: Object.keys(responses || {}),
-        sample: responses?.[Object.keys(responses || {})[0]]
-      }
+        sample: responses?.[Object.keys(responses || {})[0]],
+      },
     });
     
     // Get selected suppliers and their responses, considering promotion groups
@@ -150,7 +150,7 @@ const SuppliersView = ({
           const groupKey = getSupplierGroupKey(
             supplierId, 
             group.isPromotion, 
-            group.promotionGroupId
+            group.promotionGroupId,
           );
           const matches = selectedSuppliers[groupKey];
           console.log('Checking supplier group selection:', {
@@ -158,7 +158,7 @@ const SuppliersView = ({
             groupKey,
             isPromotion: group.isPromotion,
             promotionGroupId: group.promotionGroupId,
-            isSelected: matches
+            isSelected: matches,
           });
           return matches;
         });
@@ -173,8 +173,8 @@ const SuppliersView = ({
         missing_count: data.missing_count,
         missing_items_length: Array.isArray(data.missing_items) ? data.missing_items.length : 'not array',
         missing_items_type: typeof data.missing_items,
-        raw_missing_items: data.missing_items
-      }))
+        raw_missing_items: data.missing_items,
+      })),
     });
 
     if (selectedSupplierResponses.length === 0) {
@@ -196,7 +196,7 @@ const SuppliersView = ({
             normalized: normalizedId,
             group: group.supplierName,
             isPromotion: group.isPromotion,
-            promotionName: group.promotionName
+            promotionName: group.promotionName,
           });
           coveredItemIds.add(normalizedId);
         });
@@ -204,7 +204,7 @@ const SuppliersView = ({
 
     console.log('Covered items:', {
       count: coveredItemIds.size,
-      items: Array.from(coveredItemIds)
+      items: Array.from(coveredItemIds),
     });
 
     // Find a supplier with missing items
@@ -218,7 +218,7 @@ const SuppliersView = ({
         missing_items_type: typeof data.missing_items,
         isArray: Array.isArray(data.missing_items),
         length: data.missing_items?.length,
-        hasMissingItems
+        hasMissingItems,
       });
       
       return hasMissingItems;
@@ -236,7 +236,7 @@ const SuppliersView = ({
       id: supplierId,
       name: supplierData.supplier_name,
       missing_items_type: typeof supplierData.missing_items,
-      missing_items: supplierData.missing_items
+      missing_items: supplierData.missing_items,
     });
 
     // Use missing items directly from supplier data if it's already an array
@@ -249,7 +249,7 @@ const SuppliersView = ({
       sample: allItems[0],
       missing_items_type: typeof supplierData.missing_items,
       isArray: Array.isArray(supplierData.missing_items),
-      raw_missing_items: supplierData.missing_items
+      raw_missing_items: supplierData.missing_items,
     });
 
     // Filter to only items not covered by selected suppliers
@@ -261,7 +261,7 @@ const SuppliersView = ({
           original: item.item_id,
           normalized: normalizedId,
           isCovered,
-          coveredItemsCount: coveredItemIds.size
+          coveredItemsCount: coveredItemIds.size,
         });
         return !isCovered;
       })
@@ -271,7 +271,7 @@ const SuppliersView = ({
       count: uncoveredItems.length,
       sample: uncoveredItems[0],
       all_items_count: allItems.length,
-      covered_items_count: coveredItemIds.size
+      covered_items_count: coveredItemIds.size,
     });
 
     setOrderLevelMissingItems(uncoveredItems);
@@ -298,7 +298,7 @@ const SuppliersView = ({
       supplierName,
       items_count: items.length,
       first_item: items[0],
-      raw_missing_items: supplierResponse?.missing_items
+      raw_missing_items: supplierResponse?.missing_items,
     });
     setCurrentMissingItems(items);
     setCurrentSupplierName(supplierName);
@@ -309,7 +309,7 @@ const SuppliersView = ({
     console.log('Showing order level missing items:', {
       items_count: orderLevelMissingItems.length,
       first_item: orderLevelMissingItems[0],
-      raw_items: orderLevelMissingItems
+      raw_items: orderLevelMissingItems,
     });
     setCurrentMissingItems(orderLevelMissingItems);
     setCurrentSupplierName('Uncovered Items');
@@ -343,7 +343,7 @@ const SuppliersView = ({
                       alignItems: 'center',
                       cursor: !isLoadingResponses ? 'pointer' : 'default',
                       '&:hover': !isLoadingResponses ? {
-                        textDecoration: 'underline'
+                        textDecoration: 'underline',
                       } : {},
                       bgcolor: isLoadingResponses ? 'grey.200' : 'warning.light',
                       px: 2,
@@ -365,7 +365,7 @@ const SuppliersView = ({
                           component="span" 
                           sx={{ 
                             color: 'warning.dark',
-                            fontWeight: 'bold'
+                            fontWeight: 'bold',
                           }}
                         >
                           {coveredItems} of {totalInquiryItems} items covered
@@ -425,7 +425,7 @@ const SuppliersView = ({
                       bgcolor: 'warning.light',
                       '&:hover': {
                         bgcolor: 'warning.main',
-                      }
+                      },
                     }}
                   >
                     {missingCount} missing items
@@ -456,7 +456,7 @@ const SuppliersView = ({
                           displayPrice,
                           parseFloat(item.ImportMarkup),
                           parseFloat(item.RetailPrice),
-                          eurToIls
+                          eurToIls,
                         );
 
                         return (
@@ -464,7 +464,7 @@ const SuppliersView = ({
                             key={item.ItemID}
                             sx={{
                               backgroundColor: '#4caf5066',
-                              transition: 'background-color 0.2s'
+                              transition: 'background-color 0.2s',
                             }}
                           >
                             <TableCell>

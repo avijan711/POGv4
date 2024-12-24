@@ -6,7 +6,7 @@ import {
   TableHead,
   TableRow,
   Typography,
-  Box
+  Box,
 } from '@mui/material';
 import { formatIlsPrice, formatPercentage } from '../../utils/priceUtils';
 
@@ -59,7 +59,7 @@ function PriceHistoryPanel({ priceHistory }) {
               align="right"
               sx={{ 
                 color: entry.change > 0 ? 'success.main' : 
-                       entry.change < 0 ? 'error.main' : 'text.primary'
+                  entry.change < 0 ? 'error.main' : 'text.primary',
               }}
             >
               {entry.change !== null ? formatPercentage(entry.change) : '-'}

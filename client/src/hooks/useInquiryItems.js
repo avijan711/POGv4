@@ -28,7 +28,7 @@ export const useInquiryItems = (inquiryId) => {
           response && 
           typeof response === 'object' && 
           'supplier_name' in response && 
-          'price_quoted' in response
+          'price_quoted' in response,
         )
         .map(response => ({
           supplier_id: response.supplier_id,
@@ -38,7 +38,7 @@ export const useInquiryItems = (inquiryId) => {
           status: response.status || 'unknown',
           is_promotion: Boolean(response.is_promotion),
           promotion_name: response.promotion_name || '',
-          notes: response.notes || ''
+          notes: response.notes || '',
         }));
     } catch (e) {
       console.error('Error processing supplier responses:', e);
@@ -76,7 +76,7 @@ export const useInquiryItems = (inquiryId) => {
           console.error('Error parsing inquiry data:', e);
           inquiryData = {
             status: 'New',
-            date: new Date().toISOString()
+            date: new Date().toISOString(),
           };
         }
       }
@@ -148,13 +148,13 @@ export const useInquiryItems = (inquiryId) => {
         const has_reference_change = Boolean(
           item.new_reference_id || 
           (reference_change && reference_change.new_reference_id) ||
-          (item.has_reference_change && item.has_reference_change !== '0')
+          (item.has_reference_change && item.has_reference_change !== '0'),
         );
 
         // Determine if item is referenced by others
         const is_referenced_by = Boolean(
           referencing_items.length > 0 ||
-          (item.is_referenced_by && item.is_referenced_by !== '0')
+          (item.is_referenced_by && item.is_referenced_by !== '0'),
         );
 
         // Determine if item is a duplicate
@@ -181,7 +181,7 @@ export const useInquiryItems = (inquiryId) => {
           requested_qty: item.requested_qty || 0,
           reference_change: reference_change ? {
             ...reference_change,
-            source: reference_change.source || (reference_change.changed_by_user ? 'user' : 'supplier')
+            source: reference_change.source || (reference_change.changed_by_user ? 'user' : 'supplier'),
           } : null,
           has_reference_change,
           is_referenced_by,
@@ -199,13 +199,13 @@ export const useInquiryItems = (inquiryId) => {
           promotion_start_date,
           promotion_end_date,
           // Add supplier responses
-          supplier_responses
+          supplier_responses,
         };
       }).filter(Boolean); // Remove any null items
 
       // Sort by Excel row index by default
       const sortedItems = [...itemsWithDetails].sort((a, b) => 
-        (a.excel_row_index || 0) - (b.excel_row_index || 0)
+        (a.excel_row_index || 0) - (b.excel_row_index || 0),
       );
 
       if (sortedItems && sortedItems.length > 0) {
@@ -240,7 +240,7 @@ export const useInquiryItems = (inquiryId) => {
     try {
       dataDebug.log('Updating quantity:', { inquiryItemId, newQty });
       await axios.put(`${API_BASE_URL}/api/inquiries/inquiry-items/${inquiryItemId}/quantity`, {
-        requested_qty: newQty
+        requested_qty: newQty,
       });
       dataDebug.log('Quantity update successful');
       await fetchItems();
@@ -295,6 +295,6 @@ export const useInquiryItems = (inquiryId) => {
     handleUpdateQuantity,
     handleDeleteItem,
     handleAddItem,
-    setError
+    setError,
   };
 };

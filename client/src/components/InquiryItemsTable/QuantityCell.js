@@ -1,8 +1,16 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Box, Typography, Paper, TextField, Chip } from '@mui/material';
 import { Edit as EditIcon, Save as SaveIcon, Close as CloseIcon } from '@mui/icons-material';
 
 function QuantityCell({ item, editingQty, editedQty, onEditQty, onQtyChange, onQtyKeyPress, onSaveQty, onCancelEdit }) {
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (editingQty === item.inquiry_item_id && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [editingQty, item.inquiry_item_id]);
+
   if (editingQty === item.inquiry_item_id) {
     return (
       <Paper 
@@ -14,7 +22,7 @@ function QuantityCell({ item, editingQty, editedQty, onEditQty, onQtyChange, onQ
           flexDirection: 'column',
           gap: 1,
           minWidth: '180px',
-          boxShadow: 1
+          boxShadow: 1,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -23,9 +31,9 @@ function QuantityCell({ item, editingQty, editedQty, onEditQty, onQtyChange, onQ
           value={editedQty ?? (item.requested_qty || 0)}
           onChange={(e) => onQtyChange(item, e.target.value)}
           onKeyDown={(e) => onQtyKeyPress(e, item)}
-          autoFocus
+          inputRef={inputRef}
           variant="outlined"
-          inputProps={{ min: "0" }}
+          inputProps={{ min: '0' }}
           sx={{
             '& .MuiOutlinedInput-root': {
               fontSize: '1.25rem',
@@ -33,15 +41,15 @@ function QuantityCell({ item, editingQty, editedQty, onEditQty, onQtyChange, onQ
               backgroundColor: 'white',
               '& input': {
                 textAlign: 'right',
-                padding: '8px 12px'
+                padding: '8px 12px',
               },
               '&.Mui-focused': {
                 '& .MuiOutlinedInput-notchedOutline': {
                   borderColor: 'primary.main',
-                  borderWidth: 2
-                }
-              }
-            }
+                  borderWidth: 2,
+                },
+              },
+            },
           }}
         />
         <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
@@ -54,8 +62,8 @@ function QuantityCell({ item, editingQty, editedQty, onEditQty, onQtyChange, onQ
               fontWeight: 'bold',
               '&:hover': {
                 backgroundColor: 'primary.dark',
-                boxShadow: 1
-              }
+                boxShadow: 1,
+              },
             }}
           />
           <Chip
@@ -67,8 +75,8 @@ function QuantityCell({ item, editingQty, editedQty, onEditQty, onQtyChange, onQ
               fontWeight: 'bold',
               '&:hover': {
                 backgroundColor: 'error.dark',
-                boxShadow: 1
-              }
+                boxShadow: 1,
+              },
             }}
           />
         </Box>
@@ -93,9 +101,9 @@ function QuantityCell({ item, editingQty, editedQty, onEditQty, onQtyChange, onQ
           backgroundColor: 'action.hover',
           '& .edit-icon': {
             opacity: 1,
-            color: 'primary.main'
-          }
-        }
+            color: 'primary.main',
+          },
+        },
       }}
     >
       <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
@@ -107,7 +115,7 @@ function QuantityCell({ item, editingQty, editedQty, onEditQty, onQtyChange, onQ
           fontSize: '1.1rem',
           opacity: 0,
           transition: 'all 0.2s ease',
-          color: 'text.secondary'
+          color: 'text.secondary',
         }} 
       />
     </Box>

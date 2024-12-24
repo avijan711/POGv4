@@ -31,7 +31,7 @@ function InventoryList() {
     loadItemDetails,
     setSelectedItem,
     clearSelection,
-    setError
+    setError,
   } = useInventoryData();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,7 +66,7 @@ function InventoryList() {
     console.log('Saving item:', {
       itemId: itemData.get('item_id'),
       referenceId: itemData.get('reference_id'),
-      hebrewDescription: itemData.get('hebrew_description')
+      hebrewDescription: itemData.get('hebrew_description'),
     });
 
     const success = await saveItem(itemData, dialogMode);
@@ -127,12 +127,12 @@ function InventoryList() {
     try {
       const response = await axiosInstance.get('/api/items/export', {
         params: { headers: selectedHeaders.join(',') },
-        responseType: 'blob'
+        responseType: 'blob',
       });
 
       // Create a blob from the response data
       const blob = new Blob([response.data], { 
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
       });
       
       // Create a URL for the blob
@@ -167,7 +167,7 @@ function InventoryList() {
   const filteredItems = inventoryUtils.filterItems(items, searchTerm);
   const displayedItems = filteredItems.slice(
     page * rowsPerPage,
-    page * rowsPerPage + rowsPerPage
+    page * rowsPerPage + rowsPerPage,
   );
 
   if (loading) {
@@ -184,7 +184,7 @@ function InventoryList() {
         height: 'calc(100vh - 64px)',
         display: 'flex',
         flexDirection: 'column',
-        p: 2
+        p: 2,
       }}
     >
       {/* Header */}

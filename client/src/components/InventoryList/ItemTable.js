@@ -16,7 +16,7 @@ function ItemTable({
   getChangeSource, 
   onRowClick, 
   onEditItem, 
-  onDeleteItem 
+  onDeleteItem, 
 }) {
   const findReferencingItems = (itemId) => {
     // Find items that reference this item as their new reference
@@ -62,7 +62,7 @@ function ItemTable({
       reference_change: isSelfReferenced ? null : referenceChange, // Remove self-references
       has_reference_change: !isSelfReferenced && referenceChange !== null,
       is_referenced_by: isNewReference,
-      referencing_items: referencingItems
+      referencing_items: referencingItems,
     };
   };
 
@@ -82,7 +82,7 @@ function ItemTable({
           top: 0,
           backgroundColor: '#fff',
           zIndex: 1,
-        }
+        },
       }}
     >
       <Table 
@@ -91,7 +91,7 @@ function ItemTable({
           minWidth: 1200,
           '& td, & th': {
             borderBottom: '1px solid rgba(224, 224, 224, 1)',
-          }
+          },
         }}
         aria-label="inventory table"
       >

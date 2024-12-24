@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Box,
   Typography,
-  LinearProgress
+  LinearProgress,
 } from '@mui/material';
 import { Assignment as AssignmentIcon } from '@mui/icons-material';
 
@@ -14,14 +14,14 @@ const ResponseHeader = ({ responsesCount }) => {
     <Box sx={{ 
       mb: 3,
       pb: 2,
-      borderBottom: '1px solid rgba(0, 0, 0, 0.12)'
+      borderBottom: '1px solid rgba(0, 0, 0, 0.12)',
     }}>
       {/* Header section */}
       <Box sx={{ 
         display: 'flex', 
         alignItems: 'center',
         justifyContent: 'space-between',
-        mb: 1
+        mb: 1,
       }}>
         <Box sx={{ 
           display: 'flex', 
@@ -45,7 +45,7 @@ const ResponseHeader = ({ responsesCount }) => {
       {/* Progress bar */}
       <Box sx={{ 
         width: '100%',
-        mt: 1
+        mt: 1,
       }}>
         <LinearProgress 
           variant="determinate" 
@@ -57,8 +57,8 @@ const ResponseHeader = ({ responsesCount }) => {
             '& .MuiLinearProgress-bar': {
               borderRadius: 4,
               backgroundColor: 'success.main',
-              transition: 'transform 0.4s ease'
-            }
+              transition: 'transform 0.4s ease',
+            },
           }}
         />
       </Box>

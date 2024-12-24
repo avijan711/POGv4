@@ -17,7 +17,7 @@ export const useSupplierManagement = (prices) => {
         supplierName: item.SupplierName,
         isPromotion: item.IsPromotion || false,
         promotionName: item.PromotionName,
-        promotionGroupId: item.PromotionGroupID
+        promotionGroupId: item.PromotionGroupID,
       };
     }
     return acc;
@@ -26,7 +26,7 @@ export const useSupplierManagement = (prices) => {
   const supplierGroups = Object.entries(allSuppliers).reduce((groups, [key, supplier]) => {
     groups[key] = {
       ...supplier,
-      items: []
+      items: [],
     };
 
     // Add all items to this supplier group
@@ -46,7 +46,7 @@ export const useSupplierManagement = (prices) => {
           IsPromotion: supplier.isPromotion,
           PromotionName: supplier.promotionName,
           PromotionGroupID: supplier.promotionGroupId,
-          PriceQuoted: null
+          PriceQuoted: null,
         });
       }
     });
@@ -59,7 +59,7 @@ export const useSupplierManagement = (prices) => {
     if (prices?.length > 0) {
       const initial = Object.keys(supplierGroups).reduce((acc, key) => ({
         ...acc,
-        [key]: true
+        [key]: true,
       }), {});
       setSelectedSuppliers(initial);
     }
@@ -68,7 +68,7 @@ export const useSupplierManagement = (prices) => {
   const handleSupplierToggle = (key) => {
     setSelectedSuppliers(prev => ({
       ...prev,
-      [key]: !prev[key]
+      [key]: !prev[key],
     }));
   };
 
@@ -79,8 +79,8 @@ export const useSupplierManagement = (prices) => {
         item.ItemID,
         supplierGroups,
         selectedSuppliers,
-        temporaryPrices
-      )
+        temporaryPrices,
+      ),
     );
 
     const totalValue = winningItems.reduce((sum, item) => {
@@ -93,7 +93,7 @@ export const useSupplierManagement = (prices) => {
       totalItems: group.items.length,
       winningItems: winningItems.length,
       totalValue,
-      winningItemsList: winningItems
+      winningItemsList: winningItems,
     };
   };
 
@@ -101,6 +101,6 @@ export const useSupplierManagement = (prices) => {
     selectedSuppliers,
     supplierGroups,
     handleSupplierToggle,
-    calculateSupplierSummary
+    calculateSupplierSummary,
   };
 };

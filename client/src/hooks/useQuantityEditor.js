@@ -97,6 +97,6 @@ export function useQuantityEditor(initialValue, isEditing, onUpdate) {
     handleQtyUpdate,
     handleQtyCancel,
     handleQtyBlur,
-    handleQtyKeyPress
+    handleQtyKeyPress,
   };
 }

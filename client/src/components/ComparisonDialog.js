@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import PropTypes from 'prop-types';
 import {
   Dialog,
   Box,
@@ -36,118 +37,70 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
   const [selectedSuppliers, setSelectedSuppliers] = useState({});
   const [editingQty, setEditingQty] = useState(null);
   const [quantities, setQuantities] = useState({});
-  const [itemIds, setItemIds] = useState({});
   const [viewMode, setViewMode] = useState('items');
   const [editingPrice, setEditingPrice] = useState(null);
   const [temporaryPrices, setTemporaryPrices] = useState({});
 
-  console.log('=== ComparisonDialog Initial Data ===');
-  console.log('Total prices:', prices?.length);
-  console.log('Sample price:', prices?.[0]);
-  console.log('Unique suppliers:', new Set(prices?.map(p => p.SupplierName)));
-  console.log('Promotion items:', prices?.filter(p => p.IsPromotion)?.length);
-
   // First, get all unique suppliers and their types
-  const allSuppliers = prices?.reduce((acc, item) => {
-    const key = item.IsPromotion 
-      ? `${item.SupplierID}-${item.PromotionGroupID}`
-      : `${item.SupplierID}-regular`;
+  const allSuppliers = useMemo(() => {
+    return prices?.reduce((acc, item) => {
+      const key = item.IsPromotion
+        ? `${item.SupplierID}-${item.PromotionGroupID}`
+        : `${item.SupplierID}-regular`;
 
-    if (!acc[key]) {
-      acc[key] = {
-        supplierId: item.SupplierID,
-        supplierName: item.SupplierName,
-        isPromotion: item.IsPromotion || false,
-        promotionName: item.PromotionName,
-        promotionGroupId: item.PromotionGroupID
-      };
-    }
-    return acc;
-  }, {});
-
-  console.log('=== All Suppliers ===', allSuppliers);
+      if (!acc[key]) {
+        acc[key] = {
+          supplierId: item.SupplierID,
+          supplierName: item.SupplierName,
+          isPromotion: item.IsPromotion || false,
+          promotionName: item.PromotionName,
+          promotionGroupId: item.PromotionGroupID,
+        };
+      }
+      return acc;
+    }, {});
+  }, [prices]);
 
   // Then group items by supplier
-  const supplierGroups = prices?.reduce((groups, item) => {
-    const key = item.IsPromotion 
-      ? `${item.SupplierID}-${item.PromotionGroupID}`
-      : `${item.SupplierID}-regular`;
+  const supplierGroups = useMemo(() => {
+    return prices?.reduce((groups, item) => {
+      const key = item.IsPromotion
+        ? `${item.SupplierID}-${item.PromotionGroupID}`
+        : `${item.SupplierID}-regular`;
 
-    console.log('Processing item:', {
-      key,
-      itemId: item.ItemID,
-      supplier: item.SupplierName,
-      isPromotion: item.IsPromotion,
-      promotionName: item.PromotionName,
-      price: item.PriceQuoted,
-      bestPrice: item.BestPrice
-    });
-
-    if (!groups[key]) {
-      console.log('Creating new supplier group:', {
-        key,
-        supplier: item.SupplierName,
-        isPromotion: item.IsPromotion,
-        promotionName: item.PromotionName
-      });
-      groups[key] = {
-        ...allSuppliers[key],
-        items: []
-      };
-    }
-    groups[key].items.push(item);
-    return groups;
-  }, {}) || {};
-
-  console.log('=== Supplier Groups Analysis ===');
-  Object.entries(supplierGroups).forEach(([key, group]) => {
-    console.log('Supplier group:', {
-      key,
-      supplier: group.supplierName,
-      isPromotion: group.isPromotion,
-      promotionName: group.promotionName,
-      itemCount: group.items.length,
-      samplePrices: group.items.slice(0, 3).map(i => ({
-        itemId: i.ItemID,
-        price: i.PriceQuoted,
-        bestPrice: i.BestPrice
-      }))
-    });
-  });
+      if (!groups[key]) {
+        groups[key] = {
+          ...allSuppliers[key],
+          items: [],
+        };
+      }
+      groups[key].items.push(item);
+      return groups;
+    }, {}) || {};
+  }, [prices, allSuppliers]);
 
   useEffect(() => {
     // Initialize selected suppliers
-    console.log('Initializing selected suppliers');
     const initial = Object.keys(supplierGroups).reduce((acc, key) => {
-      console.log('Setting initial state for:', {
-        key,
-        supplier: supplierGroups[key].supplierName,
-        isPromotion: supplierGroups[key].isPromotion
-      });
       return {
         ...acc,
-        [key]: true
+        [key]: true,
       };
     }, {});
     setSelectedSuppliers(initial);
-  }, [prices]);
+  }, [prices, supplierGroups]);
 
   const handleSupplierToggle = (key) => {
-    console.log('Toggling supplier:', {
-      key,
-      supplier: supplierGroups[key].supplierName,
-      currentState: selectedSuppliers[key]
-    });
     setSelectedSuppliers(prev => ({
       ...prev,
-      [key]: !prev[key]
+      [key]: !prev[key],
     }));
   };
 
   const handleQuantityChange = (itemId, value) => {
     setQuantities(prev => ({
       ...prev,
-      [itemId]: value
+      [itemId]: value,
     }));
   };
 
@@ -155,13 +108,13 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
     const priceKey = `${itemId}-${supplierKey}`;
     setTemporaryPrices(prev => ({
       ...prev,
-      [priceKey]: parseFloat(value) || 0
+      [priceKey]: parseFloat(value) || 0,
     }));
   };
 
   const getDisplayPrice = (itemId, supplierKey, originalPrice) => {
     const priceKey = `${itemId}-${supplierKey}`;
-    return temporaryPrices.hasOwnProperty(priceKey) 
+    return Object.hasOwn(temporaryPrices, priceKey)
       ? temporaryPrices[priceKey] 
       : originalPrice;
   };
@@ -198,7 +151,7 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
 
   const calculateSupplierSummary = (group) => {
     const winningItems = group.items.filter(item => 
-      isWinningPrice(getDisplayPrice(item.ItemID, group.supplierId, item.PriceQuoted), item.ItemID)
+      isWinningPrice(getDisplayPrice(item.ItemID, group.supplierId, item.PriceQuoted), item.ItemID),
     );
     const totalValue = winningItems.reduce((sum, item) => {
       const qty = quantities[item.ItemID] || item.RequestedQty;
@@ -210,12 +163,11 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
       totalItems: group.items.length,
       winningItems: winningItems.length,
       totalValue,
-      winningItemsList: winningItems
+      winningItemsList: winningItems,
     };
   };
 
   const uniqueItems = Array.from(new Set(prices?.map(item => item.ItemID))) || [];
-  console.log('=== Unique Items ===', uniqueItems);
 
   const renderItemsView = () => (
     <TableContainer component={Paper}>
@@ -253,7 +205,7 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
                       value={quantities[itemId] || firstItem?.RequestedQty}
                       onChange={(e) => handleQuantityChange(itemId, e.target.value)}
                       onBlur={() => setEditingQty(null)}
-                      autoFocus
+                      // Focus will be managed by the parent component
                     />
                   ) : (
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
@@ -281,7 +233,7 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
                         align="right"
                         sx={{
                           backgroundColor: isWinner ? '#4caf5066' : 'inherit',
-                          transition: 'background-color 0.2s'
+                          transition: 'background-color 0.2s',
                         }}
                       >
                         {supplierItem ? (
@@ -293,8 +245,8 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
                                 value={displayPrice || ''}
                                 onChange={(e) => handlePriceChange(itemId, key, e.target.value)}
                                 onBlur={() => setEditingPrice(null)}
-                                autoFocus
-                                inputProps={{ step: "0.01" }}
+                                // Focus will be managed by the parent component
+                                inputProps={{ step: '0.01' }}
                                 sx={{ width: '100px' }}
                               />
                             ) : (
@@ -384,7 +336,7 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
                           key={item.ItemID}
                           sx={{
                             backgroundColor: '#4caf5066',
-                            transition: 'background-color 0.2s'
+                            transition: 'background-color 0.2s',
                           }}
                         >
                           <TableCell>{item.ItemID}</TableCell>
@@ -466,8 +418,8 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
               <Chip
                 key={key}
                 label={group.isPromotion ? `${group.supplierName} (${group.promotionName})` : group.supplierName}
-                color={group.isPromotion ? "secondary" : "primary"}
-                variant={selectedSuppliers[key] ? "filled" : "outlined"}
+                color={group.isPromotion ? 'secondary' : 'primary'}
+                variant={selectedSuppliers[key] ? 'filled' : 'outlined'}
                 onClick={() => handleSupplierToggle(key)}
                 onDelete={() => handleSupplierToggle(key)}
                 deleteIcon={selectedSuppliers[key] ? <DeleteIcon /> : <AddIcon />}
@@ -482,5 +434,24 @@ function ComparisonDialog({ open, onClose, prices, onCreateOrders, loading }) {
     </Dialog>
   );
 }
+
+ComparisonDialog.propTypes = {
+  open: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  prices: PropTypes.arrayOf(PropTypes.shape({
+    ItemID: PropTypes.string.isRequired,
+    SupplierID: PropTypes.string.isRequired,
+    SupplierName: PropTypes.string.isRequired,
+    HebrewDescription: PropTypes.string,
+    PriceQuoted: PropTypes.number,
+    RequestedQty: PropTypes.number,
+    IsPromotion: PropTypes.bool,
+    PromotionName: PropTypes.string,
+    PromotionGroupID: PropTypes.string,
+    BestPrice: PropTypes.number,
+  })),
+  onCreateOrders: PropTypes.func.isRequired,
+  loading: PropTypes.bool,
+};
 
 export default ComparisonDialog;

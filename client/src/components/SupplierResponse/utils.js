@@ -11,7 +11,7 @@ export const processResponses = (responses) => {
       itemType: item.referenceChange ? 'reference' : 'response',
       itemKey: item.referenceChange ? `ref-${item.itemId}-${item.referenceChange.newReferenceID}` : `resp-${item.itemId}`,
       changeId: item.referenceChange?.changeId,
-      newReferenceID: item.referenceChange?.newReferenceID
+      newReferenceID: item.referenceChange?.newReferenceID,
     }));
 
     const hasPromotionItems = responseItems.some(item => item.debugIsPromotion === 1);
@@ -20,8 +20,8 @@ export const processResponses = (responses) => {
     const missingItems = Array.from(
       new Map(
         JSON.parse(response.missingItems || '[]')
-          .map(item => [item.itemId, item])
-      ).values()
+          .map(item => [item.itemId, item]),
+      ).values(),
     );
 
     return {
@@ -32,7 +32,7 @@ export const processResponses = (responses) => {
       replacements: JSON.parse(response.replacements || '[]'),
       missingItems,
       missingItemsCount: missingItems.length,
-      isPromotion: hasPromotionItems
+      isPromotion: hasPromotionItems,
     };
   });
 };

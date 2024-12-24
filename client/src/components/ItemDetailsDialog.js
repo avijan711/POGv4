@@ -9,7 +9,7 @@ import {
   CircularProgress,
   Chip,
   Alert,
-  Snackbar
+  Snackbar,
 } from '@mui/material';
 import { Info as InfoIcon } from '@mui/icons-material';
 import axios from 'axios';
@@ -45,7 +45,7 @@ export default React.memo(ItemDetailsDialog, (prevProps, nextProps) => {
   uiDebug.log('ItemDetailsDialog shouldUpdate:', { 
     shouldUpdate,
     prevProps,
-    nextProps
+    nextProps,
   });
   
   // Return true if props are equal (no update needed)

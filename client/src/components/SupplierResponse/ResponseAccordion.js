@@ -29,7 +29,7 @@ const ResponseAccordion = ({
     onShowStats(
       'Extra Items',
       response.items.filter(item => item.itemType === 'promotion'),
-      'extra'
+      'extra',
     );
   };
 
@@ -39,7 +39,7 @@ const ResponseAccordion = ({
     onShowStats(
       'Missing Items',
       missingItems,
-      'missing'
+      'missing',
     );
   };
 
@@ -49,7 +49,7 @@ const ResponseAccordion = ({
     onShowStats(
       'Replacement Items',
       replacements,
-      'replacements'
+      'replacements',
     );
   };
 
@@ -64,7 +64,7 @@ const ResponseAccordion = ({
         '&:before': {
           display: 'none',
         },
-        backgroundColor: '#fff'
+        backgroundColor: '#fff',
       }}
     >
       <AccordionSummary 
@@ -80,7 +80,7 @@ const ResponseAccordion = ({
           alignItems: 'center', 
           justifyContent: 'space-between',
           width: '100%',
-          pr: 2
+          pr: 2,
         }}>
           <Box>
             <Typography variant="subtitle1">

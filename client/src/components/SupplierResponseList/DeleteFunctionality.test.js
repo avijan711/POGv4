@@ -9,13 +9,13 @@ describe('SupplierResponseList Delete Functionality', () => {
       supplier: {
         name: 'Test Supplier',
         contact_name: 'John Doe',
-        email: 'john@test.com'
+        email: 'john@test.com',
       },
       status: 'pending',
       total_items: 10,
       covered_items: 7,
-      missing_items: 3
-    }
+      missing_items: 3,
+    },
   ];
 
   it('calls onDelete when delete button is clicked', () => {
@@ -24,7 +24,7 @@ describe('SupplierResponseList Delete Functionality', () => {
       <SupplierResponseList
         responses={mockResponses}
         onDelete={mockDelete}
-      />
+      />,
     );
     
     const deleteButton = screen.getByRole('button', { name: /delete/i });
@@ -39,7 +39,7 @@ describe('SupplierResponseList Delete Functionality', () => {
         responses={mockResponses}
         onDelete={() => {}}
         disabled={true}
-      />
+      />,
     );
     
     const deleteButton = screen.getByRole('button', { name: /delete/i });
@@ -52,7 +52,7 @@ describe('SupplierResponseList Delete Functionality', () => {
         responses={mockResponses}
         onDelete={() => {}}
         disabled={false}
-      />
+      />,
     );
     
     const deleteButton = screen.getByRole('button', { name: /delete/i });
@@ -65,7 +65,7 @@ describe('SupplierResponseList Delete Functionality', () => {
         responses={mockResponses}
         onDelete={() => {}}
         disabled={true}
-      />
+      />,
     );
     
     const deleteButton = screen.getByRole('button', { name: /delete/i });

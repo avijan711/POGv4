@@ -18,8 +18,8 @@ export const usePriceHistory = () => {
         supplier_id: supplierId,
         ...(dateRange && {
           start_date: dateRange.start,
-          end_date: dateRange.end
-        })
+          end_date: dateRange.end,
+        }),
       };
 
       const response = await axios.get(url, { params });
@@ -41,7 +41,7 @@ export const usePriceHistory = () => {
       setError(null);
 
       const response = await axios.get(`${API_BASE_URL}/items/${itemId}/current-price`, {
-        params: { supplier_id: supplierId }
+        params: { supplier_id: supplierId },
       });
       return response.data;
     } catch (err) {
@@ -59,7 +59,7 @@ export const usePriceHistory = () => {
     loading,
     error,
     getPriceHistory,
-    getCurrentPrice
+    getCurrentPrice,
   };
 };
 

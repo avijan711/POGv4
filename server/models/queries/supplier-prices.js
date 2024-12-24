@@ -152,6 +152,6 @@ WHERE
 `;
 
 module.exports = {
-    getSupplierPricesQuery,
-    getSupplierPricesCountQuery
+  getSupplierPricesQuery,
+  getSupplierPricesCountQuery,
 };

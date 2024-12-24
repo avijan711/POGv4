@@ -75,7 +75,7 @@ function InquiryItemsTable({
         if (itemToDelete.reference_change?.source === 'inquiry_item') {
           await axios.put(`${API_BASE_URL}/api/inquiries/inquiry-items/${itemToDelete.inquiry_item_id}/reference`, {
             new_reference_id: null,
-            reference_notes: null
+            reference_notes: null,
           });
         } else if (itemToDelete.reference_change?.change_id) {
           await axios.delete(`${API_BASE_URL}/api/supplier-responses/reference/${itemToDelete.reference_change.change_id}`);
@@ -106,7 +106,7 @@ function InquiryItemsTable({
         price && 
         typeof price === 'object' && 
         'supplier_name' in price && 
-        'price_quoted' in price
+        'price_quoted' in price,
       );
     } catch (e) {
       console.error('Error parsing supplier prices:', e);

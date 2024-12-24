@@ -2,42 +2,42 @@ const BaseModel = require('./BaseModel');
 const debug = require('../utils/debug');
 
 class PromotionModel extends BaseModel {
-    constructor(db) {
-        super(db);
-    }
+  constructor(db) {
+    super(db);
+  }
 
-    async createPromotion({ name, supplier_id, start_date, end_date }) {
-        const sql = `
+  async createPromotion({ name, supplier_id, start_date, end_date }) {
+    const sql = `
             INSERT INTO promotion (
                 name, supplier_id, start_date, end_date, is_active
             ) VALUES (?, ?, ?, ?, 1)
         `;
-        const result = await this.executeRun(sql, [
-            name,
-            supplier_id,
-            start_date,
-            end_date
-        ]);
-        return {
-            success: true,
-            promotionId: result.lastID,
-            message: 'Promotion created successfully'
-        };
-    }
+    const result = await this.executeRun(sql, [
+      name,
+      supplier_id,
+      start_date,
+      end_date,
+    ]);
+    return {
+      success: true,
+      promotionId: result.lastID,
+      message: 'Promotion created successfully',
+    };
+  }
 
-    async deletePromotion(promotionId) {
-        const sql = `
+  async deletePromotion(promotionId) {
+    const sql = `
             UPDATE promotion 
             SET is_active = 0 
             WHERE promotion_id = ?
         `;
-        const result = await this.executeRun(sql, [promotionId]);
-        return { deleted: result.changes > 0 };
-    }
+    const result = await this.executeRun(sql, [promotionId]);
+    return { deleted: result.changes > 0 };
+  }
 
-    async getActivePromotions(date = null) {
-        const currentDate = date || new Date().toISOString().split('T')[0];
-        const sql = `
+  async getActivePromotions(date = null) {
+    const currentDate = date || new Date().toISOString().split('T')[0];
+    const sql = `
             SELECT 
                 p.*,
                 s.name as supplier_name,
@@ -51,12 +51,12 @@ class PromotionModel extends BaseModel {
             GROUP BY p.promotion_id
             ORDER BY p.created_at DESC
         `;
-        return await this.executeQuery(sql, [currentDate, currentDate]);
-    }
+    return await this.executeQuery(sql, [currentDate, currentDate]);
+  }
 
-    async getPromotionPrice(itemId, date = null) {
-        const currentDate = date || new Date().toISOString().split('T')[0];
-        const sql = `
+  async getPromotionPrice(itemId, date = null) {
+    const currentDate = date || new Date().toISOString().split('T')[0];
+    const sql = `
             SELECT 
                 pi.promotion_price as price,
                 p.promotion_id,
@@ -73,11 +73,11 @@ class PromotionModel extends BaseModel {
             ORDER BY p.created_at DESC
             LIMIT 1
         `;
-        return await this.executeQuerySingle(sql, [itemId, currentDate, currentDate]);
-    }
+    return await this.executeQuerySingle(sql, [itemId, currentDate, currentDate]);
+  }
 
-    async getPromotionItems(promotionId) {
-        const sql = `
+  async getPromotionItems(promotionId) {
+    const sql = `
             SELECT 
                 pi.*,
                 i.hebrew_description,
@@ -88,11 +88,11 @@ class PromotionModel extends BaseModel {
             WHERE pi.promotion_id = ?
             ORDER BY pi.item_id
         `;
-        return await this.executeQuery(sql, [promotionId]);
-    }
+    return await this.executeQuery(sql, [promotionId]);
+  }
 
-    async getSupplierPromotions(supplierId) {
-        const sql = `
+  async getSupplierPromotions(supplierId) {
+    const sql = `
             SELECT 
                 p.*,
                 COUNT(pi.item_id) as item_count
@@ -103,8 +103,8 @@ class PromotionModel extends BaseModel {
             GROUP BY p.promotion_id
             ORDER BY p.created_at DESC
         `;
-        return await this.executeQuery(sql, [supplierId]);
-    }
+    return await this.executeQuery(sql, [supplierId]);
+  }
 }
 
 module.exports = PromotionModel;

@@ -15,11 +15,10 @@ import { useSupplierPrices } from '../hooks/useSupplierPrices';
 import { 
   isWinningPrice, 
   getDisplayPrice,
-  calculateDiscount 
+  calculateDiscount, 
 } from '../utils/priceUtils';
+import { EXCHANGE_RATE_KEY, DEFAULT_EXCHANGE_RATE } from '../constants';
 
-const EXCHANGE_RATE_KEY = 'eurToIls';
-const DEFAULT_RATE = 3.95;
 
 function ComparisonDetail() {
   const { id } = useParams();
@@ -40,7 +39,7 @@ function ComparisonDetail() {
   const {
     updatePrice,
     updating,
-    updateError
+    updateError,
   } = useSupplierPrices(selectedItemId);
   const [replacementsError, setReplacementsError] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -49,13 +48,13 @@ function ComparisonDetail() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Get exchange rate from settings
-  const eurToIls = getSettingValue(EXCHANGE_RATE_KEY, DEFAULT_RATE);
+  const eurToIls = getSettingValue(EXCHANGE_RATE_KEY, DEFAULT_EXCHANGE_RATE);
 
   const {
     selectedSuppliers,
     supplierGroups,
     handleSupplierToggle,
-    calculateSupplierSummary
+    calculateSupplierSummary,
   } = useSupplierManagement(prices);
 
   // Add supplier responses hook for missing items
@@ -72,12 +71,12 @@ function ComparisonDetail() {
       console.log('Found replacement data:', {
         itemId,
         replacement,
-        allReplacements: replacementItems
+        allReplacements: replacementItems,
       });
 
       // Check if this item is referenced by others
       const isReferencedBy = Object.entries(replacementItems).some(([originalId, rep]) => 
-        rep.newItemId === itemId
+        rep.newItemId === itemId,
       );
 
       // Get referencing items if any
@@ -91,8 +90,8 @@ function ComparisonDetail() {
             changeDate: rep.changeDate,
             notes: rep.description,
             originalDescription: rep.originalDescription,
-            newDescription: rep.newDescription
-          }
+            newDescription: rep.newDescription,
+          },
         }));
 
       // Debug log the reference data
@@ -100,7 +99,7 @@ function ComparisonDetail() {
         fromAPI: response.data.item?.referenceChange,
         fromReplacements: replacement,
         isReferencedBy,
-        referencingItems
+        referencingItems,
       });
       
       const itemData = {
@@ -124,11 +123,11 @@ function ComparisonDetail() {
             changeDate: replacement.changeDate,
             notes: replacement.description,
             originalDescription: replacement.originalDescription,
-            newDescription: replacement.newDescription
+            newDescription: replacement.newDescription,
           } : null),
           isReferencedBy: response.data.item?.isReferencedBy || isReferencedBy,
-          referencingItems: response.data.item?.referencingItems || referencingItems
-        }
+          referencingItems: response.data.item?.referencingItems || referencingItems,
+        },
       };
 
       console.log('Constructed item data:', itemData);
@@ -168,7 +167,7 @@ function ComparisonDetail() {
         ...item,
         ImportMarkup: Number(item.ImportMarkup) || 1.3,
         RetailPrice: Number(item.RetailPrice) || 0,
-        PriceQuoted: Number(item.PriceQuoted) || 0
+        PriceQuoted: Number(item.PriceQuoted) || 0,
       }));
 
       // Debug log the processed data with focus on promotions
@@ -184,8 +183,8 @@ function ComparisonDetail() {
           ImportMarkup: processedData[0].ImportMarkup,
           IsPromotion: processedData[0].IsPromotion,
           PromotionName: processedData[0].PromotionName,
-          PromotionGroupID: processedData[0].PromotionGroupID
-        } : null
+          PromotionGroupID: processedData[0].PromotionGroupID,
+        } : null,
       });
 
       setPrices(processedData);
@@ -209,7 +208,7 @@ function ComparisonDetail() {
               changeDate: replacement.changeDate,
               originalDescription: replacement.originalDescription,
               newDescription: replacement.newDescription,
-              inquiryDescription: replacement.inquiryDescription
+              inquiryDescription: replacement.inquiryDescription,
             };
           }
         });
@@ -218,7 +217,7 @@ function ComparisonDetail() {
         console.log('Final replacements map:', {
           count: Object.keys(replacementsMap).length,
           sample: Object.keys(replacementsMap).length > 0 ? 
-            replacementsMap[Object.keys(replacementsMap)[0]] : null
+            replacementsMap[Object.keys(replacementsMap)[0]] : null,
         });
         setReplacementItems(replacementsMap);
       } catch (err) {
@@ -255,7 +254,7 @@ function ComparisonDetail() {
   const handleQuantityChange = (itemId, value) => {
     setQuantities(prev => ({
       ...prev,
-      [itemId]: value
+      [itemId]: value,
     }));
   };
 
@@ -275,7 +274,7 @@ function ComparisonDetail() {
     // First update local state for immediate UI feedback
     setTemporaryPrices(prev => ({
       ...prev,
-      [priceKey]: newPrice
+      [priceKey]: newPrice,
     }));
 
     try {
@@ -285,7 +284,7 @@ function ComparisonDetail() {
         // If update failed, revert the temporary price
         setTemporaryPrices(prev => ({
           ...prev,
-          [priceKey]: prev[priceKey] || 0
+          [priceKey]: prev[priceKey] || 0,
         }));
         setError('Failed to update price. Please try again.');
       }
@@ -295,7 +294,7 @@ function ComparisonDetail() {
       // Revert the temporary price on error
       setTemporaryPrices(prev => ({
         ...prev,
-        [priceKey]: prev[priceKey] || 0
+        [priceKey]: prev[priceKey] || 0,
       }));
     }
   };
@@ -327,7 +326,7 @@ function ComparisonDetail() {
             displayPrice,
             Number(supplierItem.ImportMarkup),
             Number(supplierItem.RetailPrice),
-            eurToIls
+            eurToIls,
           );
           if (discount !== null) {
             maxDiscount = Math.max(maxDiscount, discount);
@@ -342,7 +341,7 @@ function ComparisonDetail() {
       await axios.post(`${API_BASE_URL}/api/orders/from-inquiry/${id}`, {
         selectedSuppliers,
         quantities,
-        prices: temporaryPrices
+        prices: temporaryPrices,
       });
       navigate('/orders');
     } catch (err) {
@@ -360,7 +359,7 @@ function ComparisonDetail() {
       count: prices.length,
       regularPrices: prices.filter(p => !p.IsPromotion).length,
       promotionalPrices: prices.filter(p => p.IsPromotion).length,
-      promotions: [...new Set(prices.filter(p => p.IsPromotion).map(p => p.PromotionName))]
+      promotions: [...new Set(prices.filter(p => p.IsPromotion).map(p => p.PromotionName))],
     },
     supplierGroups: Object.entries(supplierGroups).reduce((acc, [key, group]) => ({
       ...acc,
@@ -369,18 +368,18 @@ function ComparisonDetail() {
         supplierName: group.supplierName,
         isPromotion: group.isPromotion,
         promotionName: group.promotionName,
-        itemCount: group.items.length
-      }
+        itemCount: group.items.length,
+      },
     }), {}),
     replacementItems: {
       count: Object.keys(replacementItems).length,
       sample: Object.keys(replacementItems).length > 0 ? 
-        replacementItems[Object.keys(replacementItems)[0]] : null
+        replacementItems[Object.keys(replacementItems)[0]] : null,
     },
     filteredItems: {
       count: filteredItems.length,
-      sample: filteredItems[0] || null
-    }
+      sample: filteredItems[0] || null,
+    },
   });
 
   if (loading) {

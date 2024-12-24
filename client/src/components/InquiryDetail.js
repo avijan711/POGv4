@@ -33,7 +33,7 @@ function InquiryDetail() {
     handleUpdateQuantity,
     handleDeleteItem,
     handleAddItem,
-    setError
+    setError,
   } = useInquiryItems(inquiryId || '');
 
   // Ensure items is always an array before passing to useInquiryFilters
@@ -48,7 +48,7 @@ function InquiryDetail() {
     toggleDuplicates,
     toggleReplacements,
     handleSort,
-    filteredAndSortedItems
+    filteredAndSortedItems,
   } = useInquiryFilters(safeItems);
 
   const dialogStates = useInquiryDialogs(inquiryId || '', fetchItems);
@@ -79,7 +79,7 @@ function InquiryDetail() {
       suppliers_responded: uniqueSuppliers,
       total_suppliers: totalSuppliers,
       days_active: daysActive,
-      response_rate: responseRate
+      response_rate: responseRate,
     };
   }, [safeItems, inquiryDate]);
 

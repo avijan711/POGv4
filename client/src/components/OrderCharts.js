@@ -5,7 +5,7 @@ import {
   ArcElement,
   Tooltip,
   Legend,
-  Title
+  Title,
 } from 'chart.js';
 import { Pie } from 'react-chartjs-2';
 
@@ -31,7 +31,7 @@ const OrderCharts = ({ supplierGroups, selectedSuppliers, calculateSupplierSumma
       return {
         name: group.isPromotion ? `${group.supplierName} (${group.promotionName})` : group.supplierName,
         itemCount: summary.winningItems,
-        totalValue: summary.totalValue
+        totalValue: summary.totalValue,
       };
     })
     .filter(data => data.itemCount > 0);
@@ -46,8 +46,8 @@ const OrderCharts = ({ supplierGroups, selectedSuppliers, calculateSupplierSumma
       data: selectedSupplierData.map(d => d.itemCount),
       backgroundColor: colors,
       borderColor: colors.map(c => c.replace('60%', '50%')),
-      borderWidth: 1
-    }]
+      borderWidth: 1,
+    }],
   };
 
   // Prepare data for value distribution chart
@@ -57,8 +57,8 @@ const OrderCharts = ({ supplierGroups, selectedSuppliers, calculateSupplierSumma
       data: selectedSupplierData.map(d => d.totalValue),
       backgroundColor: colors,
       borderColor: colors.map(c => c.replace('60%', '50%')),
-      borderWidth: 1
-    }]
+      borderWidth: 1,
+    }],
   };
 
   // Common chart options
@@ -72,9 +72,9 @@ const OrderCharts = ({ supplierGroups, selectedSuppliers, calculateSupplierSumma
           boxWidth: 15,
           padding: 15,
           font: {
-            size: 11
-          }
-        }
+            size: 11,
+          },
+        },
       },
       tooltip: {
         callbacks: {
@@ -89,10 +89,10 @@ const OrderCharts = ({ supplierGroups, selectedSuppliers, calculateSupplierSumma
               return `${label}: €${value.toFixed(2)} (${percentage}%)`;
             }
             return `${label}: ${value} items (${percentage}%)`;
-          }
-        }
-      }
-    }
+          },
+        },
+      },
+    },
   };
 
   if (selectedSupplierData.length === 0) {
@@ -104,7 +104,7 @@ const OrderCharts = ({ supplierGroups, selectedSuppliers, calculateSupplierSumma
       display: 'flex', 
       gap: 2, 
       mt: 2,
-      height: '300px'
+      height: '300px',
     }}>
       <Paper sx={{ flex: 1, p: 2 }}>
         <Pie data={itemsChartData} options={{
@@ -116,10 +116,10 @@ const OrderCharts = ({ supplierGroups, selectedSuppliers, calculateSupplierSumma
               text: 'Items Distribution',
               font: {
                 size: 14,
-                weight: 'bold'
-              }
-            }
-          }
+                weight: 'bold',
+              },
+            },
+          },
         }} />
       </Paper>
       <Paper sx={{ flex: 1, p: 2 }}>
@@ -132,10 +132,10 @@ const OrderCharts = ({ supplierGroups, selectedSuppliers, calculateSupplierSumma
               text: 'Value Distribution',
               font: {
                 size: 14,
-                weight: 'bold'
-              }
-            }
-          }
+                weight: 'bold',
+              },
+            },
+          },
         }} />
       </Paper>
     </Box>

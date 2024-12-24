@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { TextField, Box } from '@mui/material';
 
 const styles = {
@@ -10,9 +10,9 @@ const styles = {
       '-moz-appearance': 'textfield',
       '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
         '-webkit-appearance': 'none',
-        margin: 0
-      }
-    }
+        margin: 0,
+      },
+    },
   },
   displayBox: {
     cursor: 'text',
@@ -21,9 +21,9 @@ const styles = {
     textAlign: 'right',
     '&:hover': {
       backgroundColor: 'rgba(0, 0, 0, 0.04)',
-      borderRadius: '4px'
-    }
-  }
+      borderRadius: '4px',
+    },
+  },
 };
 
 function QuantityEditor({
@@ -32,8 +32,16 @@ function QuantityEditor({
   onStartEdit,
   onChange,
   onBlur,
-  onKeyDown
+  onKeyDown,
 }) {
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isEditing]);
+
   if (isEditing) {
     return (
       <TextField
@@ -42,12 +50,12 @@ function QuantityEditor({
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         onKeyDown={onKeyDown}
-        autoFocus
+        inputRef={inputRef}
         size="small"
         sx={styles.textField}
         inputProps={{ 
           min: 0,
-          style: { textAlign: 'right' }
+          style: { textAlign: 'right' },
         }}
       />
     );

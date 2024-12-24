@@ -39,7 +39,7 @@ function ItemReference({ item, isNewReference, referencingItems, getChangeSource
               onClick={(e) => onReferenceClick(e, item.reference_change.new_reference_id)}
               sx={{ 
                 cursor: 'pointer',
-                fontWeight: 'bold'
+                fontWeight: 'bold',
               }}
             />
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'bold' }}>
@@ -62,7 +62,7 @@ function ItemReference({ item, isNewReference, referencingItems, getChangeSource
               }}
               sx={{ 
                 cursor: 'pointer',
-                fontWeight: 'bold'
+                fontWeight: 'bold',
               }}
             />
           </Box>
@@ -120,7 +120,7 @@ function ItemTableRow({
   onRowClick, 
   onEdit, 
   onDelete,
-  onReferenceClick
+  onReferenceClick,
 }) {
   const generateUniqueKey = (item, index) => {
     return `${item.item_id}-${item.qty_in_stock}-${item.sold_this_year}-${item.sold_last_year}-${index}`;
@@ -165,15 +165,15 @@ function ItemTableRow({
         backgroundColor: getBackgroundColor(),
         border: getBorderStyle(),
         '&:hover': { 
-          backgroundColor: getHoverColor()
+          backgroundColor: getHoverColor(),
         },
         transition: 'all 0.2s ease',
         '& td': {
           py: 1.5,
           px: 2,
           height: 'auto',
-          maxHeight: 'none'
-        }
+          maxHeight: 'none',
+        },
       }}
     >
       <TableCell>
@@ -187,7 +187,7 @@ function ItemTableRow({
               variant="filled"
               sx={{ 
                 fontWeight: 'bold',
-                '.MuiChip-label': { px: 1 }
+                '.MuiChip-label': { px: 1 },
               }}
             />
           )}
@@ -199,7 +199,7 @@ function ItemTableRow({
         minWidth: '180px',
         maxWidth: '300px',
         direction: 'rtl', // Right-to-left for Hebrew text
-        textAlign: 'right'
+        textAlign: 'right',
       }}>
         {item.hebrew_description}
       </TableCell>
@@ -207,7 +207,7 @@ function ItemTableRow({
         whiteSpace: 'pre-wrap', 
         wordBreak: 'break-word',
         minWidth: '180px',
-        maxWidth: '300px'
+        maxWidth: '300px',
       }}>
         {item.english_description}
       </TableCell>

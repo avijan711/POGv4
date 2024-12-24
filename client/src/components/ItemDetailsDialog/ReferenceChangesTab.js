@@ -10,14 +10,14 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  Tooltip
+  Tooltip,
 } from '@mui/material';
 import { 
   SwapHoriz as SwapIcon,
   Store as StoreIcon,
   Person as PersonIcon,
   Description as DescriptionIcon,
-  ArrowForward as ArrowForwardIcon
+  ArrowForward as ArrowForwardIcon,
 } from '@mui/icons-material';
 import { useReference } from './ReferenceContext';
 
@@ -26,17 +26,17 @@ function ReferenceChangesTab({ referenceChanges = [] }) {
     onItemClick,
     getSourceIcon,
     getSourceLabel,
-    styles
+    styles,
   } = useReference();
 
   const getSourceColor = (source) => {
     switch (source) {
-      case 'user':
-        return 'primary';
-      case 'supplier':
-        return 'warning';
-      default:
-        return 'info';
+    case 'user':
+      return 'primary';
+    case 'supplier':
+      return 'warning';
+    default:
+      return 'info';
     }
   };
 
@@ -67,7 +67,7 @@ function ReferenceChangesTab({ referenceChanges = [] }) {
                   bgcolor: 'background.paper',
                   borderRadius: 1,
                   border: '1px solid',
-                  borderColor: 'divider'
+                  borderColor: 'divider',
                 }}
               >
                 <ListItemText
@@ -96,7 +96,7 @@ function ReferenceChangesTab({ referenceChanges = [] }) {
                         gap: 2,
                         bgcolor: 'grey.50',
                         p: 1.5,
-                        borderRadius: 1
+                        borderRadius: 1,
                       }}>
                         <Stack>
                           <Link
@@ -137,7 +137,7 @@ function ReferenceChangesTab({ referenceChanges = [] }) {
                             bgcolor: 'grey.50',
                             p: 1,
                             borderRadius: 1,
-                            fontStyle: 'italic'
+                            fontStyle: 'italic',
                           }}
                         >
                           {change.notes}
@@ -159,7 +159,7 @@ function ReferenceChangesTab({ referenceChanges = [] }) {
             bgcolor: 'background.default',
             border: '1px solid',
             borderColor: 'divider',
-            borderRadius: 2
+            borderRadius: 2,
           }}
         >
           <Typography variant="subtitle1" gutterBottom>Reference Changes Summary</Typography>

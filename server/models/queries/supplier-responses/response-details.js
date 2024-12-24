@@ -4,7 +4,7 @@
  * @returns {string} SQL query for response details
  */
 function getResponseDetailsQuery() {
-    return `
+  return `
     WITH inquiry_items AS (
         -- Get all items in this inquiry
         SELECT 
@@ -67,5 +67,5 @@ function getResponseDetailsQuery() {
 }
 
 module.exports = {
-    getResponseDetailsQuery
+  getResponseDetailsQuery,
 };

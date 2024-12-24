@@ -25,7 +25,7 @@ export const useSupplierResponses = (inquiryId, initialResponses = []) => {
           itemId: item.itemId ? String(item.itemId) : '',
           priceQuoted: typeof item.priceQuoted === 'number' ? item.priceQuoted : 0,
           status: item.status ? String(item.status) : 'pending',
-          itemType: item.itemType ? String(item.itemType) : 'regular'
+          itemType: item.itemType ? String(item.itemType) : 'regular',
         };
       }).filter(Boolean) : [];
 
@@ -35,7 +35,7 @@ export const useSupplierResponses = (inquiryId, initialResponses = []) => {
         itemCount: typeof response.itemCount === 'number' ? response.itemCount : 0,
         extraItemsCount: typeof response.extraItemsCount === 'number' ? response.extraItemsCount : 0,
         replacementsCount: typeof response.replacementsCount === 'number' ? response.replacementsCount : 0,
-        isPromotion: safeItems.some(item => item.itemType === 'promotion')
+        isPromotion: safeItems.some(item => item.itemType === 'promotion'),
       };
     }).filter(Boolean);
   }, [responses]);
@@ -69,7 +69,7 @@ export const useSupplierResponses = (inquiryId, initialResponses = []) => {
       } else if (deleteType === 'bulk') {
         const encodedDate = encodeURIComponent(itemToDelete.date);
         await axios.delete(
-          `${API_BASE_URL}/api/supplier-responses/bulk/${encodedDate}/${itemToDelete.supplierId}`
+          `${API_BASE_URL}/api/supplier-responses/bulk/${encodedDate}/${itemToDelete.supplierId}`,
         );
       }
       
@@ -105,6 +105,6 @@ export const useSupplierResponses = (inquiryId, initialResponses = []) => {
     handleDeleteClick,
     handleDeleteConfirm,
     closeDeleteDialog,
-    setError
+    setError,
   };
 };

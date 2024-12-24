@@ -8,12 +8,12 @@ describe('SupplierRow', () => {
     supplier: {
       name: 'Test Supplier',
       contact_name: 'John Doe',
-      email: 'john@test.com'
+      email: 'john@test.com',
     },
     status: 'pending',
     total_items: 10,
     covered_items: 7,
-    missing_items: 3
+    missing_items: 3,
   };
 
   it('displays supplier information correctly', () => {
@@ -27,11 +27,11 @@ describe('SupplierRow', () => {
   it('displays status chip correctly', () => {
     render(<SupplierRow response={mockResponse} />);
     
-    const statusChip = screen.getByText('pending');
+    const statusChip = screen.getByTestId('status-chip');
     expect(statusChip).toBeInTheDocument();
-    expect(statusChip.closest('div')).toHaveStyle({
+    expect(statusChip).toHaveStyle({
       backgroundColor: expect.any(String),
-      color: expect.any(String)
+      color: expect.any(String),
     });
   });
 
@@ -49,7 +49,7 @@ describe('SupplierRow', () => {
       <SupplierRow
         response={mockResponse}
         onViewCovered={mockViewCovered}
-      />
+      />,
     );
     
     fireEvent.click(screen.getByText(/Covered/));
@@ -62,7 +62,7 @@ describe('SupplierRow', () => {
       <SupplierRow
         response={mockResponse}
         onViewMissing={mockViewMissing}
-      />
+      />,
     );
     
     fireEvent.click(screen.getByText(/Missing/));
@@ -74,7 +74,7 @@ describe('SupplierRow', () => {
       <SupplierRow
         response={mockResponse}
         disabled={true}
-      />
+      />,
     );
     
     const buttons = screen.getAllByRole('button');
@@ -88,7 +88,7 @@ describe('SupplierRow', () => {
       <SupplierRow
         response={mockResponse}
         disabled={false}
-      />
+      />,
     );
     
     const buttons = screen.getAllByRole('button');

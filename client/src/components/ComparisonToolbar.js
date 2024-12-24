@@ -11,7 +11,7 @@ import {
   InputAdornment,
   Stack,
   Chip,
-  Paper
+  Paper,
 } from '@mui/material';
 import {
   ShoppingCart as ShoppingCartIcon,
@@ -33,7 +33,7 @@ const ComparisonToolbar = ({
   handleCreateOrders,
   selectedSuppliers,
   supplierGroups,
-  handleSupplierToggle
+  handleSupplierToggle,
 }) => {
   return (
     <>
@@ -113,8 +113,8 @@ const ComparisonToolbar = ({
             <Chip
               key={key}
               label={group.isPromotion ? `${group.supplierName} (${group.promotionName})` : group.supplierName}
-              color={group.isPromotion ? "secondary" : "primary"}
-              variant={selectedSuppliers[key] ? "filled" : "outlined"}
+              color={group.isPromotion ? 'secondary' : 'primary'}
+              variant={selectedSuppliers[key] ? 'filled' : 'outlined'}
               onClick={() => handleSupplierToggle(key)}
               onDelete={() => handleSupplierToggle(key)}
               deleteIcon={selectedSuppliers[key] ? <DeleteIcon /> : <CompareIcon />}

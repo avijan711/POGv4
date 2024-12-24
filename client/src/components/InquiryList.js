@@ -336,9 +336,9 @@ function InquiryList() {
 
       const response = await axios.get(`${API_BASE_URL}/api/inquiries/${exportInquiryId}/export`, {
         params: { 
-          headers: JSON.stringify(selectedHeaders)
+          headers: JSON.stringify(selectedHeaders),
         },
-        responseType: 'blob'
+        responseType: 'blob',
       });
       clearInterval(progressInterval);
       setLoadingProgress(100);
@@ -407,14 +407,14 @@ function InquiryList() {
 
   const getStatusColor = (status) => {
     switch (status?.toLowerCase() || '') {
-      case 'processed':
-        return 'success';
-      case 'processing':
-        return 'warning';
-      case 'failed':
-        return 'error';
-      default:
-        return 'default';
+    case 'processed':
+      return 'success';
+    case 'processing':
+      return 'warning';
+    case 'failed':
+      return 'error';
+    default:
+      return 'default';
     }
   };
 

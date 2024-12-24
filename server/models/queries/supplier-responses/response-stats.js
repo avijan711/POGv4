@@ -1,5 +1,5 @@
 function getResponseStatsQuery() {
-    return `WITH check_tables AS (
+  return `WITH check_tables AS (
         SELECT EXISTS (
             SELECT 1 FROM sqlite_master 
             WHERE type = 'table' AND name = 'supplier_response'
@@ -52,5 +52,5 @@ function getResponseStatsQuery() {
 }
 
 module.exports = {
-    getResponseStatsQuery
+  getResponseStatsQuery,
 };

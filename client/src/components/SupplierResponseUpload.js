@@ -102,7 +102,7 @@ function SupplierResponseUpload({ open, onClose, onSuccess, inquiryId }) {
         onUploadProgress: (progressEvent) => {
           const progress = (progressEvent.loaded / progressEvent.total) * 100;
           setUploadProgress(progress);
-        }
+        },
       });
 
       setFile(null);
@@ -175,8 +175,8 @@ function SupplierResponseUpload({ open, onClose, onSuccess, inquiryId }) {
               alignItems: 'center',
               cursor: uploading || !selectedSupplierId ? 'not-allowed' : 'pointer',
               '&:hover': {
-                backgroundColor: uploading || !selectedSupplierId ? 'inherit' : 'action.hover'
-              }
+                backgroundColor: uploading || !selectedSupplierId ? 'inherit' : 'action.hover',
+              },
             }}
             component="label"
           >

@@ -13,7 +13,7 @@ export function DeleteConfirmDialog({
   onClose, 
   onConfirm, 
   title, 
-  message 
+  message, 
 }) {
   return (
     <Dialog open={open} onClose={onClose}>

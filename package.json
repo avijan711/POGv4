@@ -8,7 +8,13 @@
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "nodemon server/index.js",
     "client": "cd client && npm start",
-    "install-all": "npm install && cd client && npm install"
+    "install-all": "npm install && cd client && npm install",
+    "lint": "npm run lint:server && npm run lint:client",
+    "lint:fix": "npm run lint:server:fix && npm run lint:client:fix",
+    "lint:server": "cd server && npm run lint",
+    "lint:server:fix": "cd server && npm run lint:fix",
+    "lint:client": "cd client && npm run lint",
+    "lint:client:fix": "cd client && npm run lint:fix"
   },
   "dependencies": {
     "express": "^4.18.2",

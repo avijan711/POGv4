@@ -172,8 +172,8 @@ const debugItemReferencesQuery = `
 `;
 
 module.exports = {
-    getBestSupplierPricesQuery,
-    debugInquiryItemsQuery,
-    debugSupplierPricesQuery,
-    debugItemReferencesQuery
+  getBestSupplierPricesQuery,
+  debugInquiryItemsQuery,
+  debugSupplierPricesQuery,
+  debugItemReferencesQuery,
 };

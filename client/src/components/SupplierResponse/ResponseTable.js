@@ -13,14 +13,14 @@ import {
   IconButton,
   Chip,
   Box,
-  Alert
+  Alert,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
   SwapHoriz as SwapHorizIcon,
   ArrowForward as ArrowForwardIcon,
   PriceChange as PriceChangeIcon,
-  InfoOutlined as InfoIcon
+  InfoOutlined as InfoIcon,
 } from '@mui/icons-material';
 
 const ResponseTable = memo(({ items = [], onDelete }) => {
@@ -40,7 +40,7 @@ const ResponseTable = memo(({ items = [], onDelete }) => {
         alignItems: 'center', 
         justifyContent: 'center',
         flexDirection: 'column',
-        gap: 1
+        gap: 1,
       }}>
         <InfoIcon color="action" sx={{ fontSize: 40 }} />
         <Typography color="text.secondary">
@@ -155,9 +155,9 @@ ResponseTable.propTypes = {
     priceQuoted: PropTypes.number,
     status: PropTypes.string,
     itemType: PropTypes.string,
-    newReferenceID: PropTypes.string
+    newReferenceID: PropTypes.string,
   })),
-  onDelete: PropTypes.func.isRequired
+  onDelete: PropTypes.func.isRequired,
 };
 
 ResponseTable.displayName = 'ResponseTable';

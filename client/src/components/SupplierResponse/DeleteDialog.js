@@ -6,7 +6,7 @@ import {
   DialogActions,
   Button,
   Typography,
-  CircularProgress
+  CircularProgress,
 } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
 import { formatDate } from './utils';
@@ -18,27 +18,27 @@ const DeleteDialog = ({
   itemToDelete,
   deleteType,
   error,
-  isDeleting
+  isDeleting,
 }) => {
   const getDialogTitle = () => {
     switch (deleteType) {
-      case 'bulk':
-        return 'Delete All Responses';
-      case 'reference':
-        return 'Delete Reference Change';
-      default:
-        return 'Delete Response';
+    case 'bulk':
+      return 'Delete All Responses';
+    case 'reference':
+      return 'Delete Reference Change';
+    default:
+      return 'Delete Response';
     }
   };
 
   const getDialogMessage = () => {
     switch (deleteType) {
-      case 'bulk':
-        return `Are you sure you want to delete all responses from ${itemToDelete?.supplierName} on ${formatDate(itemToDelete?.date)}?`;
-      case 'reference':
-        return `Are you sure you want to delete the reference change from ${itemToDelete?.itemId} to ${itemToDelete?.newReferenceID}?`;
-      default:
-        return `Are you sure you want to delete this response for item ${itemToDelete?.itemId}?`;
+    case 'bulk':
+      return `Are you sure you want to delete all responses from ${itemToDelete?.supplierName} on ${formatDate(itemToDelete?.date)}?`;
+    case 'reference':
+      return `Are you sure you want to delete the reference change from ${itemToDelete?.itemId} to ${itemToDelete?.newReferenceID}?`;
+    default:
+      return `Are you sure you want to delete this response for item ${itemToDelete?.itemId}?`;
     }
   };
 

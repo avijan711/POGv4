@@ -19,24 +19,24 @@ function DeleteDialog({
 }) {
   const getDialogContent = () => {
     switch (type) {
-      case 'reference':
-        return {
-          title: 'Delete Reference Change',
-          message: 'Are you sure you want to delete this reference change?',
-          description: 'This will remove the reference link between the items.'
-        };
-      case 'supplier-response':
-        return {
-          title: 'Delete Supplier Response',
-          message: 'Are you sure you want to delete this supplier response?',
-          description: 'This will remove all pricing and availability information from this supplier.'
-        };
-      default: // For regular item deletion
-        return {
-          title: 'Delete Item',
-          message: 'Are you sure you want to delete this item?',
-          description: 'This will permanently remove the item from the inquiry. This action cannot be undone.'
-        };
+    case 'reference':
+      return {
+        title: 'Delete Reference Change',
+        message: 'Are you sure you want to delete this reference change?',
+        description: 'This will remove the reference link between the items.',
+      };
+    case 'supplier-response':
+      return {
+        title: 'Delete Supplier Response',
+        message: 'Are you sure you want to delete this supplier response?',
+        description: 'This will remove all pricing and availability information from this supplier.',
+      };
+    default: // For regular item deletion
+      return {
+        title: 'Delete Item',
+        message: 'Are you sure you want to delete this item?',
+        description: 'This will permanently remove the item from the inquiry. This action cannot be undone.',
+      };
     }
   };
 
@@ -53,7 +53,7 @@ function DeleteDialog({
         display: 'flex', 
         alignItems: 'center', 
         gap: 1,
-        color: 'error.main'
+        color: 'error.main',
       }}>
         <WarningIcon color="error" />
         {dialogContent.title}
@@ -75,7 +75,7 @@ function DeleteDialog({
               p: 1,
               bgcolor: 'error.light',
               borderRadius: 1,
-              color: 'error.contrastText'
+              color: 'error.contrastText',
             }}
           >
             {error}
@@ -96,7 +96,7 @@ function DeleteDialog({
           sx={{
             '&:hover': {
               backgroundColor: 'error.dark',
-            }
+            },
           }}
         >
           Delete

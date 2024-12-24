@@ -7,7 +7,7 @@ import {
   Button,
   Typography,
   CircularProgress,
-  Box
+  Box,
 } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
 import ItemDialog from '../ItemDialog';
@@ -20,7 +20,7 @@ const InquiryDialogs = ({
   onSave,
   onDelete,
   onUploadSuccess,
-  inquiryId
+  inquiryId,
 }) => {
   const {
     dialogOpen,
@@ -32,7 +32,7 @@ const InquiryDialogs = ({
     deleteInquiryConfirmOpen,
     supplierUploadOpen,
     isDeleting,
-    loadingDetails
+    loadingDetails,
   } = dialogStates;
 
   const handleDelete = () => {

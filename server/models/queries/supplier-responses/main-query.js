@@ -1,5 +1,5 @@
 function getMainQuery() {
-    return `
+  return `
     PRAGMA group_concat_max_len = 50000;
     WITH inquiry_items AS (
         -- Get all items in this inquiry
@@ -236,20 +236,20 @@ function getMainQuery() {
 }
 
 function getSupplierResponsesQuery() {
-    return {
-        query: getMainQuery(),
-        params: (inquiryId, page = 1, pageSize = 50) => {
-            return [
-                inquiryId,  // For inquiry_items CTE
-                inquiryId,  // For responding_suppliers CTE
-                inquiryId,  // For supplier_responses CTE
-                inquiryId   // For total_responses subquery
-            ];
-        }
-    };
+  return {
+    query: getMainQuery(),
+    params: (inquiryId, page = 1, pageSize = 50) => {
+      return [
+        inquiryId,  // For inquiry_items CTE
+        inquiryId,  // For responding_suppliers CTE
+        inquiryId,  // For supplier_responses CTE
+        inquiryId,   // For total_responses subquery
+      ];
+    },
+  };
 }
 
 module.exports = {
-    getMainQuery,
-    getSupplierResponsesQuery
+  getMainQuery,
+  getSupplierResponsesQuery,
 };

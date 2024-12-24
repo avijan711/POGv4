@@ -7,7 +7,7 @@
  * @returns {string} SQL query for active promotions
  */
 function getActivePromotionsQuery() {
-    return `
+  return `
     WITH inquiry_promotion_items AS (
         -- Get all items from inquiry that are in active promotions
         SELECT 
@@ -52,7 +52,7 @@ function getActivePromotionsQuery() {
  * @returns {string} SQL query for promotion items in inquiry
  */
 function getPromotionItemsInInquiryQuery() {
-    return `
+  return `
     SELECT 
         i.item_id,
         i.hebrew_description,
@@ -78,7 +78,7 @@ function getPromotionItemsInInquiryQuery() {
  * @returns {string} SQL query for missing promotion items
  */
 function getMissingPromotionItemsQuery() {
-    return `
+  return `
     WITH inquiry_items AS (
         SELECT 
             ii.item_id,
@@ -111,7 +111,7 @@ function getMissingPromotionItemsQuery() {
 }
 
 module.exports = {
-    getActivePromotionsQuery,
-    getPromotionItemsInInquiryQuery,
-    getMissingPromotionItemsQuery
+  getActivePromotionsQuery,
+  getPromotionItemsInInquiryQuery,
+  getMissingPromotionItemsQuery,
 };

@@ -50,7 +50,7 @@ function FileUpload() {
     console.log('Selected file:', {
       name: selectedFile?.name,
       type: selectedFile?.type,
-      size: selectedFile?.size
+      size: selectedFile?.size,
     });
 
     // Validate file type
@@ -58,7 +58,7 @@ function FileUpload() {
       setError({
         message: 'Invalid file type',
         details: 'Please upload an Excel file (.xlsx or .xls)',
-        suggestion: 'Download the sample file for reference'
+        suggestion: 'Download the sample file for reference',
       });
       event.target.value = '';
       return;
@@ -69,7 +69,7 @@ function FileUpload() {
       setError({
         message: 'File too large',
         details: 'Maximum file size is 50MB',
-        suggestion: 'Please reduce the file size or split into multiple files'
+        suggestion: 'Please reduce the file size or split into multiple files',
       });
       event.target.value = '';
       return;
@@ -89,7 +89,7 @@ function FileUpload() {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
-          withCredentials: true
+          withCredentials: true,
         });
 
         // Ensure columns are strings
@@ -109,7 +109,7 @@ function FileUpload() {
         setError({
           message: 'Failed to read Excel file',
           details: error.response?.data?.error || error.message,
-          suggestion: 'Please ensure the file is a valid Excel file and try again'
+          suggestion: 'Please ensure the file is a valid Excel file and try again',
         });
         setFile(null);
         event.target.value = '';
@@ -166,7 +166,7 @@ function FileUpload() {
       setError({
         message: 'Invalid inquiry number',
         details: 'Inquiry number must be numeric',
-        suggestion: 'Please enter a valid numeric inquiry number'
+        suggestion: 'Please enter a valid numeric inquiry number',
       });
       setLoading(false);
       return;
@@ -187,7 +187,7 @@ function FileUpload() {
         fileSize: file.size,
         fileType: file.type,
         inquiryNumber,
-        columnMapping: mappingString // Log the actual string being sent
+        columnMapping: mappingString, // Log the actual string being sent
       });
       
       const response = await axios.post(`${API_BASE_URL}/api/inquiries/upload`, formData, {
@@ -198,7 +198,7 @@ function FileUpload() {
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           console.log(`Upload progress: ${percentCompleted}%`);
-        }
+        },
       });
 
       console.log('Upload successful:', response.data);
@@ -220,7 +220,7 @@ function FileUpload() {
         error,
         response: error.response,
         request: error.request,
-        config: error.config
+        config: error.config,
       });
 
       let errorMessage = 'Failed to upload file';
@@ -244,7 +244,7 @@ function FileUpload() {
       setError({
         message: errorMessage,
         details: errorDetails,
-        suggestion: errorSuggestion
+        suggestion: errorSuggestion,
       });
     } finally {
       setLoading(false);
@@ -255,7 +255,7 @@ function FileUpload() {
     try {
       console.log('Downloading sample file...');
       const response = await axios.get(`${API_BASE_URL}/sample.xlsx`, {
-        responseType: 'blob'
+        responseType: 'blob',
       });
       
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -273,7 +273,7 @@ function FileUpload() {
       setError({
         message: 'Failed to download sample file',
         details: error.message,
-        suggestion: 'Please try again or contact support'
+        suggestion: 'Please try again or contact support',
       });
     }
   };
@@ -358,8 +358,8 @@ function FileUpload() {
                         inputProps={{
                           inputMode: 'numeric',
                           pattern: '[0-9]*',
-                          min: "0",
-                          step: "1"
+                          min: '0',
+                          step: '1',
                         }}
                         InputProps={{
                           startAdornment: <NumbersIcon sx={{ mr: 1, color: 'action.active' }} />,
