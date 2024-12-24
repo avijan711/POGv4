@@ -1,10 +1,38 @@
 import { useState, useMemo } from 'react';
 
+export const QTY_INDICATORS = {
+  OK: 'OK',
+  NEW: 'NEW',
+  HIGH: 'HIGH',
+};
+
 export const useInquiryFilters = (items = []) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [showReplacements, setShowReplacements] = useState(false);
+  const [qtyIndicatorFilter, setQtyIndicatorFilter] = useState(null);
   const [sortConfig, setSortConfig] = useState({ field: 'item_id', direction: 'asc' });
+
+  const getQtyIndicator = (item) => {
+    if (!item) return null;
+    const soldThisYear = Number(item.sold_this_year || 0);
+    const soldLastYear = Number(item.sold_last_year || 0);
+    const requestedQty = Number(item.requested_qty || 0);
+
+    // If no sales history, treat as new item
+    if (soldThisYear === 0 && soldLastYear === 0) {
+      return QTY_INDICATORS.NEW;
+    }
+
+    const avgSales = (soldThisYear + soldLastYear) / 2;
+    const threshold = avgSales * 1.5;
+
+    if (requestedQty > threshold) {
+      return QTY_INDICATORS.HIGH;
+    }
+
+    return QTY_INDICATORS.OK;
+  };
 
   const toggleDuplicates = () => {
     setShowDuplicates(!showDuplicates);
@@ -84,6 +112,11 @@ export const useInquiryFilters = (items = []) => {
       filtered = filtered.filter(item => item && (item.has_reference_change || item.is_referenced_by));
     }
 
+    // Apply qty indicator filter
+    if (qtyIndicatorFilter) {
+      filtered = filtered.filter(item => getQtyIndicator(item) === qtyIndicatorFilter);
+    }
+
     // Sort items with proper null checks
     return [...filtered].sort((a, b) => {
       if (!a || !b) return 0;
@@ -109,17 +142,20 @@ export const useInquiryFilters = (items = []) => {
         ? aValue > bValue ? 1 : -1
         : aValue < bValue ? 1 : -1;
     });
-  }, [items, searchTerm, showDuplicates, showReplacements, sortConfig]);
+  }, [items, searchTerm, showDuplicates, showReplacements, qtyIndicatorFilter, sortConfig]);
 
   return {
     searchTerm,
     setSearchTerm,
     showDuplicates,
     showReplacements,
+    qtyIndicatorFilter,
+    setQtyIndicatorFilter,
     sortConfig,
     toggleDuplicates,
     toggleReplacements,
     handleSort,
     filteredAndSortedItems,
+    getQtyIndicator,
   };
 };

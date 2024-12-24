@@ -49,6 +49,8 @@ function InquiryDetail() {
     toggleReplacements,
     handleSort,
     filteredAndSortedItems,
+    qtyIndicatorFilter,
+    setQtyIndicatorFilter,
   } = useInquiryFilters(safeItems);
 
   const dialogStates = useInquiryDialogs(inquiryId || '', fetchItems);
@@ -183,6 +185,8 @@ function InquiryDetail() {
           onToggleDuplicates={toggleDuplicates}
           showReplacements={showReplacements}
           onToggleReplacements={toggleReplacements}
+          qtyIndicatorFilter={qtyIndicatorFilter}
+          setQtyIndicatorFilter={setQtyIndicatorFilter}
           onUploadResponse={() => dialogStates.setSupplierUploadOpen(true)}
           onViewBestPrices={() => navigate(`/comparisons/${inquiryId}`)}
           onDeleteInquiry={() => dialogStates.setDeleteInquiryConfirmOpen(true)}
@@ -215,6 +219,8 @@ function InquiryDetail() {
           onSort={handleSort}
           onRefresh={fetchItems}
           getChangeSource={dialogStates.getChangeSource}
+          qtyIndicatorFilter={qtyIndicatorFilter}
+          setQtyIndicatorFilter={setQtyIndicatorFilter}
         />
 
         <InquiryDialogs

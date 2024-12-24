@@ -9,7 +9,9 @@ import {
   Grid,
   Paper,
   LinearProgress,
+  ButtonGroup,
 } from '@mui/material';
+import { QTY_INDICATORS } from '../hooks/useInquiryFilters';
 import {
   Search as SearchIcon,
   Warning as WarningIcon,
@@ -33,6 +35,8 @@ function InquiryHeader({
   onToggleDuplicates,
   showReplacements,
   onToggleReplacements,
+  qtyIndicatorFilter,
+  setQtyIndicatorFilter,
   onUploadResponse,
   onViewBestPrices,
   onDeleteInquiry,
@@ -209,6 +213,26 @@ function InquiryHeader({
           >
             Show Replacements
           </Button>
+          <ButtonGroup variant="outlined">
+            <Button
+              onClick={() => setQtyIndicatorFilter(qtyIndicatorFilter === QTY_INDICATORS.OK ? null : QTY_INDICATORS.OK)}
+              color={qtyIndicatorFilter === QTY_INDICATORS.OK ? 'success' : 'inherit'}
+            >
+              OK
+            </Button>
+            <Button
+              onClick={() => setQtyIndicatorFilter(qtyIndicatorFilter === QTY_INDICATORS.NEW ? null : QTY_INDICATORS.NEW)}
+              color={qtyIndicatorFilter === QTY_INDICATORS.NEW ? 'info' : 'inherit'}
+            >
+              NEW
+            </Button>
+            <Button
+              onClick={() => setQtyIndicatorFilter(qtyIndicatorFilter === QTY_INDICATORS.HIGH ? null : QTY_INDICATORS.HIGH)}
+              color={qtyIndicatorFilter === QTY_INDICATORS.HIGH ? 'error' : 'inherit'}
+            >
+              HIGH
+            </Button>
+          </ButtonGroup>
           <Button
             variant="outlined"
             startIcon={<CloudUploadIcon />}
