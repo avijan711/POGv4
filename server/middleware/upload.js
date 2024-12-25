@@ -86,10 +86,16 @@ const uploadConfig = {
   },
 };
 
+// Import error types
+const { ExcelValidationError, CircularReferenceError } = require('../utils/excelProcessor/validator');
+const { BatchProcessingError } = require('../utils/excelProcessor/batchProcessor');
+
 // Error handler middleware
 const handleUploadError = (err, req, res, next) => {
   if (err) {
     debug.error('Upload error:', err);
+
+    // Handle multer errors
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
         error: 'File too large',
@@ -104,7 +110,39 @@ const handleUploadError = (err, req, res, next) => {
         suggestion: 'Please upload a valid Excel file (.xlsx or .xls)',
       });
     }
-    return res.status(400).json({
+
+    // Handle Excel validation errors
+    if (err instanceof ExcelValidationError) {
+      return res.status(400).json({
+        error: 'Excel validation failed',
+        message: err.message,
+        details: err.details,
+        suggestion: 'Please check the file format and required fields',
+      });
+    }
+
+    // Handle circular reference errors
+    if (err instanceof CircularReferenceError) {
+      return res.status(400).json({
+        error: 'Circular reference detected',
+        message: err.message,
+        cycle: err.cycle,
+        suggestion: 'Please remove circular references between items',
+      });
+    }
+
+    // Handle batch processing errors
+    if (err instanceof BatchProcessingError) {
+      return res.status(500).json({
+        error: 'Processing failed',
+        message: err.message,
+        details: err.details,
+        suggestion: 'Some items failed to process. Please check the error details and try again.',
+      });
+    }
+
+    // Handle generic errors
+    return res.status(500).json({
       error: 'File upload failed',
       message: err.message,
       suggestion: 'Please try again or contact support',

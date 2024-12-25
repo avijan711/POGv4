@@ -46,8 +46,8 @@ class ItemModel extends BaseModel {
                 i.*,
                 p.ils_retail_price as retail_price,
                 p.qty_in_stock,
-                p.qty_sold_this_year,
-                p.qty_sold_last_year,
+                p.qty_sold_this_year as sold_this_year,
+                p.qty_sold_last_year as sold_last_year,
                 p.date as last_price_update,
                 CASE 
                     WHEN rc.original_item_id IS NOT NULL THEN json_object(
@@ -125,8 +125,8 @@ class ItemModel extends BaseModel {
                 i.*,
                 p.ils_retail_price as retail_price,
                 p.qty_in_stock,
-                p.qty_sold_this_year,
-                p.qty_sold_last_year,
+                p.qty_sold_this_year as sold_this_year,
+                p.qty_sold_last_year as sold_last_year,
                 p.date as last_price_update,
                 CASE 
                     WHEN rc.original_item_id IS NOT NULL THEN json_object(

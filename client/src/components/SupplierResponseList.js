@@ -26,6 +26,7 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { useSupplierResponses } from '../hooks/useSupplierResponses';
+import { useSupplierPrices } from '../hooks/useSupplierPrices';
 import { MissingItemsDialog } from './SupplierResponseList/dialogs/MissingItemsDialog';
 import { CoveredItemsDialog } from './SupplierResponseList/dialogs/CoveredItemsDialog';
 import { SupplierRow } from './SupplierResponseList/SupplierRow';
@@ -40,6 +41,8 @@ function SupplierResponseList({ inquiryId }) {
     deleteResponse,
     deleteBulkResponses,
   } = useSupplierResponses(inquiryId);
+
+  const { updatePrice } = useSupplierPrices();
 
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [itemToDelete, setItemToDelete] = React.useState(null);
@@ -56,15 +59,31 @@ function SupplierResponseList({ inquiryId }) {
     }
   }, [inquiryId, fetchResponses]);
 
+  const handlePriceUpdate = async (supplierId, priceData) => {
+    try {
+      await updatePrice(supplierId, priceData);
+      await fetchResponses(); // Refresh after update
+      setSnackbar({
+        open: true,
+        message: 'Price updated successfully',
+        severity: 'success',
+      });
+      return true;
+    } catch (error) {
+      console.error('Error updating price:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to update price: ${error.message}`,
+        severity: 'error',
+      });
+      throw error;
+    }
+  };
+
   const handleDeleteResponse = async () => {
     if (!itemToDelete) return;
 
     try {
-      console.log('Deleting individual response:', {
-        responseId: itemToDelete.supplier_response_id,
-        itemId: itemToDelete.item_id,
-      });
-
       const success = await deleteResponse(itemToDelete.supplier_response_id);
       if (success) {
         setSnackbar({
@@ -72,7 +91,7 @@ function SupplierResponseList({ inquiryId }) {
           message: 'Response deleted successfully',
           severity: 'success',
         });
-        await fetchResponses(); // Refresh the list
+        await fetchResponses();
       } else {
         throw new Error('Failed to delete response');
       }
@@ -108,14 +127,6 @@ function SupplierResponseList({ inquiryId }) {
             String(date.getMonth() + 1).padStart(2, '0') + '-' + 
             String(date.getDate()).padStart(2, '0');
 
-      console.log('Bulk delete params:', {
-        date: formattedDate,
-        supplierId: supplierToDelete.supplier_id,
-        latest_response: supplierToDelete.latest_response,
-        itemCount: supplierToDelete.item_count,
-        supplierName: supplierToDelete.supplier_name,
-      });
-
       const supplierId = parseInt(supplierToDelete.supplier_id, 10);
       if (isNaN(supplierId)) {
         throw new Error('Invalid supplier ID format');
@@ -147,17 +158,6 @@ function SupplierResponseList({ inquiryId }) {
   };
 
   const handleShowMissingItems = (supplier) => {
-    // Enhanced debug logging
-    console.log('handleShowMissingItems called with:', {
-      supplier_name: supplier.supplier_name,
-      missing_items_type: typeof supplier.missing_items,
-      isArray: Array.isArray(supplier.missing_items),
-      missing_items_length: supplier.missing_items?.length,
-      missing_count: supplier.missing_count,
-      raw_missing_items: supplier.missing_items,
-    });
-
-    // Create a clean copy of the supplier data to prevent reference issues
     const supplierData = {
       ...supplier,
       missing_items: Array.isArray(supplier.missing_items) 
@@ -165,18 +165,11 @@ function SupplierResponseList({ inquiryId }) {
         : [],
     };
 
-    console.log('Setting selectedSupplier with:', {
-      supplier_name: supplierData.supplier_name,
-      missing_items_length: supplierData.missing_items.length,
-      first_item: supplierData.missing_items[0],
-    });
-
     setSelectedSupplier(supplierData);
     setMissingItemsDialogOpen(true);
   };
 
   const handleShowCovered = (supplier) => {
-    console.log('Showing covered items:', supplier);
     setSelectedSupplier(supplier);
     setCoveredItemsDialogOpen(true);
   };
@@ -311,6 +304,7 @@ function SupplierResponseList({ inquiryId }) {
                 }}
                 onShowMissing={handleShowMissingItems}
                 onShowCovered={handleShowCovered}
+                onPriceUpdate={handlePriceUpdate}
               />
             ))}
           </TableBody>

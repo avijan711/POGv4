@@ -22,7 +22,7 @@ const AVAILABLE_HEADERS = [
   { key: 'origin', label: 'Origin' },
   { key: 'reference_notes', label: 'Reference Notes' },
   { key: 'retail_price', label: 'Retail Price (ILS)' },
-  { key: 'stock', label: 'Stock' },
+  { key: 'qty_in_stock', label: 'Stock' },
   { key: 'sold_this_year', label: 'Sold This Year' },
   { key: 'sold_last_year', label: 'Sold Last Year' },
   { key: 'reference', label: 'Reference' },

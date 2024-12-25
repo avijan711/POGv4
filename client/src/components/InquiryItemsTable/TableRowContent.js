@@ -20,6 +20,7 @@ function TableRowContent({
   onDeleteItem,
   onDeleteReference,
   processSupplierPrices,
+  onPriceUpdate,
 }) {
   const supplierPrices = processSupplierPrices(item);
   const isReplacement = item.is_referenced_by === 1;
@@ -90,6 +91,18 @@ function TableRowContent({
       </TableCell>
       <TableCell align="right">{item.qty_in_stock || 0}</TableCell>
       <TableCell align="right">₪{Number(item.retail_price).toFixed(2)}</TableCell>
+      <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'flex-end' }}>
+          {supplierPrices.map((price, idx) => (
+            <SupplierPriceChip
+              key={`${price.supplier_id}-${idx}`}
+              supplierPrice={price}
+              item={item}
+              onPriceUpdate={onPriceUpdate}
+            />
+          ))}
+        </Box>
+      </TableCell>
       <TableCell align="right">{item.sold_this_year || 0}</TableCell>
       <TableCell align="right">{item.sold_last_year || 0}</TableCell>
       <TableCell align="right">{Number(item.import_markup).toFixed(2)}</TableCell>

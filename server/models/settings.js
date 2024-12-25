@@ -46,17 +46,40 @@ class SettingsModel extends BaseModel {
 
   async getSetting(key) {
     try {
-      const sql = 'SELECT * FROM settings WHERE key = ?';
-      const setting = await this.executeQuerySingle(sql, [key]);
+      let sql;
+      let params;
+
+      if (key === 'debug') {
+        // Use json_extract to get debug settings as proper JSON
+        sql = `
+          SELECT
+            key,
+            json_object(
+              'general', CAST(json_extract(value, '$.general') AS BOOLEAN),
+              'errors', CAST(json_extract(value, '$.errors') AS BOOLEAN),
+              'database', CAST(json_extract(value, '$.database') AS BOOLEAN),
+              'performance', CAST(json_extract(value, '$.performance') AS BOOLEAN),
+              'routes', CAST(json_extract(value, '$.routes') AS BOOLEAN),
+              'middleware', CAST(json_extract(value, '$.middleware') AS BOOLEAN)
+            ) as value,
+            description,
+            updated_at
+          FROM settings
+          WHERE key = ?
+        `;
+      } else {
+        sql = 'SELECT * FROM settings WHERE key = ?';
+      }
+      
+      params = [key];
+      const setting = await this.executeQuerySingle(sql, params);
             
-      // If it's a debug setting, update the debug utility
       if (key === 'debug' && setting) {
-        try {
-          const debugSettings = JSON.parse(setting.value);
-          await debug.updateSettings(debugSettings);
-        } catch (err) {
-          console.error('Error parsing debug settings:', err);
-        }
+        // Parse JSON, validate and convert to proper boolean values
+        const debugSettings = JSON.parse(setting.value);
+        const validatedSettings = this.validateDebugSettings(debugSettings);
+        debug.updateSettings(validatedSettings);
+        setting.value = JSON.stringify(validatedSettings);
       }
             
       return setting;
@@ -66,47 +89,96 @@ class SettingsModel extends BaseModel {
     }
   }
 
+  validateDebugSettings(settings) {
+    const requiredKeys = ['general', 'errors', 'database', 'performance', 'routes', 'middleware'];
+    const missingKeys = requiredKeys.filter(key => settings[key] === undefined);
+    
+    if (missingKeys.length > 0) {
+      throw new Error(`Invalid debug settings: missing required keys: ${missingKeys.join(', ')}`);
+    }
+
+    // Convert values to boolean and validate
+    const convertedSettings = {};
+    for (const [key, value] of Object.entries(settings)) {
+      if (typeof value === 'boolean') {
+        convertedSettings[key] = value;
+      } else if (value === 1 || value === 0 || value === '1' || value === '0') {
+        convertedSettings[key] = Boolean(Number(value));
+      } else if (value === 'true' || value === 'false') {
+        convertedSettings[key] = value === 'true';
+      } else {
+        throw new Error(`Invalid debug settings: ${key} must be a boolean, 0/1, or "true"/"false"`);
+      }
+    }
+
+    return convertedSettings;
+  }
+
   async updateSetting(key, value, description = null) {
     try {
-      // Convert value based on type
-      let storedValue;
+      let sql;
+      let params;
+
       if (key === 'debug') {
-        storedValue = JSON.stringify(value);
-      } else if (typeof value === 'number') {
-        // Store numbers with full precision
-        storedValue = value.toString();
+        // Parse value if it's a string
+        const settings = typeof value === 'string' ? JSON.parse(value) : value;
+        
+        // Validate debug settings
+        this.validateDebugSettings(settings);
+
+        // Use SQLite's json_object() function to store JSON
+        // Convert settings to proper boolean values
+        const validatedSettings = this.validateDebugSettings(settings);
+        
+        sql = `
+          INSERT INTO settings (key, value, description)
+          VALUES (?, json_object(
+            'general', CAST(? AS BOOLEAN),
+            'errors', CAST(? AS BOOLEAN),
+            'database', CAST(? AS BOOLEAN),
+            'performance', CAST(? AS BOOLEAN),
+            'routes', CAST(? AS BOOLEAN),
+            'middleware', CAST(? AS BOOLEAN)
+          ), ?)
+          ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            description = COALESCE(excluded.description, settings.description),
+            updated_at = CURRENT_TIMESTAMP
+        `;
+        
+        params = [
+          key,
+          validatedSettings.general,
+          validatedSettings.errors,
+          validatedSettings.database,
+          validatedSettings.performance,
+          validatedSettings.routes,
+          validatedSettings.middleware,
+          description,
+        ];
+
+        // Update debug utility first
+        debug.updateSettings(settings);
       } else {
-        storedValue = value.toString();
+        // Handle non-debug settings
+        sql = `
+          INSERT INTO settings (key, value, description)
+          VALUES (?, ?, ?)
+          ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            description = COALESCE(excluded.description, settings.description),
+            updated_at = CURRENT_TIMESTAMP
+        `;
+        
+        params = [
+          key,
+          typeof value === 'number' ? value.toString() : value.toString(),
+          description,
+        ];
       }
 
-      const sql = `
-                INSERT INTO settings (key, value, description)
-                VALUES (?, ?, ?)
-                ON CONFLICT(key) DO UPDATE SET
-                    value = excluded.value,
-                    description = COALESCE(excluded.description, settings.description),
-                    updated_at = CURRENT_TIMESTAMP
-            `;
-      await this.executeRun(sql, [key, storedValue, description]);
-
-      // If it's a debug setting, update the debug utility
-      if (key === 'debug') {
-        try {
-          const debugSettings = JSON.parse(value);
-          await debug.updateSettings(debugSettings);
-        } catch (err) {
-          console.error('Error updating debug settings:', err);
-        }
-      }
-
-      const setting = await this.getSetting(key);
-      
-      // Convert numeric values back to numbers
-      if (setting && !isNaN(setting.value)) {
-        setting.value = parseFloat(setting.value);
-      }
-      
-      return setting;
+      await this.executeRun(sql, params);
+      return await this.getSetting(key);
     } catch (err) {
       console.error('Error updating setting:', err);
       throw err;

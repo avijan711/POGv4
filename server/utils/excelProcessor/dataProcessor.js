@@ -1,5 +1,7 @@
 const XLSX = require('xlsx');
 const debug = require('../debug');
+const { ExcelValidator, ExcelValidationError, CircularReferenceError } = require('./validator');
+const { BatchProcessor, BatchProcessingError } = require('./batchProcessor');
 
 // Common field mapping for converting client-side field names to database field names
 const fieldMap = {
@@ -59,112 +61,74 @@ function parseNumericValue(value, defaultValue = 0) {
   return !isNaN(numValue) ? Math.max(0, numValue) : defaultValue;
 }
 
+/**
+ * Process inquiry data from Excel file
+ * @param {string} filePath - Path to Excel file
+ * @param {Object} columnMapping - Column mapping configuration
+ * @param {Object} model - Database model instance
+ * @returns {Promise<Array>} Processed data
+ * @throws {ExcelValidationError|CircularReferenceError|BatchProcessingError}
+ */
 async function processInquiryData(filePath, columnMapping, model) {
   try {
     debug.log('Processing inquiry data with mapping:', columnMapping);
+
+    // Initialize validator and processor
+    const validator = new ExcelValidator(model);
+    const batchProcessor = new BatchProcessor(model);
         
-    // Read Excel file with specific options to handle numeric values correctly
+    // Read Excel file
     const workbook = XLSX.readFile(filePath, {
-      raw: true,      // Get raw values
-      cellDates: true, // Handle dates properly
-      cellNF: false,   // Don't parse number formats
-      cellText: false,  // Don't generate text values
+      raw: true,
+      cellDates: true,
+      cellNF: false,
+      cellText: false,
     });
         
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        
-    // Convert sheet to JSON with specific options
     const data = XLSX.utils.sheet_to_json(firstSheet, {
-      raw: true,      // Get raw values
-      defval: '',     // Default value for empty cells
-      blankrows: false, // Skip blank rows
+      raw: true,
+      defval: '',
+      blankrows: false,
     });
 
-    if (data.length === 0) {
-      throw new Error('Excel file must contain at least one data row');
+    // Validate Excel format and data
+    await validator.validateFormat(data, columnMapping);
+    await validator.validateReferences(data, columnMapping);
+
+    // Collect all unique items
+    const itemsMap = validator.collectUniqueItems(data, columnMapping);
+
+    // Process items in batch
+    const batchResults = await batchProcessor.createItems(itemsMap, columnMapping);
+    debug.log('Batch processing results:', batchResults);
+
+    // If there are any errors, throw them
+    if (batchResults.errors.length > 0) {
+      throw new BatchProcessingError('Some items failed to process', {
+        errors: batchResults.errors,
+        created: batchResults.created,
+        updated: batchResults.updated,
+        referenced: batchResults.referenced,
+      });
     }
 
-    // Track duplicates and original positions
-    const itemIdCounts = {};
-    const itemIdFirstIndex = {};
-
-    const processedData = await Promise.all(data.map(async (row, index) => {
+    // Process the data for return
+    const processedData = data.map((row, index) => {
       const processedRow = {
-        excel_row_index: index, // Preserve original Excel order
+        excel_row_index: index,
       };
-            
+
+      // Convert fields using mapping
       for (const [field, excelCol] of Object.entries(columnMapping)) {
         if (!excelCol) continue;
-                
-        let value = row[excelCol];
-                
-        // Convert field to snake_case
+        const value = row[excelCol];
         const dbField = convertToSnakeCase(field);
-                
-        debug.log(`Processing field ${dbField} with value "${value}" from Excel column "${excelCol}"`);
 
         switch (dbField) {
         case 'item_id':
-          if (!value) {
-            throw new Error(`Missing required Item ID in row ${index + 2}`);
-          }
-          value = String(value).trim();
-          processedRow.item_id = value;
-          processedRow.original_item_id = value;
-                        
-          // Track duplicates
-          itemIdCounts[value] = (itemIdCounts[value] || 0) + 1;
-          if (itemIdCounts[value] === 1) {
-            itemIdFirstIndex[value] = index;
-          }
-          processedRow.is_duplicate = itemIdCounts[value] > 1;
-          if (processedRow.is_duplicate) {
-            processedRow.original_row_index = itemIdFirstIndex[value];
-          }
-
-          // Check for existing references in the database
-          const referenceQuery = `
-                            SELECT 
-                                rc.*,
-                                s.name as supplier_name
-                            FROM item_reference_change rc
-                            LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
-                            WHERE rc.original_item_id = ? OR rc.new_reference_id = ?
-                            ORDER BY rc.change_date DESC
-                            LIMIT 1
-                        `;
-          const reference = await model.querySingle(referenceQuery, [value, value]);
-                        
-          if (reference) {
-            if (reference.original_item_id === value) {
-              processedRow.has_reference_change = true;
-              processedRow.reference_change = {
-                change_id: reference.change_id,
-                new_reference_id: reference.new_reference_id,
-                source: reference.supplier_id ? 'supplier' : 'user',
-                supplier_name: reference.supplier_name || '',
-                notes: reference.notes || '',
-              };
-            } else {
-              processedRow.is_referenced_by = true;
-              processedRow.referencing_items = [{
-                item_id: reference.original_item_id,
-                reference_change: {
-                  change_id: reference.change_id,
-                  source: reference.supplier_id ? 'supplier' : 'user',
-                  supplier_name: reference.supplier_name || '',
-                  notes: reference.notes || '',
-                },
-              }];
-            }
-          }
-          break;
-
-        case 'hebrew_description':
-          if (!value) {
-            throw new Error(`Missing required Hebrew description in row ${index + 2}`);
-          }
-          processedRow.hebrew_description = String(value).trim();
+          processedRow.item_id = String(value).trim();
+          processedRow.original_item_id = processedRow.item_id;
           break;
 
         case 'requested_qty':
@@ -172,72 +136,17 @@ async function processInquiryData(filePath, columnMapping, model) {
           break;
 
         case 'import_markup':
-          if (value) {
-            const markup = parseNumericValue(value);
-            if (markup >= 1.0 && markup <= 2.0) {
-              processedRow.import_markup = markup;
-            }
-          }
-          break;
-
-        case 'new_reference_id':
-          if (value) {
-            const refId = String(value).trim();
-            // Only set reference if it's different from the item_id
-            if (refId !== processedRow.item_id) {
-              processedRow.new_reference_id = refId;
-              // If there's a notes column mapped, get the notes
-              const notesCol = columnMapping['reference_notes'];
-              if (notesCol && row[notesCol]) {
-                processedRow.reference_notes = String(row[notesCol]).trim();
-              }
-              // Create reference change information
-              processedRow.has_reference_change = true;
-              processedRow.reference_change = {
-                source: 'inquiry_item',
-                new_reference_id: refId,
-                notes: processedRow.reference_notes || 'Replacement from Excel upload',
-              };
-            } else {
-              debug.log(`Skipping self-reference for item ${refId} in row ${index + 2}`);
-            }
-          }
-          break;
-
-        case 'sold_this_year':
-        case 'sold_last_year':
-          // Handle numeric values with 0 as default for empty/invalid values
-          const numericValue = parseNumericValue(value, 0);
-          processedRow[dbField] = Math.floor(numericValue); // Ensure whole number
-                        
-          // Only log successful processing if there was an actual value
-          if (value !== null && value !== undefined && value !== '') {
-            debug.log(`Successfully processed ${dbField}:`, {
-              field: dbField,
-              itemId: processedRow.item_id,
-              originalValue: value,
-              finalValue: processedRow[dbField],
-            });
-          }
-          break;
-
-        case 'qty_in_stock':
-          processedRow[dbField] = parseNumericValue(value, 0);
+          processedRow.import_markup = Math.min(Math.max(parseNumericValue(value, 1.3), 1.0), 2.0);
           break;
 
         case 'retail_price':
-          if (value) {
-            processedRow[dbField] = parseNumericValue(value);
-          }
+          processedRow.retail_price = parseNumericValue(value);
           break;
 
-        case 'english_description':
-        case 'hs_code':
-        case 'notes':
-        case 'origin':
-          if (value) {
-            processedRow[dbField] = String(value).trim();
-          }
+        case 'qty_in_stock':
+        case 'sold_this_year':
+        case 'sold_last_year':
+          processedRow[dbField] = parseNumericValue(value);
           break;
 
         default:
@@ -247,49 +156,37 @@ async function processInquiryData(filePath, columnMapping, model) {
         }
       }
 
-      // Log the final processed row
-      debug.log('Processed row:', {
-        itemId: processedRow.item_id,
-        soldThisYear: processedRow.sold_this_year,
-        soldLastYear: processedRow.sold_last_year,
-        rowIndex: index + 2,
-      });
-
-      return processedRow;
-    }));
-
-    // Process referencing items
-    processedData.forEach(item => {
-      if (item.has_reference_change) {
-        const referencedItems = processedData.filter(otherItem => 
-          otherItem.item_id === item.new_reference_id,
-        );
-        if (referencedItems.length > 0) {
-          referencedItems.forEach(refItem => {
-            refItem.is_referenced_by = true;
-            if (!refItem.referencing_items) {
-              refItem.referencing_items = [];
-            }
-            refItem.referencing_items.push({
-              item_id: item.item_id,
-              reference_change: item.reference_change,
-            });
-          });
+      // Add reference information from itemsMap
+      const itemData = itemsMap.get(processedRow.item_id);
+      if (itemData) {
+        if (itemData.references.size > 0) {
+          processedRow.has_reference_change = true;
+          processedRow.reference_change = {
+            source: 'inquiry_item',
+            new_reference_id: Array.from(itemData.references)[0],
+            notes: processedRow.reference_notes || 'Reference from Excel upload',
+          };
+        }
+        if (itemData.referencedBy.size > 0) {
+          processedRow.is_referenced_by = true;
+          processedRow.referencing_items = Array.from(itemData.referencedBy).map(id => ({
+            item_id: id,
+            reference_change: {
+              source: 'inquiry_item',
+              notes: 'Reference from Excel upload',
+            },
+          }));
         }
       }
+
+      return processedRow;
     });
 
-    // Sort by original Excel order
-    processedData.sort((a, b) => a.excel_row_index - b.excel_row_index);
-
-    debug.log('Final processed data:', {
+    debug.log('Successfully processed inquiry data:', {
       totalRows: processedData.length,
-      sampleRows: processedData.slice(0, 3).map(row => ({
-        itemId: row.item_id,
-        soldThisYear: row.sold_this_year,
-        soldLastYear: row.sold_last_year,
-      })),
-      duplicates: Object.entries(itemIdCounts).filter(([_, count]) => count > 1).length,
+      created: batchResults.created.length,
+      updated: batchResults.updated.length,
+      referenced: batchResults.referenced.length,
     });
 
     return processedData;
@@ -299,165 +196,17 @@ async function processInquiryData(filePath, columnMapping, model) {
   }
 }
 
-function processSupplierResponse(filePath, columnMapping) {
-  try {
-    const workbook = XLSX.readFile(filePath, {
-      cellDates: true,  // Handle dates properly
-      cellNF: true,     // Keep number formats
-      cellText: false,  // Don't generate text values
-      cellFormula: false, // Don't parse formulas
-      WTF: false,       // Don't include cell metadata
-    });
-        
-    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        
-    // Get the data with raw values and number formats
-    const data = XLSX.utils.sheet_to_json(firstSheet, {
-      header: 'A',     // Use A1 notation
-      raw: false,      // Don't use raw values
-      defval: '',      // Default empty cells to empty string
-      blankrows: false, // Skip empty rows
-    });
-
-    if (data.length === 0) {
-      throw new Error('Excel file must contain at least one data row');
-    }
-
-    // Track duplicates and original positions
-    const itemIdCounts = {};
-    const itemIdFirstIndex = {};
-
-    const processedData = data.slice(1).map((row, index) => { // Skip header row
-      const processedRow = {
-        excel_row_index: index,
-      };
-            
-      Object.entries(columnMapping).forEach(([field, excelCol]) => {
-        if (!excelCol) return;
-                
-        let value = row[excelCol];
-        const cell = firstSheet[XLSX.utils.encode_cell({r: index + 1, c: XLSX.utils.decode_col(excelCol)})];
-                
-        // Convert field to snake_case
-        const dbField = convertToSnakeCase(field);
-                
-        switch (dbField) {
-        case 'item_id':
-          if (!value) {
-            throw new Error(`Missing required Item ID in row ${index + 2}`);
-          }
-          processedRow.item_id = String(value).trim();
-          processedRow.original_item_id = processedRow.item_id;
-                        
-          // Track duplicates
-          itemIdCounts[processedRow.item_id] = (itemIdCounts[processedRow.item_id] || 0) + 1;
-          if (itemIdCounts[processedRow.item_id] === 1) {
-            itemIdFirstIndex[processedRow.item_id] = index;
-          }
-          processedRow.is_duplicate = itemIdCounts[processedRow.item_id] > 1;
-          if (processedRow.is_duplicate) {
-            processedRow.original_row_index = itemIdFirstIndex[processedRow.item_id];
-          }
-          break;
-                        
-        case 'price_quoted':
-          let priceValue;
-                        
-          if (cell && cell.v !== undefined) {
-            if (typeof cell.v === 'number') {
-              // If it's a number, use it directly
-              priceValue = cell.v;
-            } else if (typeof cell.v === 'string') {
-              // If it's a string, try to parse it
-              // Remove any currency symbols and spaces
-              const cleanValue = cell.v.replace(/[^\d.,\-]/g, '').trim();
-              // Handle comma as decimal separator
-              const normalizedValue = cleanValue.replace(',', '.');
-              priceValue = parseFloat(normalizedValue);
-            }
-                            
-            // If parsing failed or value is invalid, default to 0
-            if (isNaN(priceValue)) {
-              priceValue = 0;
-              debug.warn(`Invalid price value in row ${index + 2}: ${cell.v}`);
-            }
-          } else {
-            priceValue = 0;
-          }
-                        
-          // Store the price with full precision
-          processedRow.price = priceValue;
-          processedRow.price_quoted = priceValue;
-                        
-          // Log for debugging
-          debug.log(`Processing price for row ${index + 2}:`, {
-            originalValue: cell?.v,
-            valueType: typeof cell?.v,
-            cellFormat: cell?.z,
-            parsedPrice: priceValue,
-          });
-          break;
-                        
-        case 'new_reference_id':
-          if (value) {
-            const refId = String(value).trim();
-            // Only set reference if it's different from the item_id
-            if (refId !== processedRow.item_id) {
-              processedRow.new_reference_id = refId;
-              processedRow.has_reference_change = true;
-              processedRow.reference_change = {
-                source: 'supplier',
-                new_reference_id: refId,
-                notes: processedRow.notes || 'Replacement from supplier response',
-              };
-            } else {
-              debug.log(`Skipping self-reference for item ${refId} in row ${index + 2}`);
-            }
-          }
-          break;
-                        
-        case 'notes':
-        case 'origin':
-        case 'hs_code':
-        case 'english_description':
-          if (value) {
-            processedRow[dbField] = String(value).trim();
-          }
-          break;
-
-        default:
-          if (value) {
-            processedRow[dbField] = String(value).trim();
-          }
-        }
-      });
-
-      return processedRow;
-    });
-
-    // Sort by original Excel order
-    processedData.sort((a, b) => a.excel_row_index - b.excel_row_index);
-
-    debug.log('Processed supplier response:', {
-      totalRows: processedData.length,
-      sampleRow: processedData[0],
-      duplicates: Object.entries(itemIdCounts).filter(([_, count]) => count > 1).length,
-    });
-
-    return processedData;
-  } catch (error) {
-    debug.error('Error processing supplier response:', error);
-    throw error;
-  }
-}
-
+/**
+ * Validate data against required fields
+ * @param {Object[]} data - Data to validate
+ * @param {string[]} requiredFields - List of required fields
+ * @throws {ExcelValidationError}
+ */
 function validateData(data, requiredFields) {
   const errors = [];
   data.forEach((row, index) => {
     requiredFields.forEach(field => {
-      // Convert field to snake_case
       const dbField = convertToSnakeCase(field);
-            
       const value = row[dbField];
       if (value == null || (typeof value === 'string' && !value.trim())) {
         errors.push({
@@ -470,7 +219,7 @@ function validateData(data, requiredFields) {
   });
 
   if (errors.length > 0) {
-    throw new Error('Data validation failed: ' + JSON.stringify(errors));
+    throw new ExcelValidationError('Data validation failed', { errors });
   }
 
   return true;
@@ -478,22 +227,20 @@ function validateData(data, requiredFields) {
 
 // Helper function to get optimal column width based on content type
 function getColumnWidth(header, sampleValue) {
-  // Add null check for header
-  if (!header) {
-    return { wch: 15 }; // Default width for undefined headers
-  }
-
-  if (header.includes('Description')) {
-    return { wch: 40 }; // Wider for descriptions
-  } else if (header === 'Item ID' || header.includes('Code')) {
-    return { wch: 12 }; // Medium for IDs and codes
-  } else if (typeof sampleValue === 'number') {
-    return { wch: 10 }; // Narrower for numbers
-  }
+  if (!header) return { wch: 15 }; // Default width for undefined headers
+  if (header.includes('Description')) return { wch: 40 }; // Wider for descriptions
+  if (header === 'Item ID' || header.includes('Code')) return { wch: 12 }; // Medium for IDs and codes
+  if (typeof sampleValue === 'number') return { wch: 10 }; // Narrower for numbers
   return { wch: 15 }; // Default width
 }
 
-// Process and format data for Excel export
+/**
+ * Process and format data for Excel export
+ * @param {Object[]} items - Items to export
+ * @param {string[]} selectedHeaders - Headers to include
+ * @param {Object} headerDisplayMap - Map of header names
+ * @returns {Promise<Object>} Export results
+ */
 async function processExportData(items, selectedHeaders, headerDisplayMap) {
   debug.log('Starting export data processing with:', {
     itemCount: items.length,
@@ -501,101 +248,71 @@ async function processExportData(items, selectedHeaders, headerDisplayMap) {
     headerDisplayMap,
   });
 
+  // Log any headers that don't have display mappings
+  const unmappedHeaders = selectedHeaders.filter(header => !headerDisplayMap[header]);
+  if (unmappedHeaders.length > 0) {
+    debug.log('Warning: Some headers do not have display mappings:', unmappedHeaders);
+  }
+
   try {
-    // Transform items to include ONLY selected headers with strict filtering
-    const rows = items.map((item, index) => {
+    // Transform items to include ONLY selected headers
+    const rows = items.map(item => {
       const filteredRow = {};
       selectedHeaders.forEach(header => {
-        let value = item[header];
+        if (!(header in item)) {
+          debug.error(`Warning: Header '${header}' not found in item:`, Object.keys(item));
+        }
+        // Map current_ prefixed fields
+        const fieldValue = header.startsWith('qty_in_stock') ? item['current_qty_in_stock'] :
+          header.startsWith('retail_price') ? item['current_retail_price'] :
+            header.startsWith('sold_this_year') ? item['current_sold_this_year'] :
+              header.startsWith('sold_last_year') ? item['current_sold_last_year'] :
+                item[header];
+
+        let value = fieldValue;
                 
         // Format specific values
         if (['retail_price', 'import_markup'].includes(header) && value != null) {
           value = parseNumericValue(value, 0).toFixed(2);
-        } else if (header === 'requested_qty') {
+        } else if (header === 'requested_qty' || header === 'qty_in_stock' ||
+                  header === 'sold_this_year' || header === 'sold_last_year') {
           value = parseNumericValue(value, 0);
         } else if (header === 'hebrew_description' || header === 'english_description') {
-          // Ensure text fields are properly encoded
           value = value ? String(value).trim() : '';
         }
 
-        // Use the display name as the key
-        const displayName = headerDisplayMap[header];
+        // Use the display name as the key, fallback to original header if no mapping exists
+        const displayName = headerDisplayMap[header] || header;
         filteredRow[displayName] = value ?? ''; // Convert null/undefined to empty string
       });
 
-      if (index === 0) {
-        debug.log('First row sample after filtering:', filteredRow);
-        debug.log('First row keys:', Object.keys(filteredRow));
-      }
-
       return filteredRow;
-    });
-
-    debug.log('Transformed all rows. Sample sizes:', {
-      rowCount: rows.length,
-      firstRowKeys: Object.keys(rows[0] || {}),
-      expectedHeaders: selectedHeaders.map(h => headerDisplayMap[h]),
     });
 
     // Create workbook and worksheet
     const wb = XLSX.utils.book_new();
     const headerDisplayNames = selectedHeaders.map(header => headerDisplayMap[header]);
-        
-    debug.log('Creating worksheet with headers:', headerDisplayNames);
-
-    // Set worksheet options for better RTL and Unicode support
     const ws = XLSX.utils.json_to_sheet(rows, {
       header: headerDisplayNames,
-      raw: false, // This ensures text is properly encoded
+      raw: false,
     });
 
-    // Verify worksheet structure
-    debug.log('Worksheet created. Properties:', {
-      ref: ws['!ref'],
-      cols: ws['!cols']?.length,
-      merges: ws['!merges']?.length,
-      firstCell: ws['A1'],
-    });
-
-    // Set RTL for Hebrew columns
-    const hebrewColumns = headerDisplayNames.reduce((acc, header, idx) => {
-      if (header === 'Hebrew Description') {
-        acc[XLSX.utils.encode_col(idx)] = { direction: 'rtl' };
-      }
-      return acc;
-    }, {});
-
-    debug.log('Hebrew columns configuration:', hebrewColumns);
-
-    // Set column properties
+    // Set column widths
     ws['!cols'] = headerDisplayNames.map((header, idx) => {
       const sampleValue = rows[0] ? rows[0][header] : null;
-      const width = getColumnWidth(header, sampleValue);
-      const colConfig = {
-        ...width,
-        rtl: header === 'Hebrew Description',
-        wpx: width.wch * 7,
-      };
-      debug.log(`Column ${idx} (${header}) config:`, colConfig);
-      return colConfig;
+      return getColumnWidth(header, sampleValue);
     });
 
-    // Add worksheet to workbook with UTF-8 encoding
+    // Add worksheet to workbook
     XLSX.utils.book_append_sheet(wb, ws, 'Inquiry Items');
 
-    debug.log('Generating final Excel buffer with options:', {
+    // Generate Excel file
+    const buffer = XLSX.write(wb, {
+      type: 'buffer',
+      bookType: 'xlsx',
       bookSST: true,
       cellStyles: true,
       compression: true,
-    });
-
-    // Generate Excel file with RTL and encoding options
-    const buffer = XLSX.write(wb, { 
-      type: 'buffer', 
-      bookType: 'xlsx',
-      bookSST: true, // Enable shared strings for better Unicode support
-      cellStyles: true, // Enable cell styles for RTL
-      compression: true, // Enable compression for better file size
     });
 
     return {
@@ -611,7 +328,6 @@ async function processExportData(items, selectedHeaders, headerDisplayMap) {
 
 module.exports = {
   processInquiryData,
-  processSupplierResponse,
   validateData,
   processExportData,
 };

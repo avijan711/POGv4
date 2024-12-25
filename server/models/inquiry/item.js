@@ -472,6 +472,343 @@ class InquiryItemModel extends BaseModel {
       throw error;
     }
   }
+
+  /**
+   * Process inquiry data from an Excel file
+   * @param {string} filePath - Path to the Excel file
+   * @param {Object} columnMapping - Mapping of Excel columns to database fields
+   * @returns {Promise<Array>} Array of processed items
+   */
+  async processInquiryDataFromExcel(filePath, columnMapping) {
+    const XLSX = require('xlsx');
+    const debug = require('../../utils/debug');
+
+    return await this.executeTransaction(async () => {
+      try {
+        debug.log('Processing inquiry data with mapping:', columnMapping);
+        
+        // Read Excel file with specific options
+        const workbook = XLSX.readFile(filePath, {
+          raw: true,
+          cellDates: true,
+          cellNF: false,
+          cellText: false,
+        });
+        
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        
+        // Convert sheet to JSON
+        const data = XLSX.utils.sheet_to_json(firstSheet, {
+          raw: true,
+          defval: '',
+          blankrows: false,
+        });
+
+        if (data.length === 0) {
+          throw new Error('Excel file must contain at least one data row');
+        }
+
+        // Track duplicates and original positions
+        const itemIdCounts = {};
+        const itemIdFirstIndex = {};
+
+        // First pass: Create all items
+        for (const row of data) {
+          for (const [field, excelCol] of Object.entries(columnMapping)) {
+            if (!excelCol) continue;
+            const value = row[excelCol];
+            const dbField = this.convertToSnakeCase(field);
+            
+            if (dbField === 'item_id' && value) {
+              const itemId = String(value).trim();
+              // Create the item using existing getOrCreateItem method
+              await this.getOrCreateItem(itemId, {
+                hebrew_description: row[columnMapping.hebrewDescription] || `Unknown Item ${itemId}`,
+              });
+            }
+          }
+        }
+
+        // Second pass: Process the data
+        const processedData = await Promise.all(data.map(async (row, index) => {
+          const processedRow = {
+            excel_row_index: index,
+          };
+                
+          for (const [field, excelCol] of Object.entries(columnMapping)) {
+            if (!excelCol) continue;
+                    
+            let value = row[excelCol];
+            const dbField = this.convertToSnakeCase(field);
+                    
+            debug.log(`Processing field ${dbField} with value "${value}" from Excel column "${excelCol}"`);
+
+            // Pre-declare variables used in switch cases
+            let referenceQuery;
+            let reference;
+            let markup;
+            let refId;
+            let notesCol;
+            let numericValue;
+
+            switch (dbField) {
+              case 'item_id':
+                if (!value) {
+                  throw new Error(`Missing required Item ID in row ${index + 2}`);
+                }
+                value = String(value).trim();
+                processedRow.item_id = value;
+                processedRow.original_item_id = value;
+                
+                // Track duplicates
+                itemIdCounts[value] = (itemIdCounts[value] || 0) + 1;
+                if (itemIdCounts[value] === 1) {
+                  itemIdFirstIndex[value] = index;
+                }
+                processedRow.is_duplicate = itemIdCounts[value] > 1;
+                if (processedRow.is_duplicate) {
+                  processedRow.original_row_index = itemIdFirstIndex[value];
+                }
+
+                // Check references
+                referenceQuery = `
+                  SELECT
+                    rc.*,
+                    s.name as supplier_name
+                  FROM item_reference_change rc
+                  LEFT JOIN supplier s ON rc.supplier_id = s.supplier_id
+                  WHERE rc.original_item_id = ? OR rc.new_reference_id = ?
+                  ORDER BY rc.change_date DESC
+                  LIMIT 1`;
+                reference = await this.executeQuerySingle(referenceQuery, [value, value]);
+                        
+                if (reference) {
+                  if (reference.original_item_id === value) {
+                    processedRow.has_reference_change = true;
+                    processedRow.reference_change = {
+                      change_id: reference.change_id,
+                      new_reference_id: reference.new_reference_id,
+                      source: reference.supplier_id ? 'supplier' : 'user',
+                      supplier_name: reference.supplier_name || '',
+                      notes: reference.notes || '',
+                    };
+                  } else {
+                    processedRow.is_referenced_by = true;
+                    processedRow.referencing_items = [{
+                      item_id: reference.original_item_id,
+                      reference_change: {
+                        change_id: reference.change_id,
+                        source: reference.supplier_id ? 'supplier' : 'user',
+                        supplier_name: reference.supplier_name || '',
+                        notes: reference.notes || '',
+                      },
+                    }];
+                  }
+                }
+                break;
+
+              case 'hebrew_description':
+                if (!value) {
+                  throw new Error(`Missing required Hebrew description in row ${index + 2}`);
+                }
+                processedRow.hebrew_description = String(value).trim();
+                break;
+
+              case 'requested_qty':
+                processedRow.requested_qty = this.parseNumericValue(value, 0);
+                break;
+
+              case 'import_markup':
+                if (value) {
+                  const markup = this.parseNumericValue(value);
+                  if (markup >= 1.0 && markup <= 2.0) {
+                    processedRow.import_markup = markup;
+                  }
+                }
+                break;
+
+              case 'new_reference_id':
+                if (value) {
+                  const refId = String(value).trim();
+                  // Only set reference if it's different from the item_id
+                  if (refId !== processedRow.item_id) {
+                    processedRow.new_reference_id = refId;
+                    // If there's a notes column mapped, get the notes
+                    const notesCol = columnMapping.reference_notes;
+                    if (notesCol && row[notesCol]) {
+                      processedRow.reference_notes = String(row[notesCol]).trim();
+                    }
+                    // Create reference change information
+                    processedRow.has_reference_change = true;
+                    processedRow.reference_change = {
+                      source: 'inquiry_item',
+                      new_reference_id: refId,
+                      notes: processedRow.reference_notes || 'Replacement from Excel upload',
+                    };
+                  } else {
+                    debug.log(`Skipping self-reference for item ${refId} in row ${index + 2}`);
+                  }
+                }
+                break;
+
+              case 'sold_this_year':
+              case 'sold_last_year':
+                // Handle numeric values with 0 as default for empty/invalid values
+                const numericValue = this.parseNumericValue(value, 0);
+                processedRow[dbField] = Math.floor(numericValue); // Ensure whole number
+                
+                // Only log successful processing if there was an actual value
+                if (value !== null && value !== undefined && value !== '') {
+                  debug.log(`Successfully processed ${dbField}:`, {
+                    field: dbField,
+                    itemId: processedRow.item_id,
+                    originalValue: value,
+                    finalValue: processedRow[dbField],
+                  });
+                }
+                break;
+
+              case 'qty_in_stock':
+                processedRow[dbField] = this.parseNumericValue(value, 0);
+                break;
+
+              case 'retail_price':
+                if (value) {
+                  processedRow[dbField] = this.parseNumericValue(value);
+                }
+                break;
+
+              case 'english_description':
+              case 'hs_code':
+              case 'notes':
+              case 'origin':
+                if (value) {
+                  processedRow[dbField] = String(value).trim();
+                }
+                break;
+
+              default:
+                if (value) {
+                  processedRow[dbField] = String(value).trim();
+                }
+                break;
+            }
+          }
+
+          // Log the final processed row
+          debug.log('Processed row:', {
+            itemId: processedRow.item_id,
+            soldThisYear: processedRow.sold_this_year,
+            soldLastYear: processedRow.sold_last_year,
+            rowIndex: index + 2,
+          });
+
+          return processedRow;
+        }));
+
+        // Process referencing items
+        processedData.forEach(item => {
+          if (item.has_reference_change) {
+            const referencedItems = processedData.filter(otherItem =>
+              otherItem.item_id === item.new_reference_id
+            );
+            if (referencedItems.length > 0) {
+              referencedItems.forEach(refItem => {
+                refItem.is_referenced_by = true;
+                if (!refItem.referencing_items) {
+                  refItem.referencing_items = [];
+                }
+                refItem.referencing_items.push({
+                  item_id: item.item_id,
+                  reference_change: item.reference_change,
+                });
+              });
+            }
+          }
+        });
+
+        // Sort by original Excel order
+        processedData.sort((a, b) => a.excel_row_index - b.excel_row_index);
+
+        debug.log('Final processed data:', {
+          totalRows: processedData.length,
+          sampleRows: processedData.slice(0, 3).map(row => ({
+            itemId: row.item_id,
+            soldThisYear: row.sold_this_year,
+            soldLastYear: row.sold_last_year,
+          })),
+          duplicates: Object.entries(itemIdCounts).filter(([_, count]) => count > 1).length,
+        });
+
+        return processedData;
+      } catch (error) {
+        debug.error('Error processing inquiry data:', error);
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * Helper function to convert field names to snake_case
+   * @private
+   */
+  convertToSnakeCase(field) {
+    const fieldMap = {
+      'itemID': 'item_id',
+      'newReferenceID': 'new_reference_id',
+      'hsCode': 'hs_code',
+      'HSCode': 'hs_code',
+      'englishDescription': 'english_description',
+      'EnglishDescription': 'english_description',
+      'hebrewDescription': 'hebrew_description',
+      'HebrewDescription': 'hebrew_description',
+      'importMarkup': 'import_markup',
+      'ImportMarkup': 'import_markup',
+      'requestedQty': 'requested_qty',
+      'RequestedQty': 'requested_qty',
+      'stockQuantity': 'qty_in_stock',
+      'StockQuantity': 'qty_in_stock',
+      'retailPrice': 'retail_price',
+      'RetailPrice': 'retail_price',
+      'qtySoldThisYear': 'qty_sold_this_year',
+      'QtySoldThisYear': 'qty_sold_this_year',
+      'qty_sold_this_year': 'qty_sold_this_year',
+      'qtySoldLastYear': 'qty_sold_last_year',
+      'QtySoldLastYear': 'qty_sold_last_year',
+      'qty_sold_last_year': 'qty_sold_last_year',
+      'referenceNotes': 'reference_notes',
+      'ReferenceNotes': 'reference_notes',
+      'notes': 'notes',
+      'Notes': 'notes',
+      'origin': 'origin',
+      'Origin': 'origin',
+    };
+    return fieldMap[field] || field.toLowerCase().replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+  }
+
+  /**
+   * Helper function to safely parse numeric values
+   * @private
+   */
+  parseNumericValue(value, defaultValue = 0) {
+    if (value === null || value === undefined || value === '') {
+      return defaultValue;
+    }
+
+    // If it's already a number (Excel might provide it as such)
+    if (typeof value === 'number') {
+      return Math.max(0, value);
+    }
+
+    // Convert to string and clean up
+    const strValue = String(value).trim();
+    
+    // Remove any spaces and handle both comma and period as decimal separators
+    const cleanValue = strValue.replace(/\s/g, '').replace(/,/g, '.');
+    const numValue = Number(cleanValue);
+
+    return !isNaN(numValue) ? Math.max(0, numValue) : defaultValue;
+  }
 }
 
 module.exports = InquiryItemModel;

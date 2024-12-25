@@ -1,5 +1,4 @@
 const debug = require('../utils/debug');
-const { validateFileType } = require('../utils/excelProcessor/validator');
 
 function validateInquiryId(req, res, next) {
   const inquiryId = req.params.inquiry_id;
@@ -65,17 +64,14 @@ function validateBulkDelete(req, res, next) {
 
 function validateUpload(req, res, next) {
   try {
-    // Check if file exists
+    // Check if file exists and was accepted by multer
     if (!req.file) {
-      const error = new Error('No file uploaded');
+      const error = new Error('No file uploaded or file was rejected');
       error.name = 'ValidationError';
       throw error;
     }
 
-    // Validate file type using the actual file path
-    validateFileType(req.file.path);
-
-    // Check column mapping
+    // Validate column mapping
     if (!req.body.column_mapping) {
       const error = new Error('Column mapping is required');
       error.name = 'ValidationError';
@@ -125,10 +121,9 @@ function validateUpload(req, res, next) {
     }
 
     // Store the validated mapping back in the request
-    req.validatedMapping = {
-      ...columnMapping,
+    req.validatedMapping = Object.assign({}, columnMapping, {
       price: columnMapping.price_quoted, // Ensure price field is mapped for internal use
-    };
+    });
 
     next();
   } catch (error) {

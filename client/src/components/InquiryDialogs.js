@@ -5,15 +5,15 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  TextField,
-  CircularProgress,
   Typography,
   Box,
+  CircularProgress,
   Alert,
 } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
 import SupplierResponseUpload from './SupplierResponseUpload';
 import ItemDetailsDialogWrapper from './ItemDetailsDialogWrapper';
+import EditItemDialog from './InquiryDialogs/EditItemDialog';
 
 function InquiryDialogs({
   dialogStates,
@@ -36,12 +36,6 @@ function InquiryDialogs({
     error,
   } = dialogStates;
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    await onSave(formData);
-  };
-
   const handleItemClick = async (itemId) => {
     // This should be implemented by the parent component
     console.log('Item clicked:', itemId);
@@ -50,74 +44,13 @@ function InquiryDialogs({
   return (
     <>
       {/* Edit Item Dialog */}
-      <Dialog open={dialogOpen} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit Item</DialogTitle>
-        <form onSubmit={handleSave}>
-          <DialogContent>
-            {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {error}
-              </Alert>
-            )}
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <TextField
-                name="item_id"
-                label="Item ID"
-                value={selectedItem?.item_id || ''}
-                InputProps={{ readOnly: true }}
-              />
-              <TextField
-                name="hebrew_description"
-                label="Hebrew Description"
-                value={selectedItem?.hebrew_description || ''}
-                multiline
-                rows={2}
-                InputProps={{ readOnly: true }}
-              />
-              <TextField
-                name="english_description"
-                label="English Description"
-                value={selectedItem?.english_description || ''}
-                multiline
-                rows={2}
-                InputProps={{ readOnly: true }}
-              />
-              <TextField
-                name="import_markup"
-                label="Import Markup"
-                type="number"
-                value={selectedItem?.import_markup || ''}
-                inputProps={{ step: '0.01' }}
-                required
-              />
-              <TextField
-                name="hs_code"
-                label="HS Code"
-                value={selectedItem?.hs_code || ''}
-              />
-              <TextField
-                name="retail_price"
-                label="Retail Price"
-                type="number"
-                value={selectedItem?.retail_price || ''}
-                inputProps={{ step: '0.01' }}
-                required
-              />
-              <TextField
-                name="qty_in_stock"
-                label="Stock"
-                type="number"
-                value={selectedItem?.qty_in_stock || ''}
-                required
-              />
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button type="submit" variant="contained">Save</Button>
-          </DialogActions>
-        </form>
-      </Dialog>
+      <EditItemDialog
+        open={dialogOpen}
+        onClose={onClose}
+        onSave={onSave}
+        selectedItem={selectedItem}
+        error={error}
+      />
 
       {/* Item Details Dialog */}
       {selectedItemDetails && (

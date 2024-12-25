@@ -95,6 +95,27 @@ function InquiryItemsTable({
     }
   };
 
+  const handlePriceUpdate = async (supplierId, priceData) => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/prices/update/${supplierId}`, {
+        items: [{
+          item_id: priceData.item_id,
+          price: priceData.price,
+        }],
+        source_type: priceData.is_permanent ? 'manual' : 'inquiry',
+      });
+
+      if (onRefresh) {
+        onRefresh();
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error updating price:', err);
+      throw new Error(err.response?.data?.message || 'Failed to update price');
+    }
+  };
+
   const processSupplierPrices = (item) => {
     let supplierPrices = [];
     try {
@@ -157,6 +178,9 @@ function InquiryItemsTable({
                 Retail Price (ILS)
               </SortableTableCell>
               <TableCell align="right" sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
+                Supplier Prices
+              </TableCell>
+              <TableCell align="right" sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
                 Qty Sold (This Year)
               </TableCell>
               <TableCell align="right" sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
@@ -203,6 +227,7 @@ function InquiryItemsTable({
                   onDeleteItem={onDeleteItem}
                   onDeleteReference={(item) => handleDeleteClick(item, 'reference')}
                   processSupplierPrices={processSupplierPrices}
+                  onPriceUpdate={handlePriceUpdate}
                 />
               ))
             )}

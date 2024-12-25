@@ -10,8 +10,20 @@ class Debug {
     };
   }
 
-  async updateSettings(newSettings) {
-    this.settings = { ...this.settings, ...newSettings };
+  updateSettings(newSettings) {
+    // Ensure newSettings is an object
+    const settings = typeof newSettings === 'string' ? JSON.parse(newSettings) : newSettings;
+    
+    // Only update valid debug settings
+    const validKeys = ['general', 'errors', 'database', 'performance', 'routes', 'middleware'];
+    const filteredSettings = {};
+    for (const key of validKeys) {
+      if (settings[key] !== undefined) {
+        filteredSettings[key] = Boolean(settings[key]);
+      }
+    }
+    
+    this.settings = Object.assign({}, this.settings, filteredSettings);
   }
 
   log(message, data = null) {
@@ -23,7 +35,8 @@ class Debug {
     if (data && typeof data === 'object') {
       if (data.qtySoldThisYear !== undefined || data.qtySoldLastYear !== undefined) {
         console.log(`${logPrefix} ${message}`, {
-          ...data,
+          qtySoldThisYear: data.qtySoldThisYear,
+          qtySoldLastYear: data.qtySoldLastYear,
           _salesDataNote: 'Sales data present in this log',
         });
       } else {

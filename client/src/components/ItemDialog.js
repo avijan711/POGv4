@@ -44,7 +44,7 @@ function TabPanel({ children, value, index }) {
   );
 }
 
-function ItemDialog({ open, onClose, item, onSave, mode, error }) {
+function ItemDialog({ open, onClose, item = null, onSave, mode, error }) {
   // Use the enhanced useItemDetails hook in edit mode
   const {
     tabValue,

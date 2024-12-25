@@ -22,8 +22,10 @@ import {
   Info as InfoIcon,
   KeyboardArrowDown as KeyboardArrowDownIcon,
   KeyboardArrowUp as KeyboardArrowUpIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 import { formatPrice } from './utils';
+import PriceEditDialog from '../InquiryItemsTable/PriceEditDialog';
 
 export function SupplierRow({ 
   supplierId, 
@@ -32,22 +34,24 @@ export function SupplierRow({
   onDelete, 
   onDeleteItem, 
   onShowMissing,
-  onShowCovered, 
+  onShowCovered,
+  onPriceUpdate,
 }) {
   const [open, setOpen] = React.useState(false);
+  const [editingPrice, setEditingPrice] = React.useState(null);
 
-  // Enhanced debug logging for initial data
-  React.useEffect(() => {
-    console.log('SupplierRow mounted/updated:', {
-      supplier_name: supplierData.supplier_name,
-      missing_items_type: typeof supplierData.missing_items,
-      isArray: Array.isArray(supplierData.missing_items),
-      missing_items_length: supplierData.missing_items?.length,
-      raw_missing_items: supplierData.missing_items,
-      missing_count: supplierData.missing_count,
-      first_missing_item: Array.isArray(supplierData.missing_items) ? supplierData.missing_items[0] : null,
-    });
-  }, [supplierData]);
+  const handlePriceUpdate = async (priceData) => {
+    try {
+      await onPriceUpdate(supplierId, {
+        ...priceData,
+        item_id: editingPrice.item_id,
+      });
+      setEditingPrice(null);
+    } catch (err) {
+      console.error('Error updating price:', err);
+      throw err;
+    }
+  };
 
   const missingItemsCount = supplierData.missing_count || supplierData.missing_items?.length || 0;
   const respondedItemsCount = supplierData.item_count || supplierData.responses?.length || 0;
@@ -55,24 +59,10 @@ export function SupplierRow({
 
   const handleShowMissing = React.useCallback(() => {
     if (missingItemsCount > 0) {
-      // Ensure missing_items is an array and create a clean copy
       const missingItems = Array.isArray(supplierData.missing_items) 
         ? [...supplierData.missing_items]
         : [];
 
-      // Enhanced debug logging
-      console.log('handleShowMissing triggered:', {
-        supplier: supplierData.supplier_name,
-        original_missing_items: supplierData.missing_items,
-        processed_missing_items: missingItems,
-        missing_items_length: missingItems.length,
-        first_item: missingItems[0],
-        missingCount: missingItemsCount,
-        totalExpected: totalItems,
-        responded: respondedItemsCount,
-      });
-            
-      // Create a clean copy of the supplier data
       const cleanSupplierData = {
         ...supplierData,
         missing_items: missingItems,
@@ -90,15 +80,6 @@ export function SupplierRow({
 
   const handleShowCovered = React.useCallback(() => {
     if (respondedItemsCount > 0) {
-      // Enhanced debug logging
-      console.log('handleShowCovered triggered:', {
-        supplier: supplierData.supplier_name,
-        responses: supplierData.responses,
-        responses_length: supplierData.responses?.length,
-        totalExpected: totalItems,
-        responded: respondedItemsCount,
-      });
-            
       onShowCovered({
         ...supplierData,
         responses: Array.isArray(supplierData.responses) 
@@ -178,7 +159,7 @@ export function SupplierRow({
             color="error"
             onClick={() => onDelete(supplierData)}
           >
-                        Delete All
+            Delete All
           </Button>
         </TableCell>
       </TableRow>
@@ -187,7 +168,7 @@ export function SupplierRow({
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box sx={{ margin: 1 }}>
               <Typography variant="h6" gutterBottom component="div">
-                                Responses
+                Responses
               </Typography>
               <Table size="small">
                 <TableHead>
@@ -216,8 +197,10 @@ export function SupplierRow({
                             icon={<AttachMoneyIcon />}
                             label={formatPrice(response.price_quoted)}
                             color={response.is_promotion ? 'secondary' : 'default'}
-                            variant="outlined"
+                            variant={response.is_permanent ? 'filled' : 'outlined'}
                             size="small"
+                            onClick={() => setEditingPrice(response)}
+                            sx={{ cursor: 'pointer' }}
                           />
                           {response.is_promotion && (
                             <Chip
@@ -227,6 +210,18 @@ export function SupplierRow({
                               size="small"
                             />
                           )}
+                          <IconButton
+                            size="small"
+                            onClick={() => setEditingPrice(response)}
+                            sx={{ 
+                              padding: '2px',
+                              '&:hover': {
+                                backgroundColor: 'action.hover',
+                              },
+                            }}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
                         </Box>
                       </TableCell>
                       <TableCell>
@@ -250,6 +245,23 @@ export function SupplierRow({
           </Collapse>
         </TableCell>
       </TableRow>
+
+      {editingPrice && (
+        <PriceEditDialog
+          open={!!editingPrice}
+          onClose={() => setEditingPrice(null)}
+          item={{
+            item_id: editingPrice.item_id,
+            hebrewDescription: editingPrice.hebrew_description,
+            englishDescription: editingPrice.english_description,
+          }}
+          supplierPrice={{
+            ...editingPrice,
+            supplier_name: supplierData.supplier_name,
+          }}
+          onSave={handlePriceUpdate}
+        />
+      )}
     </>
   );
 }

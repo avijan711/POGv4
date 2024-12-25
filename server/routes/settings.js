@@ -55,26 +55,46 @@ function createSettingsRouter({ db }) {
         });
       }
 
+      // Validate input
+      if (typeof enabled !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          message: 'Debug enabled status must be a boolean',
+          details: `Received: ${typeof enabled}`,
+        });
+      }
+
+      // Validate debug type
+      const validTypes = ['general', 'errors', 'database', 'performance', 'routes', 'middleware'];
+      if (!validTypes.includes(type)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid debug type',
+          details: `Must be one of: ${validTypes.join(', ')}`,
+        });
+      }
+
       // Get current settings
       const currentSettings = await settingsModel.getSetting('debug');
-      const settings = currentSettings ? JSON.parse(currentSettings.value) : {
-        general: true,
-        errors: true,
-        database: false,
-        performance: false,
-        routes: false,
-        middleware: false,
-      };
+      if (!currentSettings) {
+        return res.status(500).json({
+          success: false,
+          message: 'Debug settings not found',
+          details: 'Unable to retrieve current debug settings',
+        });
+      }
 
-      // Update setting
+      // Parse and update settings
+      const settings = JSON.parse(currentSettings.value);
       settings[type] = enabled;
 
-      // Save settings
-      await settingsModel.updateSetting('debug', JSON.stringify(settings), 'Debug logging settings');
+      // Save settings (model will handle JSON validation and storage)
+      const updatedSetting = await settingsModel.updateSetting('debug', settings, 'Debug logging settings');
 
-      res.json({ 
-        success: true, 
-        settings, 
+      res.json({
+        success: true,
+        settings: JSON.parse(updatedSetting.value),
+        message: `Debug ${type} ${enabled ? 'enabled' : 'disabled'}`,
       });
     } catch (err) {
       debug.error('Error updating debug settings:', err);

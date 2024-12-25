@@ -280,8 +280,12 @@ function createRouter({ db }) {
         });
       }
 
+      // Create a temporary model for Excel processing
+      const BaseModel = require('../models/BaseModel');
+      const tempModel = new BaseModel(dal);
+      
       // Process the Excel file using the mapping
-      const items = await processInquiryData(req.file.path, mapping, dal);
+      const items = await processInquiryData(req.file.path, mapping, tempModel);
             
       // Create a new inquiry with the processed items
       const inquiry = await inquiryModel.createInquiry({

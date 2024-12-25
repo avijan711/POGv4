@@ -1,6 +1,7 @@
 const BaseModel = require('../BaseModel');
 const InquiryItemModel = require('./item');
 const { getInquiriesQuery, getInquiryByIdQuery } = require('../queries/inquiries');
+const debug = require('../../utils/debug');
 
 class InquiryModel extends BaseModel {
   constructor(db) {
@@ -8,30 +9,32 @@ class InquiryModel extends BaseModel {
     this.itemModel = new InquiryItemModel(db);
   }
 
-  async createInquiry(inquiryNumber, items) {
-    return new Promise((resolve, reject) => {
-      this.db.serialize(async () => {
-        try {
-          await this.beginTransaction();
-          const inquiryId = await new Promise((resolve, reject) => {
-            this.db.run(
-              'INSERT INTO Inquiry (InquiryNumber, Status) VALUES (?, ?)',
-              [inquiryNumber, 'new'],
-              function(err) {
-                if (err) reject(err);
-                else resolve(this.lastID);
-              },
-            );
-          });
-          await this.itemModel.createBulk(inquiryId, items);
-          await this.commit();
-          resolve(inquiryId);
-        } catch (error) {
-          console.error('Error in transaction:', error);
-          await this.rollback();
-          reject(error);
+  async createInquiry(data) {
+    const { inquiryNumber, items } = data;
+    return await this.executeTransaction(async () => {
+      try {
+        // Create the inquiry
+        const result = await this.executeRun(
+          'INSERT INTO inquiry (inquiry_number, status) VALUES (?, ?)',
+          [inquiryNumber, 'new'],
+        );
+
+        const inquiryId = result.lastID;
+
+        // Create each item
+        for (const item of items) {
+          await this.itemModel.createInquiryItem(inquiryId, item);
         }
-      });
+
+        return {
+          id: inquiryId,
+          inquiryNumber,
+          status: 'new',
+        };
+      } catch (error) {
+        debug.error('Error creating inquiry:', error);
+        throw error;
+      }
     });
   }
 
@@ -90,7 +93,18 @@ class InquiryModel extends BaseModel {
       return {
         inquiry: parsedRow.inquiry,
         items: parsedRow.items.map(item => ({
-          ...item,
+          item_id: item.item_id,
+          hebrew_description: item.hebrew_description,
+          english_description: item.english_description,
+          requested_qty: item.requested_qty,
+          import_markup: item.import_markup,
+          hs_code: item.hs_code,
+          origin: item.origin,
+          retail_price: item.retail_price,
+          qty_in_stock: item.qty_in_stock,
+          qty_sold_this_year: item.qty_sold_this_year,
+          qty_sold_last_year: item.qty_sold_last_year,
+          notes: item.notes,
           referenceChange: item.referenceChange === 'null' ? null : item.referenceChange,
           referencingItems: item.referencingItems || [],
         })),

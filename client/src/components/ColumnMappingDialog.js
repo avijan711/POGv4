@@ -29,9 +29,9 @@ const SUPPLIER_RESPONSE_OPTIONAL_FIELDS = [
 ];
 
 const INVENTORY_REQUIRED_FIELDS = [
-  { field: 'item_id', label: 'Item ID', description: 'Unique identifier for each item', hebrewLabels: ['קוד פריט', 'מספר פריט'] },
-  { field: 'hebrew_description', label: 'Hebrew Description', description: 'Item description in Hebrew', hebrewLabels: ['שם פריט'] },
-  { field: 'requested_qty', label: 'Requested Quantity', description: 'Number of items being requested', hebrewLabels: ['כמות', 'כמות שהוזמנה'] },
+  { field: 'itemID', label: 'Item ID', description: 'Unique identifier for each item', hebrewLabels: ['קוד פריט', 'מספר פריט'] },
+  { field: 'hebrewDescription', label: 'Hebrew Description', description: 'Item description in Hebrew', hebrewLabels: ['שם פריט'] },
+  { field: 'requestedQty', label: 'Requested Quantity', description: 'Number of items being requested', hebrewLabels: ['כמות', 'כמות שהוזמנה'] },
 ];
 
 const INVENTORY_OPTIONAL_FIELDS = [

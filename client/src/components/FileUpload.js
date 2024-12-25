@@ -229,8 +229,17 @@ function FileUpload() {
 
       if (error.response) {
         errorMessage = error.response.data?.error || errorMessage;
-        errorDetails = error.response.data?.details || error.message;
-        errorSuggestion = error.response.data?.suggestion || errorSuggestion;
+        
+        // Handle structured error details
+        if (error.response.data?.details?.message) {
+          errorDetails = error.response.data.details.message;
+        } else if (error.response.data?.details?.missingColumns) {
+          errorDetails = `Missing columns: ${error.response.data.details.missingColumns.join(', ')}`;
+        } else {
+          errorDetails = error.response.data?.details || error.message;
+        }
+        
+        errorSuggestion = error.response.data?.suggestion || 'Please ensure all required columns are mapped correctly';
       } else if (error.request) {
         errorMessage = 'No response from server';
         errorDetails = 'The server is not responding';

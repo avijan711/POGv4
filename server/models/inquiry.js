@@ -235,8 +235,8 @@ class InquiryModel extends BaseModel {
                 i.hs_code as current_hs_code,
                 ph.ils_retail_price as current_retail_price,
                 ph.qty_in_stock as current_qty_in_stock,
-                ph.sold_this_year as current_sold_this_year,
-                ph.sold_last_year as current_sold_last_year,
+                ph.qty_sold_this_year as current_sold_this_year,
+                ph.qty_sold_last_year as current_sold_last_year,
                 ri.reference_change,
                 CASE 
                     WHEN ri.new_reference_id IS NOT NULL THEN 1 
