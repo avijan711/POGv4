@@ -25,14 +25,6 @@ class PriceHistoryService extends BaseModel {
     return item;
   }
 
-  // Private helper to calculate retail price
-  _calculateRetailPrice(supplierPrice, importMarkup) {
-    if (supplierPrice == null || importMarkup == null) {
-      return null;
-    }
-    return supplierPrice * importMarkup;
-  }
-
   // Private helper to update supplier price list entry
   async _updatePriceListEntry(itemId, supplierId, price, sourceType, sourceId, notes = null) {
     debug.log('Updating price list entry:', {
@@ -79,75 +71,44 @@ class PriceHistoryService extends BaseModel {
       sourceType,
     });
 
-    // Get item details for markup
-    const item = await this._getItemDetails(itemId);
-    const retailPrice = this._calculateRetailPrice(supplierPrice, item.import_markup);
+    // Get the latest price history for stock and sales data
+    const latestHistory = await this.executeQuerySingle(`
+      SELECT 
+        ils_retail_price,
+        qty_in_stock,
+        qty_sold_this_year,
+        qty_sold_last_year
+      FROM price_history
+      WHERE item_id = ?
+      ORDER BY date DESC
+      LIMIT 1
+    `, [itemId]);
 
-    debug.log('Calculated retail price:', {
+    // Insert new price history record
+    await this.executeRun(`
+      INSERT INTO price_history (
+        item_id,
+        ils_retail_price,
+        qty_in_stock,
+        qty_sold_this_year,
+        qty_sold_last_year,
+        supplier_id,
+        source_type,
+        source_id,
+        supplier_price,
+        date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `, [
+      itemId,
+      latestHistory?.ils_retail_price || null,  // Keep existing retail price
+      latestHistory?.qty_in_stock || 0,
+      latestHistory?.qty_sold_this_year || 0,
+      latestHistory?.qty_sold_last_year || 0,
+      supplierId,
+      sourceType,
+      sourceId,
       supplierPrice,
-      importMarkup: item.import_markup,
-      retailPrice,
-    });
-
-    if (sourceType === 'promotion') {
-      // For promotions, get the latest non-promotion price history
-      const latestHistory = await this.executeQuerySingle(`
-        SELECT 
-          ils_retail_price,
-          qty_in_stock,
-          qty_sold_this_year,
-          qty_sold_last_year
-        FROM price_history
-        WHERE item_id = ?
-        ORDER BY date DESC
-        LIMIT 1
-      `, [itemId]);
-
-      await this.executeRun(`
-        INSERT INTO price_history (
-          item_id,
-          ils_retail_price,
-          qty_in_stock,
-          qty_sold_this_year,
-          qty_sold_last_year,
-          supplier_id,
-          source_type,
-          source_id,
-          supplier_price,
-          date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        itemId,
-        retailPrice,
-        latestHistory?.qty_in_stock || 0,
-        latestHistory?.qty_sold_this_year || 0,
-        latestHistory?.qty_sold_last_year || 0,
-        supplierId,
-        sourceType,
-        sourceId,
-        supplierPrice,
-      ]);
-    } else {
-      // For non-promotions, record new price history
-      await this.executeRun(`
-        INSERT INTO price_history (
-          item_id,
-          ils_retail_price,
-          supplier_id,
-          source_type,
-          source_id,
-          supplier_price,
-          date
-        ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [
-        itemId,
-        retailPrice,
-        supplierId,
-        sourceType,
-        sourceId,
-        supplierPrice,
-      ]);
-    }
+    ]);
   }
 
   // Main function to update prices - uses a single transaction
@@ -171,7 +132,7 @@ class PriceHistoryService extends BaseModel {
           item.notes,
         );
 
-        // Record price history with retail price calculation
+        // Record price history with supplier price
         await this._recordPriceHistory(
           item.item_id,
           supplierId,
@@ -217,7 +178,7 @@ class PriceHistoryService extends BaseModel {
           COALESCE(ph.qty_in_stock, 0) as qty_in_stock,
           COALESCE(ph.sold_this_year, 0) as sold_this_year,
           COALESCE(ph.sold_last_year, 0) as sold_last_year,
-          ph.supplier_price,
+          COALESCE(ph.supplier_price, spl.current_price) as supplier_price,
           ph.ils_retail_price
         FROM supplier_price_list spl
         LEFT JOIN promotion p ON spl.is_promotion = 1 AND spl.promotion_id = p.promotion_id
@@ -237,7 +198,7 @@ class PriceHistoryService extends BaseModel {
           COALESCE(ph.qty_in_stock, 0) as qty_in_stock,
           COALESCE(ph.sold_this_year, 0) as sold_this_year,
           COALESCE(ph.sold_last_year, 0) as sold_last_year,
-          ph.supplier_price,
+          COALESCE(ph.supplier_price, sr.price_quoted) as supplier_price,
           ph.ils_retail_price
         FROM supplier_response sr
         LEFT JOIN supplier s ON sr.supplier_id = s.supplier_id
@@ -275,10 +236,20 @@ class PriceHistoryService extends BaseModel {
         CASE 
           WHEN spl.is_promotion = 1 THEN p.end_date
           ELSE NULL
-        END as promotion_end_date
+        END as promotion_end_date,
+        ph.supplier_price,
+        ph.ils_retail_price
       FROM supplier_price_list spl
       LEFT JOIN promotion p ON spl.promotion_id = p.promotion_id
       LEFT JOIN item i ON spl.item_id = i.item_id
+      LEFT JOIN (
+        SELECT 
+          item_id,
+          supplier_price,
+          ils_retail_price,
+          ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY date DESC) as rn
+        FROM price_history
+      ) ph ON spl.item_id = ph.item_id AND ph.rn = 1
       WHERE spl.item_id = ? AND spl.supplier_id = ?
     `;
     return await this.executeQuerySingle(sql, [itemId, supplierId]);
@@ -298,10 +269,20 @@ class PriceHistoryService extends BaseModel {
         CASE 
           WHEN spl.is_promotion = 1 THEN p.end_date
           ELSE NULL
-        END as promotion_end_date
+        END as promotion_end_date,
+        ph.supplier_price,
+        ph.ils_retail_price
       FROM supplier_price_list spl
       LEFT JOIN item i ON spl.item_id = i.item_id
       LEFT JOIN promotion p ON spl.promotion_id = p.promotion_id
+      LEFT JOIN (
+        SELECT 
+          item_id,
+          supplier_price,
+          ils_retail_price,
+          ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY date DESC) as rn
+        FROM price_history
+      ) ph ON spl.item_id = ph.item_id AND ph.rn = 1
       WHERE spl.supplier_id = ?
     `;
 
